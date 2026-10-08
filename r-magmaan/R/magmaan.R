@@ -7,7 +7,7 @@
 # the ordinary API in project/design/r-interface-vision.md.
 
 .continuous_estimators <- c("ML", "FIML", "ML2S", "GLS", "ULS", "WLS")
-.ordered_estimators <- c("DWLS", "WLS", "ULS")
+.ordered_estimators <- c("DWLS", "WLS", "ULS", "ML")
 
 # lavaan names that bundle an estimator with a standard-error or test correction,
 # mapped to the plain estimator magmaan() accepts instead.
@@ -283,8 +283,10 @@ print.magmaan_model <- function(x, ...) {
 #'   ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
 #'   to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.
 #' @param estimator `"ML"`, `"FIML"`, `"ML2S"`, `"GLS"` or `"ULS"` for
-#'   continuous variables; `"DWLS"`, `"WLS"` or `"ULS"` for ordered variables.
-#'   Estimators other than FIML and ML2S delete incomplete rows listwise.
+#'   continuous variables; `"DWLS"`, `"WLS"`, `"ULS"` or association `"ML"` for
+#'   ordered variables. Omission selects ML for continuous variables and DWLS
+#'   for ordered variables. Association ML requires complete rows; other
+#'   estimators except FIML and ML2S delete incomplete rows listwise.
 #' @param covariance The covariance policy: `"unrestricted"`, `"psd"` (every
 #'   model-implied covariance matrix positive semidefinite), or `"barrier"` or
 #'   [barrier()] (a penalized estimate in the interior of the PSD domain;
@@ -329,6 +331,17 @@ print.magmaan_model <- function(x, ...) {
 #' @param ... Arguments removed in magmaan 0.2.0; each raises an error naming
 #'   its replacement.
 #' @return An object of class `magmaan`.
+#' @section Ordered association ML:
+#' With all indicators declared `ordered`, `estimator = "ML"` fits Gaussian
+#' ML on the estimated polychoric correlations. The ordinal default remains
+#' DWLS. Association ML requires complete rows, saturated thresholds, fixed
+#' response scales and linear constraints. Its policy covariance uses exact
+#' empirical first-stage influence and observed sensitivity; global and nested
+#' fit-function tests use the All weighted-chi-square reference, with SB and
+#' PEBA4 available as references. Modification indices use robust one-df scores.
+#' Finite-sample global tests can be liberal: in decisions/08 sparse binary
+#' two-factor Gaussian models, All rejected 10.9% at nominal 5% for N = 1000
+#' and 6.1% for N = 4000. This caveat applies even with Gaussian latent responses.
 #' @section Identification:
 #' Structurally unidentified models are refused before fitting, including
 #' ordinary refits, with a `magmaan_identification_error` condition. Gauge
@@ -436,12 +449,19 @@ magmaan <- function(model, data,
   }
   .check_mplus_fittable(model)
   .check_identification(model)
+  if (missing(estimator) && length(model$ordered)) estimator <- "DWLS"
   estimator <- .check_estimator(estimator)
   covariance <- .check_covariance(covariance)
   .check_flag(inference, "inference")
   options <- .check_options(options)
   .check_estimator_data(estimator, model$ordered)
   data <- .fit_data(model, data)
+  if (estimator == "ML" && length(model$ordered)) {
+    if (!setequal(model$ordered, model$observed))
+      stop(.association_scope_error("association ML requires all indicators ordinal"))
+    if (anyNA(data[c(model$observed, model$group)]))
+      stop(.association_scope_error("association ML requires complete rows"))
+  }
 
   # barrier(0) maximizes the unpenalized likelihood: it is the unrestricted fit.
   effective <- covariance$policy
@@ -585,13 +605,19 @@ as_lab_fit <- function(fit) {
   est
 }
 
+.association_scope_error <- function(detail) {
+  structure(list(message = paste0("magmaan(): unsupported_model: ", detail),
+                 call = NULL, reason = "unsupported_model", detail = detail),
+            class = c("magmaan_unsupported_model_error", "error", "condition"))
+}
+
 .check_estimator_data <- function(estimator, ordered) {
   has_ordered <- length(ordered) > 0L
   if (has_ordered && !estimator %in% .ordered_estimators) {
     stop(sprintf(paste0(
       "magmaan(): estimator = \"%s\" treats every variable as continuous. ",
       "Construct the model without `ordered` to fit it to these items as ",
-      "continuous, or use DWLS, WLS or ULS for ordered variables."), estimator),
+      "continuous, or use DWLS, WLS, ULS or ML for ordered variables."), estimator),
       call. = FALSE)
   }
   if (!has_ordered && identical(estimator, "DWLS")) {

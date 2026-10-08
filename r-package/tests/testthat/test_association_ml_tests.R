@@ -1,4 +1,4 @@
-test_that("association ML spectral laws reconstruct in the lab and preserve policy guards", {
+test_that("association ML spectral laws reconstruct in the lab and compose the ordinary policy", {
   set.seed(3233)
   n <- 500L
   f <- rnorm(n)
@@ -19,6 +19,12 @@ test_that("association ML spectral laws reconstruct in the lab and preserve poli
     expect_true(global$available,info=global$detail)
     if (!isTRUE(global$available)) next
     expect_equal(global$statistic,2*n*ij$value,tolerance=1e-10)
+    policy <- policy_inference(alt)
+    expect_true(policy$covariance_available, info = policy$covariance_detail)
+    expect_equal(policy$covariance, ij$vcov, tolerance = 0)
+    expect_equal(policy$score$p_all, global$All$p_value, tolerance = 0)
+    expect_identical(policy$score$reference, "all")
+
     reconstructed <- sort(Re(eigen(global$U %*% global$Gamma)$values),decreasing=TRUE)[seq_len(global$df)]
     expect_equal(sort(global$spectrum,decreasing=TRUE),reconstructed,tolerance=1e-10)
     for (r in c("All","SB","PEBA4")) {
@@ -34,6 +40,10 @@ test_that("association ML spectral laws reconstruct in the lab and preserve poli
     expect_true(nested$available,info=nested$detail)
     if (!isTRUE(nested$available)) next
     expect_equal(nested$df,1L)
+    policy_test <- policy_nested(alt, null)$lr
+    expect_equal(policy_test$statistic, nested$statistic, tolerance = 0)
+    expect_equal(policy_test$p_all, nested$All$p_value, tolerance = 0)
+
     Hinv <- solve(ij$H)
     C <- nested$A %*% Hinv %*% t(nested$A)
     S <- nested$A %*% Hinv %*% ij$B %*% Hinv %*% t(nested$A)

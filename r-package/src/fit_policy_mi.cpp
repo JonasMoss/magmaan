@@ -38,14 +38,14 @@ Rcpp::DataFrame policy_modification_indices_impl(Rcpp::List fit,
   if (s.penalized) out = {api::InferenceReason::Penalized, std::string(api::penalized_detail), {}};
   else if (!s.converged) out = {api::InferenceReason::NotConverged, "the fit did not pass its convergence verdict", {}};
   else if ((estimator != "ML" && estimator != "FIML" && estimator != "DWLS") ||
-      fit.containsElementNamed("nclusters") || fit.containsElementNamed("association"))
+      fit.containsElementNamed("nclusters"))
     out = {api::InferenceReason::UnsupportedModel, "the modification-index policy covers single-level ML, FIML and ordinal or mixed DWLS", {}};
   else {
     auto ctx = ctx_from_fit(fit);
-    const auto est = est_from_fit(fit);
+    const auto est = est_from_fit(fit, fit.containsElementNamed("association"));
     api::PolicyModificationOptions opts;
     opts.releases = releases;
-    if (estimator == "DWLS") {
+    if (estimator == "DWLS" || est.association) {
       const auto parameterization = ordinal_parameterization_from_string(
           fit.containsElementNamed("parameterization") ? Rcpp::as<std::string>(fit["parameterization"]) : "delta");
       if (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"])) {

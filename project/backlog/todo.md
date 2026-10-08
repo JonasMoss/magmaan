@@ -1722,7 +1722,7 @@ release, including dependencies otherwise shared with the primary programme.
 
 ### Association-ML inference
 
-- [ ] **L — define association-ML MI/release and sampling inference.** The
+- [x] **L — define association-ML MI/release and sampling inference.** The
   [audit and ordered contract plan](../design/association-ml-inference.md) is
   complete (TASK-32.1). TASK-32.2 implements the lab-only evaluation-point
   score, observed sensitivity and joint exact Stage-1 covariance, with independent
@@ -1738,10 +1738,11 @@ release, including dependencies otherwise shared with the primary programme.
   production is frozen at `b37ebefb` under `results/production-2026-10-05/`;
   TASK-128.1 completes the report against the registered criteria. TASK-128.3
   passes the post-hoc MI population approximation check: maximum implied size
-  5.364183% across 96 cells, below 5.5%; MI exposure is the next implementation step. Ordinary
-  exposure and global/nested reference decisions remain pending user review.
-  Ordinary association-ML components retain typed
-  refusal until those contracts and their calibration pass.
+  5.364183% across 96 cells, below 5.5%. The user adopted ordinary covariance,
+  All global/nested tests and robust MI/releases on 2026-10-08. TASK-128.2
+  composes the lab components through prepared ordinary fits; out-of-scope
+  routes retain refusals. Sparse binary two-factor global size remains a
+  documented finite-sample limitation (TASK-128.4).
 
 ### Barrier fitting and inference
 

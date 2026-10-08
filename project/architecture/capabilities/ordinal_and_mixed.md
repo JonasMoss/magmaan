@@ -1151,20 +1151,23 @@ exact Stage-1 Gamma, or observed H/IJ meat and an exact parameter restriction.
 Explicit matrix reconstructions, zero-df/exact-fit reductions, one-restriction,
 grouped and misspecified pseudo-true restriction gates are in `ordinal_ij_test.cpp`.
 Moment nesting is refused. Ordinary covariance, global/nested tests and
-MI/releases remain typed unavailable pending subcard 5. Lab
+MI/releases compose these lab components through TASK-128.2, with All primary
+and SB/PEBA4 comparators. Lab
 `association_ml_modification_indices` and `association_ml_score_tests` now
 compose observed Schur nuisance projection/EPC with exact empirical projected
 meat and one-df chi-square statistics. Fixed/absent association rows and
 linear equality releases retain per-candidate typed refusals. Independent
 Schur, augmented gradient/curvature, released-refit and grouped gates are in
 `ordinal_ij_test.cpp`; lab reconstruction/refusals are in
-`test_association_ml_scores.R`. No policy guard is removed. TASK-32.5
+`test_association_ml_scores.R`. TASK-32.5
 registers [decisions/08](../../../experiments/decisions/08-association-ml-policy/report.qmd)
 for covariance/global/nested/MI calibration, with bounded smoke/pilot evidence
 and provenance-checked per-cell execution. Production is frozen and reported;
 TASK-128.3 passes the approved post-hoc MI population approximation criterion
-(maximum implied size 5.364183% across 96 cells, limit 5.5%). Ordinary MI
-exposure remains an implementation follow-up; no policy guard is removed here.
+(maximum implied size 5.364183% across 96 cells, limit 5.5%). Ordinary MI exposure is adopted with TASK-128.2. Unsupported channels retain
+typed refusals. Sparse binary two-factor Gaussian global All rejection was
+10.9% at nominal 5% for N = 1000 and 6.1% for N = 4000; the help documents
+this finite-sample limitation.
 
 ### Mixed DWLS ordinary policy
 

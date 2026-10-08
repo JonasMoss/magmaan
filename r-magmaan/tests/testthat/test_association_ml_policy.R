@@ -1,0 +1,40 @@
+test_that("ordinary association ML composes the lab policy", {
+  set.seed(3233)
+  n <- 500L
+  f <- rnorm(n)
+  d <- as.data.frame(sapply(c(.8, .73, .66, .59), function(l) {
+    z <- l * f + sqrt(1 - l * l) * rnorm(n)
+    1L + (z > -.45) + (z > .55)
+  }))
+  names(d) <- paste0("x", 1:4)
+  model <- function(syntax) magmaan_model(syntax, prototype = d, ordered = names(d))
+  alt <- magmaan(model("f =~ x1 + x2 + x3 + x4"), d, estimator = "ML")
+  null <- magmaan(model("f =~ x1 + l*x2 + l*x3 + x4"), d, estimator = "ML")
+  expect_true(alt$lab$converged)
+  expect_true(alt$inference$status$available[1])
+  ij <- magmaanlab::association_ml_ij(alt$lab, alt$lab$ordinal_stats)
+  expect_equal(unname(vcov(alt)), unname(ij$vcov), tolerance = 0, ignore_attr = TRUE)
+  expect_true(all(is.finite(confint(alt))))
+  global <- magmaanlab::association_ml_global_test(alt$lab, alt$lab$ordinal_stats)
+  tab <- summary(alt, references = c("all", "sb", "peba4"))$tests
+  expect_true(all(c("all", "sb", "peba4") %in% tab$reference))
+  primary <- tab[tab$recommended, ]
+  expect_equal(primary$reference, "all")
+  expect_equal(primary$pvalue, global$All$p_value, tolerance = 0)
+  nested <- magmaanlab::association_ml_nested_test(alt$lab, null$lab, alt$lab$ordinal_stats)
+  a <- anova(alt, null, references = c("all", "sb", "peba4"))
+  expect_equal(a$pvalue[a$recommended], nested$All$p_value, tolerance = 0)
+  mi <- modindices(alt, releases = FALSE)
+  lab_mi <- magmaanlab::association_ml_modification_indices(alt$lab, alt$lab$ordinal_stats, absent = TRUE)
+  expect_true(any(mi$reason == "available"))
+  expect_equal(mi$statistic[mi$reason == "available"], vapply(Filter(function(r) isTRUE(r$available), lab_mi$rows), function(r) r$statistic, numeric(1)), tolerance = 0)
+  release <- modindices(null)
+  lab_release <- magmaanlab::association_ml_score_tests(null$lab, null$lab$ordinal_stats)
+  expect_equal(release$statistic[release$kind == "release" & release$reason == "available"],
+    vapply(Filter(function(r) isTRUE(r$available), lab_release$rows), function(r) r$statistic, numeric(1)), tolerance = 0)
+  missing <- d; missing$x1[1] <- NA
+  expect_error(magmaan(model("f =~ x1 + x2 + x3 + x4"), missing, estimator = "ML"), "unsupported_model.*complete rows", class = "magmaan_unsupported_model_error")
+  mixed <- magmaan_model("f =~ x1 + x2 + x3 + x4", prototype = d, ordered = names(d)[1:3])
+  expect_error(magmaan(mixed, d, estimator = "ML"), "unsupported_model.*all indicators ordinal", class = "magmaan_unsupported_model_error")
+  expect_equal(magmaan(model("f =~ x1 + x2 + x3 + x4"), d, inference = FALSE)$estimator, "DWLS")
+})

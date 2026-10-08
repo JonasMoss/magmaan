@@ -167,6 +167,19 @@ struct PolicyNested {
 // All components unavailable for one reason.
 PolicyInference policy_unavailable(InferenceReason reason, std::string detail);
 
+// Complete-row all-ordinal association ML: exact Stage-1 IJ and All laws.
+PolicyInference policy_inference_association_ml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& estimates, const PolicyFitState& state,
+    const std::vector<std::int8_t>* row_user = nullptr);
+PolicyNested policy_nested_association_ml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::OrdinalStats& stats,
+    const std::vector<std::int8_t>* null_row_user = nullptr,
+    const std::vector<std::int8_t>* alternative_row_user = nullptr);
+
 // Owning evaluation-point snapshots. Inputs cannot be edited or combined with
 // another fit after construction; lazily retained ingredients include failures.
 // As with NTMLFit, a snapshot is used from one thread at a time.

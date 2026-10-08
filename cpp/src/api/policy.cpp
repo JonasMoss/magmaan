@@ -19,6 +19,84 @@
 
 namespace magmaan::api {
 
+namespace {
+InferenceReason reason_from(const PostError& error);
+PolicyTest association_policy_test(const post_expected<estimate::frontier::AssociationMlTest>& result,
+    const char* label) {
+  PolicyTest out;
+  out.reference = "all";
+  out.label = label;
+  if (!result) {
+    switch (result.error().kind) {
+      case PostError::Kind::NotNested: out.reason = InferenceReason::NotNested; break;
+      case PostError::Kind::UnsupportedNesting: out.reason = InferenceReason::UnsupportedNesting; break;
+      case PostError::Kind::BoundaryNesting: out.reason = InferenceReason::BoundaryNesting; break;
+      default: out.reason = reason_from(result.error());
+    }
+    out.detail = result.error().detail;
+  } else if (result->df <= 0) {
+    out.reason = InferenceReason::Saturated;
+    out.detail = "zero degrees of freedom: no reference law";
+  } else {
+    out.statistic = result->statistic;
+    out.df = result->df;
+    out.eigenvalues = result->spectrum;
+    out.p_all = result->all.p_value;
+    out.p_sb = result->sb.p_value;
+    out.p_peba4 = result->peba4.p_value;
+    out.peba_blocks = result->peba4.blocks_effective;
+    out.sb_scale = result->sb.lambdas_reference.mean();
+    if (!std::isfinite(out.p_all)) {
+      out.reason = InferenceReason::NumericFailure;
+      out.detail = "association-ML All reference tail evaluation failed";
+    }
+  }
+  return out;
+}
+}
+PolicyInference policy_inference_association_ml(spec::LatentStructure pt,
+    const model::MatrixRep& rep, const data::OrdinalStats& stats,
+    const estimate::Estimates& estimates, const PolicyFitState& state,
+    const std::vector<std::int8_t>* row_user) {
+  if (state.penalized) return policy_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
+  if (!state.converged) return policy_unavailable(InferenceReason::NotConverged, "the fit did not pass its convergence verdict");
+  if (!estimates.association) return policy_unavailable(InferenceReason::UnsupportedModel, "association ML estimates required");
+  PolicyInference out;
+  out.verdict_disagreement = verdict_disagreement(state);
+  auto ij = estimate::frontier::association_ml_ij(pt, rep, stats, estimates, row_user);
+  if (ij) out.covariance = ij->vcov;
+  else {
+    out.covariance_reason = reason_from(ij.error());
+    out.covariance_detail = ij.error().detail;
+  }
+  out.score = association_policy_test(estimate::frontier::association_ml_global_test(
+      pt, rep, stats, estimates, row_user), "fit_function");
+  out.lr.reason = InferenceReason::Inapplicable;
+  out.lr.detail = "association ML fits estimated correlations; its global discrepancy is reported as fit_function";
+  return out;
+}
+PolicyNested policy_nested_association_ml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const estimate::Estimates& alternative_estimates,
+    const PolicyFitState& alternative_state, const data::OrdinalStats& stats,
+    const std::vector<std::int8_t>* null_row_user,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  PolicyNested out;
+  out.verdict_disagreement = verdict_disagreement(null_state) || verdict_disagreement(alternative_state);
+  if (null_state.penalized || alternative_state.penalized || !null_state.converged || !alternative_state.converged) {
+    out.lr.reason = null_state.penalized || alternative_state.penalized ? InferenceReason::Penalized : InferenceReason::NotConverged;
+    out.lr.detail = out.lr.reason == InferenceReason::Penalized ? std::string(penalized_detail) : "the fit did not pass its convergence verdict";
+  } else {
+    out.lr = association_policy_test(estimate::frontier::association_ml_nested_test(
+        alternative_pt, alternative_rep, stats, alternative_estimates,
+        null_pt, null_rep, null_estimates, alternative_row_user, null_row_user), "fit_function_difference");
+  }
+  out.score.reason = InferenceReason::Inapplicable;
+  out.score.detail = "association-ML nested policy reports the parameter-space fit-function difference";
+  return out;
+}
+
 struct FimlPolicyFit::Impl {
   const spec::LatentStructure pt;
   const model::MatrixRep rep;

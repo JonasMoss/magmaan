@@ -21,10 +21,10 @@ pt <- read.csv(paths[5]); uncertainty <- read.csv(paths[6])
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Ordinary association-ML inference | Typed unavailable | Open | Production complete; user decision pending |
-| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; frozen production; user decision pending |
-| Lab global / nested references | All, SB, PEBA4 | Open | Production complete; user reference decision pending |
-| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; frozen production; user decision pending |
+| Ordinary association-ML inference | Exact IJ covariance, All global/nested, robust MI | Adopted | User decision 2026-10-08; TASK-128.2 |
+| Covariance | Exact Stage-1 IJ, observed sensitivity | Adopted | Component gates; frozen production; user decision 2026-10-08 |
+| Global / nested references | All primary; SB and PEBA4 comparators | Adopted | Frozen production; user decision 2026-10-08; global finite-sample caveat |
+| MI | Robust projected meat, observed Schur metric | Adopted | TASK-128.3 population check passed; user pre-approval; TASK-128.2 |
 
 ## Question and short answer
 
@@ -34,8 +34,9 @@ Association ML has no coverage flags, seven global size flags and one nested
 size flag; DWLS has one correlation-coverage flag. No MI size cell is flagged,
 and the population approximation check passes the post-hoc 5.5% criterion below. Sparse ordinal samples
 cause substantial unavailability. The production tables below
-retain cell denominators and uncertainty. Ordinary exposure and the global and
-nested reference choices remain user decisions.
+retain cell denominators and uncertainty. The user adopted ordinary exposure
+with All global/nested references and robust MIs on 2026-10-08; finite-sample
+flags and unsupported-channel refusals remain.
 
 ## Pilot mechanics and development evidence
 
@@ -389,7 +390,8 @@ Sparse-sample non-positive-definiteness and the other listed failures limit
 availability. The MI population approximation check passes the approved post-hoc criterion. These facts request finite-sample and availability review;
 flags never justify OPG, expected bread or another inconsistent recipe.
 
-Production reporting is complete. The user decision remains: should ordinary
-association-ML inference be exposed, and with which global and nested reference
-(All, SB or PEBA4), given the flags, MC uncertainty and availability? No adoption
-or reference choice is made here.
+Production reporting is complete. On 2026-10-08 the user adopted ordinary
+association-ML covariance and global/nested tests with All primary, retaining
+SB and PEBA4 as comparators and the finite-sample caveat. TASK-128.3 passed
+the MI population check, activating the user's pre-approval for robust MIs and
+linear releases. TASK-128.2 implements this exposure; the flags remain visible.

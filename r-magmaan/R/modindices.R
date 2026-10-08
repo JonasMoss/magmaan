@@ -43,7 +43,7 @@ modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases
     rows <- rows[keep]; out <- out[keep, , drop = FALSE]
   }
   if (test == "lr" && nrow(out)) {
-    out$test <- if (fit$estimator == "DWLS") "fit_function_difference" else "lr"
+    out$test <- if (fit$estimator == "DWLS" || !is.null(fit$lab$association)) "fit_function_difference" else "lr"
     for (i in seq_len(nrow(out))) {
       if (!out$reason[i] %in% c("available", "numeric_failure") || out$group[i] == 0L && out$kind[i] == "fixed") next
       augmented <- tryCatch(suppressWarnings(magmaanlab::policy_mi_refit(
@@ -59,7 +59,7 @@ modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases
         out$df[i] <- nested$df
         if (isTRUE(nested$available)) {
           out$statistic[i] <- nested$statistic
-          out$pvalue[i] <- if (fit$estimator == "DWLS") nested$p_all else nested$p_peba4
+          out$pvalue[i] <- if (fit$estimator == "DWLS" || !is.null(fit$lab$association)) nested$p_all else nested$p_peba4
         }
       }
     }

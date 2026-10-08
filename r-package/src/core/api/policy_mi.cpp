@@ -7,12 +7,12 @@
 #include <utility>
 namespace magmaan::api {
 namespace {
-PolicyModificationIndices gate(const spec::LatentStructure& pt, const PolicyFitState& state, const estimate::Estimates& estimates) {
+PolicyModificationIndices gate(const spec::LatentStructure& pt, const PolicyFitState& state, const estimate::Estimates& estimates, bool association = false) {
   if (state.penalized) return {InferenceReason::Penalized, std::string(penalized_detail), {}};
   if (!state.converged) return {InferenceReason::NotConverged,
       "the fit did not pass its convergence verdict", {}};
-  if (estimates.association.has_value())
-    return {InferenceReason::UnsupportedModel, "association-ML sampling inference is not validated", {}};
+  if (estimates.association && !association)
+    return {InferenceReason::UnsupportedModel, "association ML requires the all-ordinal policy route", {}};
   if (estimates.diagnostics.active_bounds_full.any_active())
     return {InferenceReason::UnsupportedModel, "active-bound inference is unsupported", {}};
   if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }) ||
@@ -91,8 +91,11 @@ PolicyModificationIndices policy_modification_indices(const Fit& fit,
   const auto& rep = fit.model().matrix_rep();
   const auto& estimates = fit.estimates();
   const auto state = policy_fit_state(estimates);
-  auto out = gate(pt, state, estimates);
+  auto out = gate(pt, state, estimates, true);
   if (out.reason != InferenceReason::Available) return out;
+  if (estimates.association && fit.data().ordinal())
+    return policy_modification_indices(pt, rep, *fit.data().ordinal(), estimates,
+        estimate::OrdinalParameterization::Delta, state, options);
   if (fit.estimator_spec().ordinal_moments &&
       fit.estimator_spec().ordinal_weight == estimate::OrdinalWeightKind::DWLS) {
     const auto parameterization = fit.estimator_spec().ordinal_parameterization;
@@ -151,8 +154,29 @@ PolicyModificationIndices policy_modification_indices(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& input, const estimate::Estimates& estimates,
     estimate::OrdinalParameterization parameterization, const PolicyFitState& state,
     const PolicyModificationOptions& options) {
-  auto out = gate(pt, state, estimates);
+  auto out = gate(pt, state, estimates, true);
   if (out.reason != InferenceReason::Available) return out;
+  if (estimates.association) {
+    auto fixed = estimate::frontier::association_ml_modification_indices(pt, rep, input, estimates, options.candidates);
+    auto releases = options.releases ? estimate::frontier::association_ml_score_tests(pt, rep, input, estimates)
+        : post_expected<estimate::frontier::AssociationMlScoreTable>{estimate::frontier::AssociationMlScoreTable{}};
+    if (!fixed) return failure(fixed.error());
+    if (!releases) return failure(releases.error());
+    for (const auto* table : {&*fixed, &*releases}) for (const auto& row : table->rows) {
+      if (row.result) {
+        out.table.rows.push_back(*row.result);
+        out.row_reasons.push_back(InferenceReason::Available);
+      } else {
+        inference::ScoreTestResult missing;
+        missing.candidate = row.candidate;
+        missing.mi_scaled = missing.p_value = missing.epc = missing.epc_lv = missing.epc_all =
+            std::numeric_limits<double>::quiet_NaN();
+        out.table.rows.push_back(std::move(missing));
+        out.row_reasons.push_back(failure(row.result.error()).reason);
+      }
+    }
+    return out;
+  }
   auto stats = dwls_policy_stats(input, static_cast<DwlsPolicyFit::Impl*>(nullptr));
   if (!stats) return failure(stats.error());
   auto fixed = estimate::frontier::modification_indices_ordinal_robust(pt, rep, *stats, estimates,

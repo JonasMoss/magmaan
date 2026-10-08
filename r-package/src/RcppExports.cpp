@@ -2527,6 +2527,32 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_inference_association_ml_impl
+Rcpp::List policy_inference_association_ml_impl(Rcpp::List fit, Rcpp::LogicalVector state);
+RcppExport SEXP _magmaanlab_policy_inference_association_ml_impl(SEXP fitSEXP, SEXP stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type state(stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_inference_association_ml_impl(fit, state));
+    return rcpp_result_gen;
+END_RCPP
+}
+// policy_nested_association_ml_impl
+Rcpp::List policy_nested_association_ml_impl(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state);
+RcppExport SEXP _magmaanlab_policy_nested_association_ml_impl(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP null_stateSEXP, SEXP alternative_stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type null_state(null_stateSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type alternative_state(alternative_stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_nested_association_ml_impl(fit_H1, fit_H0, null_state, alternative_state));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepare_policy_dwls_impl
 SEXP prepare_policy_dwls_impl(Rcpp::List fit);
 RcppExport SEXP _magmaanlab_prepare_policy_dwls_impl(SEXP fitSEXP) {
@@ -4892,6 +4918,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_convention_inference_impl", (DL_FUNC) &_magmaanlab_convention_inference_impl, 4},
     {"_magmaanlab_convention_nested_impl", (DL_FUNC) &_magmaanlab_convention_nested_impl, 7},
     {"_magmaanlab_policy_inference_impl", (DL_FUNC) &_magmaanlab_policy_inference_impl, 2},
+    {"_magmaanlab_policy_inference_association_ml_impl", (DL_FUNC) &_magmaanlab_policy_inference_association_ml_impl, 2},
+    {"_magmaanlab_policy_nested_association_ml_impl", (DL_FUNC) &_magmaanlab_policy_nested_association_ml_impl, 4},
     {"_magmaanlab_prepare_policy_dwls_impl", (DL_FUNC) &_magmaanlab_prepare_policy_dwls_impl, 1},
     {"_magmaanlab_dwls_policy_reuse_impl", (DL_FUNC) &_magmaanlab_dwls_policy_reuse_impl, 1},
     {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 3},

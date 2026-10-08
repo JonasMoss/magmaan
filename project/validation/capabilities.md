@@ -53,7 +53,7 @@ evidence for the adopted recipe (exit criterion 3).
 | | Global n F, All spectrum from exact sampling influence | Limited validation | Explicit exact-row cross-product construction; OPG-spectrum difference; one/two groups delta/theta | Calibration pending | OPG NACOV fitting weights retained |
 | | Nested fit-function difference, observed-Hessian/IJ All reference; SB/PEBA4 comparators; moment-tangent nesting | Limited validation | Common-point profile and direct parameter-space laws agree <= 1e-10; lab and ordinary nested reporting | Calibration pending | Local moment embedding witness |
 | | Global LR; nested score | Inapplicable; unsupported | Typed `inapplicable`; `unsupported_model` | | DWLS has no likelihood; nested score is not derived |
-| All-ordinal association ML | Every ordinary component | Unsupported | Typed association-ML refusal; lab covariance, spectral and score tests below | | Policy calibration remains TASK-32 subcard 5 |
+| All-ordinal association ML | Covariance, global/nested tests, MI/releases | Supported in the complete-row contract | Exact Stage-1 IJ/observed sensitivity; All global/nested; robust one-df MI | policy/lab exact comparisons | Finite-sample global caveat; unsupported routes retain typed refusal |
 | ML2S, GLS, continuous ULS, all-ordinal ULS/WLS, mixed WLS | Every component | Unsupported | Typed `unsupported_model`; lab components below | | Secondary breadth, consumer-gated; no 0.2.0 requirement |
 | Continuous WLS (ADF), mixed ULS | Estimation | Unsupported in `magmaan()` | The call errors and names `magmaanlab::estimate()` / DWLS or WLS | | Consumer-gated |
 | Two-level, SAM, composites, closed-form estimators | Every component | Not offered in `magmaan()` | Lab interfaces keep their own gates (area files) | | No 0.2.0 requirement |
@@ -217,9 +217,9 @@ convergence rules remain fitting choices. Reported bundles target lavaan 0.7.2.
 Association-ML covariance is a lab-only component in
 `estimate::frontier::association_ml_ij` / `magmaanlab::association_ml_ij()`.
 It uses observed sensitivity and exact empirical Stage-1 influence, including
-threshold cross-covariance; independent numerical gates pass. Ordinary
-association-ML inference remains unsupported pending
-calibration (TASK-32 subcard 5). Lab global/nested tests now report All,
+threshold cross-covariance; independent numerical gates pass. Ordinary association-ML inference is adopted by TASK-128.2 after the frozen
+decisions/08 production report and TASK-128.3 MI population check. The policy
+composes the lab components exactly, selecting All for global/nested tests. Lab global/nested tests now report All,
 SB and PEBA4 from local correlation ML geometry/exact Stage-1 Gamma and
 observed H/IJ meat/exact parameter restrictions, respectively. Independent
 matrix reconstruction, normalization, exact-fit, saturated/identical zero-df,

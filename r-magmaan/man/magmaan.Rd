@@ -31,8 +31,10 @@ ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
 to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.}
 
 \item{estimator}{\code{"ML"}, \code{"FIML"}, \code{"ML2S"}, \code{"GLS"} or \code{"ULS"} for
-continuous variables; \code{"DWLS"}, \code{"WLS"} or \code{"ULS"} for ordered variables.
-Estimators other than FIML and ML2S delete incomplete rows listwise.}
+continuous variables; \code{"DWLS"}, \code{"WLS"}, \code{"ULS"} or association \code{"ML"} for
+ordered variables. Omission selects ML for continuous variables and DWLS
+for ordered variables. Association ML requires complete rows; other
+estimators except FIML and ML2S delete incomplete rows listwise.}
 
 \item{covariance}{The covariance policy: \code{"unrestricted"}, \code{"psd"} (every
 model-implied covariance matrix positive semidefinite), or \code{"barrier"} or
@@ -92,6 +94,20 @@ under magmaan's single documented policy. The arguments are the choices
 that define the estimate; structural choices belong to \code{\link[=magmaan_model]{magmaan_model()}}
 and optimization details to \code{options}.
 }
+\section{Ordered association ML}{
+
+With all indicators declared \code{ordered}, \code{estimator = "ML"} fits Gaussian
+ML on the estimated polychoric correlations. The ordinal default remains
+DWLS. Association ML requires complete rows, saturated thresholds, fixed
+response scales and linear constraints. Its policy covariance uses exact
+empirical first-stage influence and observed sensitivity; global and nested
+fit-function tests use the All weighted-chi-square reference, with SB and
+PEBA4 available as references. Modification indices use robust one-df scores.
+Finite-sample global tests can be liberal: in decisions/08 sparse binary
+two-factor Gaussian models, All rejected 10.9\% at nominal 5\% for N = 1000
+and 6.1\% for N = 4000. This caveat applies even with Gaussian latent responses.
+}
+
 \section{Identification}{
 
 Structurally unidentified models are refused before fitting, including

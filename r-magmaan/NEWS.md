@@ -24,6 +24,13 @@
   clip roundoff-negative spectrum entries using the projected-score validator;
   materially negative spectra still raise a numeric error.
 
+- Ordinary `magmaan(estimator = "ML")` on complete all-ordinal data now uses
+  association ML, exact Stage-1 IJ covariance with observed sensitivity, All
+  global/nested references, and robust modification indices/equality releases.
+  DWLS remains the ordinal default. Global tests can be liberal in finite
+  samples; see the association-ML help caveat and decisions/08 evidence.
+
+
 - Identification refusals now suggest specific scale, location and rotation
   restrictions. Information deficits name affected parameters without suggesting
   an automatic fix; no identifying constraints are added.

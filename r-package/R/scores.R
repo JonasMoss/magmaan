@@ -309,6 +309,12 @@ policy_inference <- function(fit, data = NULL) {
   state <- .policy_state(fit)
   if (state[[4]]) return(policy_inference_impl(NULL, state))
   estimator <- toupper(fit$estimator %||% "")
+  if (!is.null(fit$association)) {
+    out <- tryCatch(policy_inference_association_ml_impl(fit, state), error = function(e) e)
+    if (inherits(out, "error")) return(.policy_unavailable("unsupported_model", conditionMessage(out), state))
+    return(out)
+  }
+
   if ((isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(estimator, "DWLS")) {
     out <- tryCatch(policy_inference_dwls_impl(fit, state,
       .policy_context(fit, "dwls", function() prepare_policy_dwls_impl(fit))), error = function(e) e)
@@ -370,6 +376,15 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
     list(score = t, lr = t, psd_boundary = FALSE,
          verdict_disagreement = .verdict_disagreement(states$H0) ||
            .verdict_disagreement(states$H1))
+  }
+  association <- vapply(list(fit_H1, fit_H0), function(fit) !is.null(fit$association), logical(1))
+  if (any(association)) {
+    if (!all(association)) return(unsupported("nested association ML requires two association-ML fits"))
+    if (!identical(fit_H1$ordinal_stats, fit_H0$ordinal_stats))
+      stop("policy_nested(): the two fits must use the same observations in the same order")
+    out <- tryCatch(policy_nested_association_ml_impl(fit_H1, fit_H0, states$H0, states$H1), error = function(e) e)
+    if (inherits(out, "error")) return(unsupported(conditionMessage(out)))
+    return(out)
   }
   dwls <- vapply(list(fit_H1, fit_H0), function(fit)
     (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))

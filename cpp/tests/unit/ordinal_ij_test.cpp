@@ -1,3 +1,5 @@
+#include "magmaan/api/policy.hpp"
+#include "magmaan/api/policy_mi.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "ordinal_test_helpers.hpp"
 
@@ -795,6 +797,20 @@ TEST_CASE("association ML global and nested spectral reconstruction") {
     auto ij = estimate::frontier::association_ml_ij(alt,*ra,*stats,ea); REQUIRE(ij.has_value());
     auto global = estimate::frontier::association_ml_global_test(alt,*ra,*stats,ea);
     REQUIRE_MESSAGE(global.has_value(),(global ? "" : global.error().detail));
+    api::PolicyFitState state; state.converged = true;
+    auto policy = api::policy_inference_association_ml(alt, *ra, *stats, ea, state);
+    CHECK((policy.covariance.array() == ij->vcov.array()).all());
+    CHECK(policy.score.statistic == global->statistic);
+    CHECK(policy.score.p_all == global->all.p_value);
+    CHECK(policy.score.p_sb == global->sb.p_value);
+    CHECK(policy.score.p_peba4 == global->peba4.p_value);
+    CHECK(policy.score.reference == "all");
+    auto lab_nested = estimate::frontier::association_ml_nested_test(alt, *ra, *stats, ea, null, *rn, en);
+    REQUIRE(lab_nested.has_value());
+    auto policy_nested = api::policy_nested_association_ml(null, *rn, en, state, alt, *ra, ea, state, *stats);
+    CHECK(policy_nested.lr.statistic == lab_nested->statistic);
+    CHECK(policy_nested.lr.p_all == lab_nested->all.p_value);
+    CHECK(policy_nested.lr.reference == "all");
     const int groups = grouped ? 2 : 1;
     const double N = 500*groups;
     CHECK(global->df == 2*groups);
@@ -944,6 +960,16 @@ TEST_CASE("association ML lab MI and releases use observed Schur and exact meat"
     options.candidates=inference::ScoreCandidateSet::WithAbsentRows;
     auto mi=estimate::frontier::association_ml_modification_indices(pt,*rep,*stats,est,options);
     REQUIRE_MESSAGE(mi.has_value(),(mi ? "" : mi.error().detail));
+    api::PolicyFitState state; state.converged = true;
+    api::PolicyModificationOptions policy_options; policy_options.candidates = options; policy_options.releases = false;
+    auto policy = api::policy_modification_indices(pt, *rep, *stats, est, estimate::OrdinalParameterization::Delta, state, policy_options);
+    REQUIRE(policy.reason == api::InferenceReason::Available);
+    REQUIRE(policy.table.rows.size() == mi->rows.size());
+    for (std::size_t i = 0; i < mi->rows.size(); ++i) if (mi->rows[i].result) {
+      CHECK(policy.table.rows[i].mi_scaled == mi->rows[i].result->mi_scaled);
+      CHECK(policy.table.rows[i].p_value == mi->rows[i].result->p_value);
+      CHECK(policy.table.rows[i].epc == mi->rows[i].result->epc);
+    }
     int fixed=0, absent=0, refused=0;
     std::string refusal_details;
     for (const auto& row : mi->rows) {
@@ -996,6 +1022,12 @@ TEST_CASE("association ML lab MI and releases use observed Schur and exact meat"
     auto ee=fit(equality,*er);
     auto releases=estimate::frontier::association_ml_score_tests(equality,*er,*stats,ee);
     REQUIRE(releases.has_value()); REQUIRE(releases->rows.size()==1);
+    policy_options.releases = true;
+    auto equality_policy = api::policy_modification_indices(equality, *er, *stats, ee,
+        estimate::OrdinalParameterization::Delta, state, policy_options);
+    REQUIRE(equality_policy.reason == api::InferenceReason::Available);
+    REQUIRE_FALSE(equality_policy.table.rows.empty());
+    CHECK(equality_policy.table.rows.back().mi_scaled == releases->rows[0].result->mi_scaled);
     const auto& release=releases->rows[0]; REQUIRE(release.result.has_value());
     const auto& r=*release.result;
     // Independent Schur block reconstruction in the augmented chart.

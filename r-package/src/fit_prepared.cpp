@@ -506,6 +506,27 @@ Rcpp::List policy_inference_impl(SEXP context, Rcpp::LogicalVector state) {
 }
 
 // [[Rcpp::export]]
+Rcpp::List policy_inference_association_ml_impl(Rcpp::List fit, Rcpp::LogicalVector state) {
+  auto ctx = ctx_from_fit(fit);
+  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(fit, R_NilValue, "ordinal_stats", "policy_inference"));
+  return policy_inference_list(magmaan::api::policy_inference_association_ml(
+      ctx.pt, ctx.rep, stats, est_from_fit(fit, true), policy_state_from(state), &ctx.names.row_user));
+}
+
+// [[Rcpp::export]]
+Rcpp::List policy_nested_association_ml_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
+    Rcpp::LogicalVector null_state, Rcpp::LogicalVector alternative_state) {
+  auto a = ctx_from_fit(fit_H1), n = ctx_from_fit(fit_H0);
+  auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(fit_H1, R_NilValue, "ordinal_stats", "policy_nested"));
+  const auto out = magmaan::api::policy_nested_association_ml(n.pt, n.rep, est_from_fit(fit_H0, true),
+      policy_state_from(null_state), a.pt, a.rep, est_from_fit(fit_H1, true),
+      policy_state_from(alternative_state), stats, &n.names.row_user, &a.names.row_user);
+  return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
+      Rcpp::_["lr"] = policy_test_list(out.lr), Rcpp::_["psd_boundary"] = out.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
+}
+
+// [[Rcpp::export]]
 SEXP prepare_policy_dwls_impl(Rcpp::List fit) {
   auto ctx = ctx_from_fit(fit);
   auto est = est_from_fit(fit);

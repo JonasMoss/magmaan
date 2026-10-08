@@ -486,10 +486,13 @@ release-score work across the remaining estimator/weight families is tracked
 in the [completion matrix](../backlog/todo.md#mi-and-release-score-completion-020).
 
 `estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
-ULS and WLS. Variables declared in `ordered`: DWLS, WLS and ULS. The data type
-is declared by `ordered`, never inferred from the estimator. Normal-theory ML
-on Likert items means not declaring them ordered. Invalid pairs error with a
-message naming the valid alternatives.
+ULS and WLS. Variables declared in `ordered`: DWLS, WLS, ULS and association
+ML. Omission selects DWLS for ordered models and ML for continuous models.
+The data type is declared by `ordered`, never inferred from the estimator.
+Normal-theory ML on category scores means not declaring them ordered; explicit
+ML with all indicators ordered fits the polychoric correlations with the
+[association-ML policy](association-ml-inference.md#ordinary-exposure).
+Invalid pairs error with a message naming the valid alternatives.
 
 lavaan names that bundle an estimator with a correction (MLM, MLR, MLMV, WLSM,
 WLSMV, ULSM, ULSMV) are rejected in fitting with a pointer to the plain

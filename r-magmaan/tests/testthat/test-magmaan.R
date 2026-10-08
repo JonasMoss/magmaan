@@ -79,7 +79,7 @@ test_that("estimator and data type must agree", {
   o <- ordinal_hs()
   ordinal <- magmaan_model(cfa, prototype = o, ordered = paste0("x", 1:6))
   expect_error(magmaan(cfa, d, estimator = "DWLS"), "declare them with magmaan_model")
-  expect_error(magmaan(ordinal, o), "treats every variable as continuous")
+  expect_identical(magmaan(ordinal, o)$estimator, "DWLS")
   expect_error(magmaan(cfa, d, estimator = "WLS"), "continuous WLS")
   expect_error(magmaan_model(cfa, identification = "sphere"), "planned")
   expect_error(magmaan(cfa, as.matrix(d[paste0("x", 1:6)])), "data frame")

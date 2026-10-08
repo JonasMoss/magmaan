@@ -3,7 +3,7 @@
 TASK-32.1 audits the fitter and specifies implementation gates; TASK-32.2
 implements the lab evaluation-point covariance component, and TASK-32.3 adds
 lab global/nested reference laws. TASK-32.4 adds lab MI and linear releases;
-ordinary exposure remains gated by subcard 5. The ordinary policy must satisfy the
+ordinary exposure is adopted after subcard 5 and TASK-128.3 (see below). The ordinary policy must satisfy the
 [misspecification requirement](../scope.md#misspecification-robust-inference-requirement).
 Initial scope is independent complete rows, all-ordinal indicators, saturated
 thresholds, fixed response scales and linear association constraints. Missing
@@ -80,8 +80,8 @@ the 1e-5 relative-error gate. Stratified delete-one covariance errors against IJ
 are 0.117626, 0.029646 and 0.00728114 at total N = 250, 1000 and 4000. These
 are deterministic numerical validation, not policy coverage calibration.
 Subcards 1 (the exact sampling channel and its outstanding gates) and 2 (lab
-score/sensitivity/covariance) are implemented; subcard 3 adds lab spectral laws
-and subcard 5 remains open.
+score/sensitivity/covariance) are implemented; subcard 3 adds lab spectral laws. Subcard 5 production is frozen and reported; the user
+adopted ordinary exposure on 2026-10-08.
 The lab `association_ml_global_test()` reports T = 2N q and All (negative
 weights truncated), SB and PEBA4. For correlation basis E_j, its local null
 metric is V_b[j,k] = w_b tr(C_b^-1 E_j C_b^-1 E_k)/2. With Delta the active
@@ -106,8 +106,8 @@ p-values. Penalties, missing raw rows, fixed/restricted thresholds, nonlinear
 constraints, covariance faces and singular active information remain refused.
 Independent explicit metric/Gamma and restriction reconstructions, exact-fit,
 saturated, identical-model, one-restriction and identical misspecified-stratum
-gates live in `ordinal_ij_test.cpp`. These lab references do not select an
-ordinary-user policy; policy calibration remains subcard 5.
+gates live in `ordinal_ij_test.cpp`. The ordinary policy now selects All, following subcard 5 production and the
+user decision recorded below.
 
 The lab `association_ml_modification_indices()` and `association_ml_score_tests()`
 reuse the LS candidate enumeration and affine release directions, with separate
@@ -149,8 +149,9 @@ policy's influence/spectrum composition, but are LS workers, not association-ML
 implementations. Candidate enumeration and release directions in
 `cpp/src/estimate/ordinal_score.cpp` can be reused after separating LS kernels.
 `require_ls_ordinal_estimates` there, `robust_ordinal` in ordinal_robust.cpp,
-and dispatch in `cpp/src/api/sem.cpp` and `cpp/src/api/policy.cpp` deliberately
-refuse current association inference. Preserve those guards until gates pass.
+and generic dispatch in `cpp/src/api/sem.cpp` retain their LS/likelihood
+refusals. The explicit association-ML policy in `cpp/src/api/policy.cpp`
+composes the association components without weakening those guards.
 
 ## Ordered implementation subcards
 
@@ -178,8 +179,7 @@ refuse current association inference. Preserve those guards until gates pass.
    independent one-direction Schur reconstruction, augmented-model gradient and
    finite-difference EPC gates; grouped absent/fixed rows and equality releases;
    agreement with the nested score for the same restriction; C++/lab-R results
-   and typed unsupported threshold/scale/boundary/penalty routes. Ordinary guards remain until
-   subcard 5 calibration.
+   and typed unsupported threshold/scale/boundary/penalty routes. Ordinary exposure follows the adopted subcard 5 decision below.
 5. **Frozen policy calibration before ordinary exposure.** Predeclare covariance
    coverage and global/nested/MI size panels over N, category imbalance, group
    constraints and latent nonnormality/model misspecification. Acceptance:
@@ -188,7 +188,30 @@ refuse current association inference. Preserve those guards until gates pass.
    for a required consistent recipe. Pricing/long runs need separate authorization. TASK-32.5 registers
    [decisions/08](../../experiments/decisions/08-association-ml-policy/report.qmd)
    for smoke and a bounded pricing pilot only; production and ordinary exposure
-   remain separate decisions.
+   were separately authorized; the adoption is recorded below.
 
-The existing [MI capability matrix](../validation/capabilities.md) remains
-unsupported until implementation and calibration establish these contracts.
+The [MI capability matrix](../validation/capabilities.md) records the
+implemented ordinary contract and retained unsupported channels.
+
+
+## Ordinary exposure
+
+The user adopted ordinary association-ML inference on 2026-10-08 after the
+TASK-128.1 production report: `magmaan(estimator = "ML")` with all indicators
+ordered uses the existing correlation-target fitter through prepared handles.
+DWLS remains the ordinal default. TASK-128.2 composes the exact Stage-1 IJ
+covariance with observed sensitivity and All global and parameter-space nested
+references; SB and PEBA4 remain reportable comparators. Global tests are
+fit-function statistics, not ordinal likelihood-ratio tests. Missing rows,
+mixed indicators, restricted thresholds, response-scale releases, nonlinear
+constraints, penalties and primitive covariance faces retain refusals.
+
+TASK-128.3 passed the approved MI population-approximation criterion (maximum
+implied size 5.364183% across 96 cells, limit 5.5%). The user's pre-approval
+therefore also adopts robust one-df MIs and supported linear equality releases,
+composed from the lab observed-Schur/exact-projected-meat components.
+
+The global All test remains liberal in sparse binary two-factor Gaussian
+models: rejection is 10.9% at nominal 5% for N = 1000 and 6.1% for N = 4000
+in decisions/08. Adoption preserves this finite-sample caveat; it does not
+claim uniform size control or change any recipe or acceptance rule.

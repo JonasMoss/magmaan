@@ -420,6 +420,13 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     if (method != "ML") out["ordinal_computational_weight"] =
         method == "GLS" || method == "DLS" ? "WLS" : method;
     if (e->association) {
+      // Fit-only preparation omits diagnostic cases. Association inference
+      // needs the same complete Stage-1 rows, in zero-based category units.
+      auto retained = s;
+      retained.int_data.clear();
+      for (const auto& x : d.raw.X)
+        retained.int_data.push_back((x.array() - 1.0).matrix().cast<int>());
+      out["ordinal_stats"] = ordinal_stats_to_r(retained);
       Rcpp::List composition = out["composition"];
       composition["algorithm"] = std::string(estimate::backend_name(backend));
       out["composition"] = composition;

@@ -21,7 +21,7 @@ test_that("saved lavaan specifications supply their structural choices", {
   expect_equal(coef(magmaan(magmaan_model(spec, prototype = d, ordered = rev(ord),
                                           parameterization = "theta"),
                             d, estimator = "DWLS", inference = FALSE)), coef(f))
-  expect_error(magmaan(spec, d), "treats every variable as continuous")
+  expect_identical(magmaan(spec, d)$estimator, "DWLS")
   expect_error(magmaan_model(spec, prototype = d, ordered = ord[-1]), "conflicts")
   expect_error(magmaan_model(spec, prototype = d, parameterization = "delta"), "conflicts")
   expect_error(magmaan(spec, d, estimator = "DWLS", options = list(start = "fabin3")),
