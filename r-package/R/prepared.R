@@ -67,7 +67,7 @@ prepare_model <- function(model, ..., prototype = NULL) {
     }
   }
   native <- prepared_model_impl(spec$partable, kind, schema)
-  .prepared_object(native = native, spec = spec, input_spec = input_spec, ov_names = ov, kind = kind,
+  .prepared_object(native = native, identification_report = structural_identification_impl(NULL, native), spec = spec, input_spec = input_spec, ov_names = ov, kind = kind,
                    categories = categories, masks = masks, class = "magmaan_prepared_model")
 }
 
@@ -244,4 +244,34 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   if (estimator == "DLS") route_args$dls_a <- weight$dls_a
   fit$options$route <- list(fitter = "fit_model", args = route_args)
   fit
+}
+
+#' Check structural identification
+#'
+#' Checks generic local identification without data. A prepared model reuses
+#' its construction-time report. For an ordinal specification, provide a
+#' prototype to declare categories; prototype values never enter the check.
+#' Models with unsupported moment maps or constraints are returned as unchecked.
+#' Lab fitting remains available for every status; unidentified fits fail their
+#' convergence verdict. No constraints are added by this check.
+#' @param model A model specification, lavaan syntax, or a prepared model.
+#' @param prototype Optional category-schema prototype for ordinal specifications.
+#' @return A list with `status` (`identified`, `unidentified`, `unchecked`),
+#'   `reason`, `map`, reduced `n_parameters`, `n_moments`, `counting_rule`,
+#'   `rank`, `n_points`, `null_tolerance`, `identified_tolerance`,
+#'   `min_relative_singular_values` (one per evaluated point), and
+#'   `smallest_singular_values` at the deciding point. `null_directions` has
+#'   one column per free direction, with parameter labels as row names;
+#'   `null_direction_text` describes the coefficients. Cached directions are
+#'   evaluated at the deciding data-free probe (`directions_at_estimate = FALSE`).
+#'   This checks generic local identification, not global uniqueness or weak
+#'   identification at a fitted point.
+#' @export
+structural_identification <- function(model, prototype = NULL) {
+  if (inherits(model, "magmaan_prepared_model"))
+    return(structural_identification_impl(NULL, model$native))
+  spec <- if (is.character(model)) model_spec(model) else as_magmaan_model_spec(model)
+  if (length(spec$ordered) && !is.null(prototype))
+    return(structural_identification(prepare_model(spec, prototype = prototype)))
+  structural_identification_impl(spec$partable)
 }

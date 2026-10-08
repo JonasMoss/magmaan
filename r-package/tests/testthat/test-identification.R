@@ -92,3 +92,41 @@ testthat::test_that("identified and constrained controls keep their verdicts und
     }
   }
 })
+
+testthat::test_that("standalone reports and prepared fits reuse construction checks without refusing", {
+  before <- prepared_identification_count_impl()
+  ridge <- prepare_model(model_spec("f =~ NA*x1 + x2 + x3"))
+  testthat::expect_equal(prepared_identification_count_impl(), before + 1)
+  report <- structural_identification(ridge)
+  testthat::expect_identical(report, ridge$identification_report)
+  testthat::expect_identical(report$status, "unidentified")
+  testthat::expect_false(report$directions_at_estimate)
+  for (n in c(300L, 400L)) {
+    ss <- interior; ss$nobs <- n
+    fit <- suppressWarnings(estimate(ridge, prepare_data(ridge, ss), estimator = "ML"))
+    testthat::expect_s3_class(fit, "magmaan_fit")
+    testthat::expect_identical(fit$diagnostics$identification, report)
+    testthat::expect_false(fit$converged)
+    testthat::expect_equal(prepared_identification_count_impl(), before + 1)
+  }
+  testthat::expect_identical(structural_identification("f =~ x1 + x2 + x3")$status,
+                            "identified")
+  testthat::expect_identical(structural_identification(model_spec(
+    "f =~ x1 + a*x2 + b*x3\nb == a*a"))$status, "unchecked")
+})
+
+testthat::test_that("ordinal construction uses category schema without prototype values", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  vars <- paste0("x", 1:3)
+  d[vars] <- lapply(d[vars], function(x) ordered(cut(x, breaks = quantile(x,
+    c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE), levels = 1:3))
+  spec <- model_spec("f =~ x1 + x2 + x3", ordered = vars)
+  m <- prepare_model(spec, prototype = d[0, vars])
+  report <- structural_identification(m)
+  expect_identical(report$status, "identified")
+  expect_identical(report$map, "ordinal")
+  expect_identical(structural_identification(spec, prototype = d), report)
+  fit <- estimate(m, prepare_data(m, d), estimator = "DWLS")
+  expect_identical(fit$diagnostics$identification, report)
+})

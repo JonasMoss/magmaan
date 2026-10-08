@@ -94,6 +94,11 @@ test_that("ordinal ML supports loading equalities and rejects inactive constrain
     expect_error(fit_model(bad, dat[ordered], estimator = "ML"),
                  "means|mean/intercept|response|saturated")
     prepared <- prepare_model(bad, prototype = dat[ordered])
+    if (identical(extra, "x1 | 0*t1 + t2")) {
+      report <- structural_identification(prepared)
+      expect_identical(report$status, "unchecked")
+      expect_identical(report$reason, "unsupported_model")
+    }
     expect_error(estimate(prepared, prepare_data(prepared, dat[ordered]), estimator = "ML"),
                  "means|mean/intercept|response|saturated")
   }

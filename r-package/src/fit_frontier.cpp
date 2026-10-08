@@ -854,6 +854,7 @@ Rcpp::List frontier_fit_ml_psd_impl(
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(
       std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  reuse_identification(ctx, partable);
   std::string start_policy = "scaled-fabin";
   std::string start_fallback_reason = "none";
 

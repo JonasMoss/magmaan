@@ -299,6 +299,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
+  reuse_identification(ctx, partable);
   if (control.isNotNull()) {
     Rcpp::List ctl(control.get());
     if (ctl.containsElementNamed("fitting_options")) {
@@ -370,6 +371,7 @@ Rcpp::List fit_moments_barrier_impl(
   auto parsed = partable_from_arg(partable, "fit_moments_barrier");
   auto starts = std::move(parsed.starts);
   auto ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names), sample_stats);
+  reuse_identification(ctx, partable);
   const auto x0 = start_values_or_stop(ctx, starts, "scaled-fabin", nullptr, nullptr, control);
   auto options = multiinfo_options_from(1.25, R_NilValue, target);
   options.weight = weight;

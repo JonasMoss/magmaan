@@ -2601,6 +2601,40 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// structural_identification_impl
+Rcpp::List structural_identification_impl(SEXP partable, SEXP native);
+RcppExport SEXP _magmaanlab_structural_identification_impl(SEXP partableSEXP, SEXP nativeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type native(nativeSEXP);
+    rcpp_result_gen = Rcpp::wrap(structural_identification_impl(partable, native));
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_identification_count_impl
+double prepared_identification_count_impl();
+RcppExport SEXP _magmaanlab_prepared_identification_count_impl() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(prepared_identification_count_impl());
+    return rcpp_result_gen;
+END_RCPP
+}
+// prepared_identification_partable_impl
+SEXP prepared_identification_partable_impl(SEXP partable, SEXP native);
+RcppExport SEXP _magmaanlab_prepared_identification_partable_impl(SEXP partableSEXP, SEXP nativeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type native(nativeSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_identification_partable_impl(partable, native));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_profile_lrt_parameter_ml_impl
 Rcpp::List frontier_profile_lrt_parameter_ml_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, SEXP raw_data, bool robust, Rcpp::Nullable<Rcpp::String> reference);
 RcppExport SEXP _magmaanlab_frontier_profile_lrt_parameter_ml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP, SEXP referenceSEXP) {
@@ -4826,6 +4860,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_prepared_structure_count_impl", (DL_FUNC) &_magmaanlab_prepared_structure_count_impl, 0},
     {"_magmaanlab_nested_null_start_impl", (DL_FUNC) &_magmaanlab_nested_null_start_impl, 2},
+    {"_magmaanlab_structural_identification_impl", (DL_FUNC) &_magmaanlab_structural_identification_impl, 2},
+    {"_magmaanlab_prepared_identification_count_impl", (DL_FUNC) &_magmaanlab_prepared_identification_count_impl, 0},
+    {"_magmaanlab_prepared_identification_partable_impl", (DL_FUNC) &_magmaanlab_prepared_identification_partable_impl, 2},
     {"_magmaanlab_frontier_profile_lrt_parameter_ml_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ml_impl, 10},
     {"_magmaanlab_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_gmm_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl, 11},

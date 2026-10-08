@@ -613,6 +613,23 @@ struct Ctx {
   bool                     meanstructure = false;
 };
 
+// Immutable report snapshot for the ordinary ML2S fallback's fresh Stage-2
+// adapters. The native pointer is process-local; restored pointers are ignored.
+struct IdentificationSnapshot {
+  std::shared_ptr<const magmaan::estimate::IdentificationReport> report;
+  std::int32_t n_free = -1;
+};
+inline void reuse_identification(Ctx& ctx, SEXP partable) {
+  SEXP ptr = Rf_getAttrib(partable, Rf_install("magmaan_identification"));
+  if (TYPEOF(ptr) != EXTPTRSXP ||
+      R_ExternalPtrTag(ptr) != Rf_install("magmaan_identification") ||
+      !R_ExternalPtrAddr(ptr)) return;
+  const auto& cache = *Rcpp::XPtr<IdentificationSnapshot>(ptr);
+  if (cache.n_free != ctx.pt.n_free()) return;
+  ctx.rep.identification = cache.report;
+  ctx.rep.identification_n_free = cache.n_free;
+}
+
 // Permutation taking the model's observed-variable order `ov` to `M`'s
 // column order: `perm[k]` is the column of `M` for the k-th model variable.
 // If `M` has column names, match by name (error on a missing model variable);

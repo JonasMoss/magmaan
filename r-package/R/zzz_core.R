@@ -345,6 +345,8 @@ frontier_fcsem_standard_errors <- fcsem_standard_errors_impl
 frontier_fcsem_fit_measures <- fcsem_fit_measures_impl
 frontier_fcsem_standardized_rows <- fcsem_standardized_rows_impl
 
+prepared_identification_partable <- prepared_identification_partable_impl
+
 magmaan_core <- local({
   groups <- list(
     parse = c(
@@ -362,6 +364,8 @@ magmaan_core <- local({
     ),
     compat_mplus = c("mplus_model"),
     model = c(
+      "structural_identification",
+      "prepared_identification_partable",
       "model_matrix_rep",
       "model_implied"
     ),

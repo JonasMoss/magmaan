@@ -7,6 +7,7 @@ namespace prepared {
 using namespace magmaan;
 // Internal trace counts binding-owned structural preparation, not numerical workspaces.
 inline std::size_t structural_preparations = 0;
+inline std::size_t identification_preparations = 0;
 struct Model {
   Ctx ctx;
   spec::Starts starts;
@@ -94,6 +95,18 @@ SEXP model(SEXP partable, std::string kind, Rcpp::Nullable<Rcpp::List> schema) {
   if (m.ctx.rep.ov_names.empty()) Rcpp::stop("magmaan: empty model");
   m.ctx.ov_names = m.ctx.rep.ov_names[0];
   m.ctx.meanstructure = has_meanstructure(m.ctx.pt);
+  const auto parameterization = ordinal_parameterization_from_string(m.parameterization);
+  auto report = kind == "ordinal"
+      ? estimate::frontier::check_structural_identification(m.ctx.pt, m.ctx.rep,
+          ordinal_stats_from_arg(Rcpp::List(schema.get())), parameterization)
+      : kind == "mixed"
+      ? estimate::frontier::check_structural_identification(m.ctx.pt, m.ctx.rep,
+          mixed_ordinal_stats_from_arg(Rcpp::List(schema.get())), parameterization)
+      : estimate::frontier::check_structural_identification(m.ctx.pt, m.ctx.rep);
+  if (!report) stop_fit(report.error());
+  ++identification_preparations;
+  m.ctx.rep.identification = std::make_shared<const estimate::IdentificationReport>(std::move(*report));
+  m.ctx.rep.identification_n_free = m.ctx.pt.n_free();
   return handle(std::move(m), "magmaan_prepared_model");
 }
 

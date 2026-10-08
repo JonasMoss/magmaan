@@ -250,8 +250,17 @@ the gap, or more reduced parameters than moments, is Unidentified; anything in
 between, and every route without a moment map, is Unchecked. An unidentified
 model fails every verdict (common, a selected compatibility rule such as the
 lavaan preset, and explicit policies); unchecked reports change nothing.
-Unidentified reports carry a unit null-direction basis evaluated at the
-estimate, named by free-parameter labels.
+Unidentified reports carry a unit null-direction basis named by free-parameter
+labels. Immutable `api::Model` and native prepared handles compute and share a
+report once per construction through `MatrixRep`; fits copy it into diagnostics.
+Cached null directions refer to the deciding data-free probe; uncached low-level
+checks can express directions at the estimate. Structural changes require a new
+prepared model/representation. `magmaanlab::structural_identification()` checks a
+specification or retrieves the prepared report without refusing lab fits.
+Ordinary `magmaan_model()` stores and prints the report; `magmaan()` and ordinary
+refits refuse Unidentified models before estimation with
+`magmaan_identification_error` (status, reason, labelled direction coefficients).
+Unchecked models fit normally; there is no ordinary override.
 
 Moment maps: vech(Sigma) and mu per block for complete-data ML/LS/GMM/SNLLS,
 Fisher/IRLS, PSD, multi-information, ML2S Stage 2, direct FIML,

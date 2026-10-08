@@ -8,6 +8,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -71,6 +72,9 @@ IdentificationReport check_identification_rank(
     const MomentJacobian& jacobian, const Eigen::VectorXd* estimate = nullptr,
     IdentificationOptions options = {});
 
+// Immutable prepared owners attach their default-options report to MatrixRep;
+// this overload reuses it, retaining directions at the data-free probe. Clear
+// the cache/rebuild the representation after changing the model structure.
 // The continuous moment map of the LISREL evaluator: vech(Sigma) per block,
 // plus mu when the model has a mean structure. Covers complete-data ML/LS,
 // multi-group models, PSD-constrained fits and direct FIML (the same
@@ -90,8 +94,16 @@ fit_expected<IdentificationReport> check_structural_identification(
     const Eigen::VectorXd* estimate = nullptr,
     IdentificationOptions options = {});
 
-// "lhs op rhs" for each free parameter in theta order ("x1~1" for an
-// intercept); rows of groups after the first carry ".g<group>".
+// Schema-only checks on already prepared ordinal structures. No sample values
+// or fitted point enter the report; fits reuse it through MatrixRep.
+fit_expected<IdentificationReport> check_structural_identification(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& schema, OrdinalParameterization parameterization);
+fit_expected<IdentificationReport> check_structural_identification(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& schema, OrdinalParameterization parameterization);
+
+// "lhs op rhs" in free-parameter order, with group suffixes after group 1.
 std::vector<std::string> free_parameter_labels(const spec::LatentStructure& pt,
                                                const spec::LatentNames& names);
 

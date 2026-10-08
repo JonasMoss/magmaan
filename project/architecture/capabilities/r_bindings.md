@@ -266,16 +266,20 @@
   table) replaces `start` and `options$starts`; with engine options an explicit
   start overrides the preset's. Removed arguments (`psd`, `start`, `fixed.x`,
   `meanstructure`, `missing`, `cluster` and the structural arguments now on
-  `magmaan_model()`) raise errors naming their replacement. Fits use a lazily built native
-  prepared handle cached by reference on
-  the model. Repeated fits reuse structure; serialization and process changes
+  `magmaan_model()`) raise errors naming their replacement. Construction prepares
+  the native handle and its data-free identification report, cached by reference
+  on the model (TASK-33.3.1). Printing shows identification; ordinary fitting and
+  refits refuse Unidentified models with `magmaan_identification_error`, whose
+  fields retain status, reason and labelled direction coefficients. Unchecked
+  models fit normally. Repeated fits reuse structure; serialization and process changes
   rebuild the handle from portable fields. All-ordinal and complete mixed DWLS fitting options
   reuse `fit_ordinal_configured()` through prepared handles, including the
   lavaan preset, starts, optimizer and convergence choices. Delta/theta and
   grouped loading/threshold invariance retain fresh-fit attempts and reporting
   metadata. Mixed preset delta/theta single/grouped and equal-loading fits
   retain the same endpoints as the fresh fitter and pass retained WLSMV
-  reporting gates (TASK-91). ML2S retains the `fit_model()` route pending prepared support.
+  reporting gates (TASK-91). ML2S retains the `fit_model()` route pending prepared
+  support, sharing the construction report with its fresh Stage-2 adapters.
 - Fresh-fit parity, structural reuse, save/reload and PSOCK reconstruction are
   covered by the ordinary prepared-handle tests. Task-25.3 supplies ordinal
   equality and reporting metadata parity used by this composition.

@@ -451,9 +451,20 @@ IdentificationReport check_structural_identification(
     const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
     const EqConstraints& con, bool nonlinear_constraints,
     const Eigen::VectorXd* estimate, IdentificationOptions options) {
-  const Timer timer{};
+  const auto& rep = ev.matrix_rep();
   const IdentificationMap map = has_mean_structure(pt)
       ? IdentificationMap::CovarianceMean : IdentificationMap::Covariance;
+  const IdentificationOptions defaults;
+  if (rep.identification && rep.identification_n_free == pt.n_free() &&
+      !has_ordinal_structure(pt) &&
+      (rep.identification->map == map || rep.identification->map == IdentificationMap::None) &&
+      (!nonlinear_constraints ||
+       rep.identification->reason == IdentificationReason::NonlinearConstraints) &&
+      options.seed == defaults.seed && options.n_points == defaults.n_points &&
+      options.null_tolerance == defaults.null_tolerance &&
+      options.identified_tolerance == defaults.identified_tolerance)
+    return *rep.identification;
+  const Timer timer{};
   // The covariance map is the wrong map for ordinal models (their moments are
   // thresholds and correlations) and FC-SEM uses another evaluator; an empty
   // Jacobian reports them unsupported.

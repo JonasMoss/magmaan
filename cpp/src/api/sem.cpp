@@ -8,6 +8,7 @@
 #include <numeric>
 
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/frontier/identification.hpp"
 #include "magmaan/robust/restriction.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/twolevel.hpp"
@@ -384,7 +385,14 @@ Model::Model(std::string source, parse::FlatPartable flat,
       flat_(std::make_shared<parse::FlatPartable>(std::move(flat))),
       structure_(std::move(structure)), names_(std::move(names)),
       starts_(std::move(starts)), rep_(std::move(rep)),
-      options_(std::move(options)) {}
+      options_(std::move(options)) {
+  auto report = estimate::frontier::check_structural_identification(structure_, rep_);
+  estimate::IdentificationReport cached;
+  if (report) cached = std::move(*report);
+  else cached.reason = estimate::IdentificationReason::UnsupportedModel;
+  rep_.identification = std::make_shared<const estimate::IdentificationReport>(std::move(cached));
+  rep_.identification_n_free = structure_.n_free();
+}
 
 Result<Model> model_from_lavaan(std::string_view syntax,
                                 ModelOptions options) {
@@ -713,7 +721,11 @@ InformationSpec observed_information_analytic() {
 Fit::Fit(std::shared_ptr<const Model> model, std::shared_ptr<const Data> data,
          estimate::Estimates estimates, EstimatorSpec estimator)
     : model_(std::move(model)), data_(std::move(data)),
-      estimates_(std::move(estimates)), estimator_(std::move(estimator)) {}
+      estimates_(std::move(estimates)), estimator_(std::move(estimator)) {
+  if (estimates_.diagnostics.identification.reason == estimate::IdentificationReason::NotAttempted &&
+      model_->identification() != nullptr)
+    estimates_.diagnostics.identification = *model_->identification();
+}
 
 Result<Fit> fit(std::shared_ptr<const Model> model,
                 std::shared_ptr<const Data> data, EstimatorSpec estimator) {

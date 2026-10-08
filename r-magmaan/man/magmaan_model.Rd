@@ -67,6 +67,17 @@ means, each observed variable gets a free intercept, which changes no other
 estimate, standard error or test. Exogenous observed covariates are random
 variables with free variances and covariances (there is no \code{fixed.x}).
 }
+\section{Identification}{
+
+Construction computes a data-free check of generic local identification and
+stores it in \code{identification_report}. Printing shows \code{identified},
+\verb{NOT identified}, or \code{unchecked} with its reason beside the marker/std.lv
+setting. Fits reuse the report. Construction always returns the model;
+\code{\link[=magmaan]{magmaan()}} refuses an unidentified model before fitting. Unchecked models
+fit normally. The check does not assess global uniqueness or weak
+identification at an estimate, and never adds identifying constraints.
+}
+
 \section{Schema checks}{
 
 Each fit checks its data against the frozen schema. Data with an undeclared

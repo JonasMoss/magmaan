@@ -1,12 +1,14 @@
 # magmaan (development version)
 
+- `magmaan_model()` now caches and prints structural identification.
+  `magmaan()` refuses unidentified models before fitting with
+  `magmaan_identification_error`, naming the free parameter directions.
+  Unchecked models fit normally; deliberate ridge fits remain in magmaanlab.
+
 - ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
   within-group observed variances differ by more than a factor of 1000,
   with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit
   this advice. The diagnostic is computed by the shared C++ core.
-- A structurally unidentified model is reported as not converged
-  (`fit$inference$convergence$identified` is `FALSE`); it no longer passes on
-  a local Newton check.
 
 # magmaan 0.2.0
 

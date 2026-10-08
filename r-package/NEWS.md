@@ -1,5 +1,10 @@
 # magmaanlab (development version)
 
+- `structural_identification()` checks a specification or reuses a prepared
+  model's data-free report. Prepared fits reuse construction-time identification
+  and express cached null directions at the deciding probe point. Lab fits
+  remain available for unidentified models, with a failed verdict.
+
 - Continuous ULS, DWLS and WLS/ADF fits now warn when within-group observed
   variances differ by more than a factor of 1000, with advice to rescale.
   The C++ diagnostic also covers ML2S Stage-2 and continuous mixed-LS moments;

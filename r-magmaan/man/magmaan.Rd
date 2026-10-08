@@ -83,6 +83,17 @@ under magmaan's single documented policy. The arguments are the choices
 that define the estimate; structural choices belong to \code{\link[=magmaan_model]{magmaan_model()}}
 and optimization details to \code{options}.
 }
+\section{Identification}{
+
+Structurally unidentified models are refused before fitting, including
+ordinary refits, with a \code{magmaan_identification_error} condition. Its fields
+are \code{status}, \code{reason}, and \code{directions}: a coefficient matrix with parameter
+labels as row names and one column per free direction. The message names
+these directions. Add identifying restrictions to the model; there is no
+ordinary override. Deliberate unidentified fits remain available through
+\code{magmaanlab::fit_model()}. Unchecked models fit normally.
+}
+
 \section{Covariance policies}{
 
 \code{"psd"} constrains every model-implied covariance matrix to be positive
@@ -123,8 +134,8 @@ compatibility rule such as \code{preset = "lavaan-0.7.2"}, \code{disagree} is \c
 when the rule and magmaan's check reach different verdicts; inference
 follows the rule. \code{identified} is \code{TRUE} when the model is structurally
 (generically locally) identified, \code{FALSE} when it is not, and \code{NA} when the
-check does not cover the model. A structurally unidentified fit never has
-\code{converged = TRUE}, under any rule; \code{as_lab_fit(fit)$diagnostics$identification}
+check does not cover the model. Ordinary fits refuse structurally unidentified
+models; \code{as_lab_fit(fit)$diagnostics$identification}
 holds the rank report and the parameter combinations that leave the implied
 moments unchanged.
 

@@ -1,7 +1,9 @@
 # The ordinary-user entry points. This file handles arguments only:
 # magmaan_model() builds the model specification once with
-# magmaanlab::model_spec() and freezes the data schema; magmaan() fits it with
-# magmaanlab::fit_model() and computes inference with infer(). The design is
+# magmaanlab::model_spec(), freezes the data schema and prepares its native
+# handle and identification report. magmaan() fits through that handle (ML2S
+# retains its fresh Stage-1 composition) and computes inference with infer().
+# The design is
 # the ordinary API in project/design/r-interface-vision.md.
 
 .continuous_estimators <- c("ML", "FIML", "ML2S", "GLS", "ULS", "WLS")
@@ -79,6 +81,14 @@
 #'   (latent variances fixed to one).
 #' @param parameterization `"delta"` or `"theta"`, for ordered variables.
 #' @return An object of class `magmaan_model`.
+#' @section Identification:
+#' Construction computes a data-free check of generic local identification and
+#' stores it in `identification_report`. Printing shows `identified`,
+#' `NOT identified`, or `unchecked` with its reason beside the marker/std.lv
+#' setting. Fits reuse the report. Construction always returns the model;
+#' [magmaan()] refuses an unidentified model before fitting. Unchecked models
+#' fit normally. The check does not assess global uniqueness or weak
+#' identification at an estimate, and never adds identifying constraints.
 #' @section Schema checks:
 #' Each fit checks its data against the frozen schema. Data with an undeclared
 #' group or category, changed factor levels, a declared group without rows or a
@@ -192,7 +202,7 @@ magmaan_model <- function(model, prototype = NULL,
   categories <- if (is.null(prototype)) list() else
     .variable_schema(prototype, observed, ordered, caller)
 
-  structure(
+  out <- structure(
     list(spec = spec, observed = observed, ordered = ordered, categories = categories,
          group = group, groups = labels, group.equal = group.equal,
          group.partial = group.partial, identification = identification,
@@ -201,6 +211,10 @@ magmaan_model <- function(model, prototype = NULL,
          fittable = !is_mplus || !length(.mplus_refusals(spec)),
          prepared_cache = new.env(parent = emptyenv())),
     class = "magmaan_model")
+  out$identification_report <- if (out$fittable)
+    magmaanlab::structural_identification(.prepared_model(out)) else
+    magmaanlab::structural_identification(spec)
+  out
 }
 
 # Only the portable specification/schema survives serialization meaningfully.
@@ -228,7 +242,11 @@ print.magmaan_model <- function(x, ...) {
   if (!is.null(x$group)) {
     cat("  groups:         ", x$group, ": ", paste(x$groups, collapse = ", "), "\n", sep = "")
   }
-  cat("  identification: ", x$identification, "\n", sep = "")
+  report <- x$identification_report
+  status <- switch(report$status, identified = "identified", unidentified = "NOT identified",
+                   "unchecked")
+  if (identical(status, "unchecked")) status <- paste0(status, " (", report$reason, ")")
+  cat("  identification: ", x$identification, "; ", status, "\n", sep = "")
   if (!is.null(x$spec$mplus_source)) {
     refusals <- x$mplus_refusals
     if (!length(refusals)) {
@@ -302,6 +320,14 @@ print.magmaan_model <- function(x, ...) {
 #' @param ... Arguments removed in magmaan 0.2.0; each raises an error naming
 #'   its replacement.
 #' @return An object of class `magmaan`.
+#' @section Identification:
+#' Structurally unidentified models are refused before fitting, including
+#' ordinary refits, with a `magmaan_identification_error` condition. Its fields
+#' are `status`, `reason`, and `directions`: a coefficient matrix with parameter
+#' labels as row names and one column per free direction. The message names
+#' these directions. Add identifying restrictions to the model; there is no
+#' ordinary override. Deliberate unidentified fits remain available through
+#' `magmaanlab::fit_model()`. Unchecked models fit normally.
 #' @section Covariance policies:
 #' `"psd"` constrains every model-implied covariance matrix to be positive
 #' semidefinite. A PSD estimate on the boundary gets inference for an interior
@@ -338,8 +364,8 @@ print.magmaan_model <- function(x, ...) {
 #' when the rule and magmaan's check reach different verdicts; inference
 #' follows the rule. `identified` is `TRUE` when the model is structurally
 #' (generically locally) identified, `FALSE` when it is not, and `NA` when the
-#' check does not cover the model. A structurally unidentified fit never has
-#' `converged = TRUE`, under any rule; `as_lab_fit(fit)$diagnostics$identification`
+#' check does not cover the model. Ordinary fits refuse structurally unidentified
+#' models; `as_lab_fit(fit)$diagnostics$identification`
 #' holds the rank report and the parameter combinations that leave the implied
 #' moments unchanged.
 #'
@@ -391,6 +417,7 @@ magmaan <- function(model, data,
     model <- magmaan_model(model, prototype = data)
   }
   .check_mplus_fittable(model)
+  .check_identification(model)
   estimator <- .check_estimator(estimator)
   covariance <- .check_covariance(covariance)
   .check_flag(inference, "inference")
@@ -424,6 +451,8 @@ magmaan <- function(model, data,
   # ML2S still needs the fresh fitter's Stage-1 composition.
   fallback <- estimator == "ML2S"
   if (fallback) {
+    args$model$partable <- magmaanlab::magmaan_core$prepared_identification_partable(
+      args$model$partable, .prepared_model(model)$native)
     lab <- do.call(magmaanlab::fit_model, args)
   } else {
     handle <- .prepared_model(model)
@@ -887,4 +916,19 @@ as_lab_fit <- function(fit) {
   stop(structure(list(message = message,
                       call = NULL, reason = reason, edit = edit),
                  class = c("magmaan_mplus_error", "error", "condition")))
+}
+
+.check_identification <- function(model) {
+  report <- model$identification_report
+  if (is.null(report)) report <- magmaanlab::structural_identification(.prepared_model(model))
+  if (!identical(report$status, "unidentified")) return(invisible(model))
+  directions <- report$null_directions
+  detail <- paste(report$null_direction_text, collapse = "; ")
+  message <- paste0("magmaan(): model is structurally unidentified (", report$reason, ").",
+                    if (nzchar(detail)) paste0(" Free directions: ", detail, "."),
+                    " Add identifying restrictions to the parameters in these directions; ",
+                    "deliberate unidentified fits are available in magmaanlab::fit_model().")
+  stop(structure(list(message = message, call = NULL, status = report$status,
+                      directions = directions, reason = report$reason),
+                 class = c("magmaan_identification_error", "error", "condition")))
 }

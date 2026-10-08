@@ -10,6 +10,61 @@ using namespace detail_ordinal;
 
 namespace frontier {
 namespace {
+template<class Stats>
+fit_expected<IdentificationReport> schema_identification(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const Stats& schema, OrdinalParameterization parameterization) {
+  const auto map = std::is_same_v<Stats, data::OrdinalStats>
+      ? IdentificationMap::Ordinal : IdentificationMap::Mixed;
+  if (rep.identification && rep.identification_n_free == pt.n_free() &&
+      (rep.identification->map == map ||
+       rep.identification->reason == IdentificationReason::NonlinearConstraints ||
+       rep.identification->reason == IdentificationReason::ConstraintsUnavailable))
+    return *rep.identification;
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return std::unexpected(FitError{FitError::Kind::NumericIssue,
+      ev.error().detail, 0, 0.0});
+  auto con = build_eq_constraints(pt, true);
+  if (!con) {
+    IdentificationReport report;
+    report.reason = pt.nonlinear_eq_rows.empty()
+        ? IdentificationReason::ConstraintsUnavailable
+        : IdentificationReason::NonlinearConstraints;
+    return report;
+  }
+  auto layout = make_threshold_layout(pt, rep, schema);
+  // Some valid specifications (e.g. fixed thresholds on the association-ML
+  // route) have no supported structural moment layout. Construction still
+  // succeeds; their fitter retains its own unsupported-combination checks.
+  if (!layout)
+    return check_identification_rank(pt, *con, !pt.nonlinear_eq_rows.empty(), map, {});
+  MomentJacobian jacobian = [&ev, &layout, &schema, parameterization](
+      const Eigen::VectorXd& point) -> model_expected<Eigen::MatrixXd> {
+    auto e = ev->evaluate(point, true, true);
+    if (!e) return std::unexpected(e.error());
+    if constexpr (std::is_same_v<Stats, data::OrdinalStats>)
+      return ordinal_moment_jacobian(schema, *layout, e->moments, e->J_sigma,
+                                    point, parameterization, e->J_mu);
+    else
+      return mixed_moment_jacobian(schema, *layout, e->moments, e->J_sigma,
+                                  e->J_mu, point, parameterization, nullptr);
+  };
+  return check_identification_rank(pt, *con, !pt.nonlinear_eq_rows.empty(), map, jacobian);
+}
+}  // namespace
+
+fit_expected<IdentificationReport> check_structural_identification(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::OrdinalStats& schema, OrdinalParameterization parameterization) {
+  return schema_identification(pt, rep, schema, parameterization);
+}
+fit_expected<IdentificationReport> check_structural_identification(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& schema, OrdinalParameterization parameterization) {
+  return schema_identification(pt, rep, schema, parameterization);
+}
+
+namespace {
 
 struct OrdinalObjectiveState {
   data::OrdinalStats stats;
@@ -875,9 +930,16 @@ IdentificationReport ordinal_identification(
     const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
     const EqConstraints& con, const NonlinearEqConstraints& nl,
     const OrdinalNewtonContext& c, const Eigen::VectorXd& theta) {
-  frontier::MomentJacobian jacobian;
+  const auto& rep = ev.matrix_rep();
   const bool available = c.layout != nullptr &&
       (c.stats != nullptr || c.mixed != nullptr);
+  const auto map = c.stats != nullptr ? IdentificationMap::Ordinal : IdentificationMap::Mixed;
+  if (available && rep.identification && rep.identification_n_free == pt.n_free() &&
+      (rep.identification->map == map ||
+       rep.identification->reason == IdentificationReason::NonlinearConstraints ||
+       rep.identification->reason == IdentificationReason::ConstraintsUnavailable))
+    return *rep.identification;
+  frontier::MomentJacobian jacobian;
   if (available) {
     jacobian = [&ev, &c](const Eigen::VectorXd& point)
         -> model_expected<Eigen::MatrixXd> {

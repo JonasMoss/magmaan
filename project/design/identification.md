@@ -132,7 +132,12 @@ hold the contract.
 
 ## Work
 
-- TASK-33.3: core check, verdict wiring and R exposure on fits (in progress).
-- TASK-33.3.1: construction-time caching, the ordinary refusal, printing and
-  documentation.
+- TASK-33.3: core check, verdict wiring and R exposure on fits (complete).
+- TASK-33.3.1: construction-time caching on immutable `api::Model` and native
+  prepared handles, the ordinary refusal, printing and standalone lab report.
+  Cached directions refer to the deciding data-free probe, not an estimate.
+  Low-level callers can attach a report to their immutable `MatrixRep`; rebuild
+  the representation after structural changes. Complete: full optimized and
+  Debug C++ suites and both R testthat suites verified, including the corrected
+  unsupported ordinal-schema fixture and construction-count probes.
 - TASK-33.3.2: scale, location and rotation classification and suggested fixes.

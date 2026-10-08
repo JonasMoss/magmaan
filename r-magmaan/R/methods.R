@@ -574,6 +574,9 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
   if (!identical(test$reason, "not_converged") ||
       !grepl("the alternative fits worse than the null", test$detail, fixed = TRUE)) return(out)
   warnings <- character()
+  if (identical(alternative$diagnostics$identification$status, "unidentified")) {
+    .check_identification(list(identification_report = alternative$diagnostics$identification))
+  }
   retry <- tryCatch(withCallingHandlers(
     magmaanlab::refit_from_null(alternative, null),
     warning = function(w) {

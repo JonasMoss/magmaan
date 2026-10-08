@@ -729,6 +729,18 @@ nested_null_start_impl <- function(fit_H1, fit_H0) {
     .Call(`_magmaanlab_nested_null_start_impl`, fit_H1, fit_H0)
 }
 
+structural_identification_impl <- function(partable, native = NULL) {
+    .Call(`_magmaanlab_structural_identification_impl`, partable, native)
+}
+
+prepared_identification_count_impl <- function() {
+    .Call(`_magmaanlab_prepared_identification_count_impl`)
+}
+
+prepared_identification_partable_impl <- function(partable, native) {
+    .Call(`_magmaanlab_prepared_identification_partable_impl`, partable, native)
+}
+
 frontier_profile_lrt_parameter_ml_impl <- function(fit, parameter, target, optimizer = NULL, control = NULL, bounds = NULL, constraint_tol = 1e-6, raw_data = NULL, robust = FALSE, reference = NULL) {
     .Call(`_magmaanlab_frontier_profile_lrt_parameter_ml_impl`, fit, parameter, target, optimizer, control, bounds, constraint_tol, raw_data, robust, reference)
 }

@@ -139,7 +139,7 @@ test_that('Mplus errors list all edits and printing shows fittability', {
   expect_output(print(joint), '  Mplus input:    fittable', fixed=TRUE)
   ordinary <- magmaan_model('f =~ y1 + y2 + y3')
   expect_identical(capture.output(print(ordinary)), c('magmaan model',
-    '  observed:       y1, y2, y3', '  identification: marker'))
+    '  observed:       y1, y2, y3', '  identification: marker; identified'))
 })
 
 test_that('continuous grouped and categorical Mplus models rebuild in a fresh process', {

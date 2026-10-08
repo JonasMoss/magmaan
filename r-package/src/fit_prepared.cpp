@@ -720,3 +720,37 @@ Rcpp::NumericVector nested_null_start_impl(Rcpp::List fit_H1, Rcpp::List fit_H0)
   if (!embedded) stop_post(embedded.error());
   return Rcpp::wrap(embedded->theta);
 }
+
+// [[Rcpp::export]]
+Rcpp::List structural_identification_impl(SEXP partable, SEXP native = R_NilValue) {
+  if (!Rf_isNull(native)) {
+    const auto& m = prepared::get<prepared::Model>(native, "magmaan_prepared_model");
+    const auto labels = magmaan::estimate::frontier::free_parameter_labels(m.ctx.pt, m.ctx.names);
+    return identification_to_r(*m.ctx.rep.identification, &labels);
+  }
+  auto parsed = partable_from_arg(partable, "structural_identification");
+  auto rep = magmaan::model::build_matrix_rep(parsed.structure, &parsed.names);
+  if (!rep) stop_model(rep.error());
+  auto report = magmaan::estimate::frontier::check_structural_identification(parsed.structure, *rep);
+  if (!report) stop_fit(report.error());
+  const auto labels = magmaan::estimate::frontier::free_parameter_labels(parsed.structure, parsed.names);
+  return identification_to_r(*report, &labels);
+}
+
+// Internal construction-count probe, not a public package function.
+// [[Rcpp::export]]
+double prepared_identification_count_impl() {
+  return static_cast<double>(prepared::identification_preparations);
+}
+
+// Private bridge for ordinary ML2S, whose Stage-1 composition is still fresh.
+// [[Rcpp::export]]
+SEXP prepared_identification_partable_impl(SEXP partable, SEXP native) {
+  const auto& m = prepared::get<prepared::Model>(native, "magmaan_prepared_model");
+  Rcpp::RObject out(Rf_shallow_duplicate(partable));
+  Rcpp::XPtr<IdentificationSnapshot> ptr(new IdentificationSnapshot{
+      m.ctx.rep.identification, m.ctx.pt.n_free()}, true,
+      Rf_install("magmaan_identification"));
+  out.attr("magmaan_identification") = ptr;
+  return out;
+}

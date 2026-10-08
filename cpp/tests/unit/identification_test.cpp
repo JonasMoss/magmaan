@@ -10,6 +10,8 @@
 #include <Eigen/SVD>
 
 #include "../test_fit.hpp"
+#include "../../src/estimate/detail_identification_probe.hpp"
+#include "magmaan/api/sem.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/frontier/convergence_policy.hpp"
@@ -508,3 +510,105 @@ TEST_CASE("Identification: ordinal routes rank the threshold/correlation map") {
     }
   }
 }
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace {
+std::size_t identification_checks = 0;
+void count_identification(const IdentificationReport&, double) {
+  ++identification_checks;
+}
+struct IdentificationObserver {
+  IdentificationObserver() {
+    identification_checks = 0;
+    magmaan::estimate::identification_test::set_observer(count_identification);
+  }
+  ~IdentificationObserver() {
+    magmaan::estimate::identification_test::set_observer(nullptr);
+  }
+};
+}
+TEST_CASE("Identification: immutable API models cache one data-free report across fits") {
+  IdentificationObserver observer;
+  magmaan::api::ModelOptions options;
+  options.build.auto_fix_first = false;
+  auto m = magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4", options);
+  REQUIRE(m.has_value());
+  REQUIRE(m->identification() != nullptr);
+  CHECK(identification_checks == 1);
+  CHECK(m->identification()->status == IdentificationStatus::Unidentified);
+  CHECK_FALSE(m->identification()->directions_at_estimate);
+  const auto shared = m->matrix_rep().identification;
+  const auto copied = *m;
+  CHECK(copied.matrix_rep().identification == shared);
+  for (const double factor : {1.0, 2.0}) {
+    const auto ss = sample(factor * one_factor_cov({.8, .7, .6, .5}));
+    auto fit = magmaan::test::fit(m->structure(), m->matrix_rep(), ss);
+    REQUIRE(fit.has_value());
+    CHECK(fit->diagnostics.identification.status == IdentificationStatus::Unidentified);
+    CHECK(fit->diagnostics.identification.null_directions.isApprox(shared->null_directions));
+    CHECK(identification_checks == 1);
+  }
+  auto ev = magmaan::model::ModelEvaluator::build(m->structure(), m->matrix_rep());
+  auto con = magmaan::estimate::build_eq_constraints(m->structure());
+  REQUIRE(ev.has_value());
+  REQUIRE(con.has_value());
+  const auto extra = fr::check_structural_identification(m->structure(), *ev, *con, true);
+  CHECK(extra.status == IdentificationStatus::Unchecked);
+  CHECK(extra.reason == IdentificationReason::NonlinearConstraints);
+}
+TEST_CASE("Identification: prepared ordinal structures reuse one schema-only rank check") {
+  auto X = one_factor_data(400, {.8, .7, .6, .5}, 20261008);
+  for (Eigen::Index i = 0; i < X.rows(); ++i)
+    for (Eigen::Index j = 0; j < X.cols(); ++j)
+      X(i, j) = 1.0 + (X(i, j) > 0.8 + 0.5 * static_cast<double>(j)) +
+          (X(i, j) > 1.4 + 0.5 * static_cast<double>(j));
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto m = model("f =~ x1 + x2 + x3 + x4\nx1 | t1 + t2\nx2 | t1 + t2\n"
+                 "x3 | t1 + t2\nx4 | t1 + t2");
+  using magmaan::estimate::OrdinalParameterization;
+  const auto parameterization = OrdinalParameterization::Delta;
+  auto prepared = magmaan::estimate::prepare_ordinal_partable(m.pt, *stats, parameterization);
+  REQUIRE(prepared.has_value());
+  IdentificationObserver observer;
+  auto report = fr::check_structural_identification(m.pt, m.rep, *stats, parameterization);
+  REQUIRE(report.has_value());
+  REQUIRE(report->status == IdentificationStatus::Identified);
+  CHECK(identification_checks == 1);
+  m.rep.identification = std::make_shared<const IdentificationReport>(*report);
+  m.rep.identification_n_free = m.pt.n_free();
+  auto repeated = fr::check_structural_identification(m.pt, m.rep, *stats, parameterization);
+  REQUIRE(repeated.has_value());
+  CHECK(identification_checks == 1);
+  for (int i = 0; i < 2; ++i) {
+    auto fit = magmaan::test::fit_ordinal_bounded(m.pt, m.rep, *stats, {},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, {}, parameterization);
+    REQUIRE(fit.has_value());
+    CHECK(fit->diagnostics.identification.status == IdentificationStatus::Identified);
+    CHECK(identification_checks == 1);
+  }
+  auto fixed = model("f =~ x1 + x2 + x3 + x4\nx1 | 0*t1 + t2\nx2 | t1 + t2\n"
+                     "x3 | t1 + t2\nx4 | t1 + t2");
+  // Four declared categories need three thresholds, while this explicit
+  // fixed-threshold specification supplies only two (the R regression case).
+  auto four = one_factor_data(400, {.8, .7, .6, .5}, 20261008);
+  for (Eigen::Index i = 0; i < four.rows(); ++i)
+    for (Eigen::Index j = 0; j < four.cols(); ++j) {
+      const double y = four(i, j);
+      four(i, j) = 1.0 + (y > 0.0) + (y > 0.5) + (y > 1.0);
+    }
+  auto four_stats = magmaan::data::ordinal_stats_from_integer_data({four});
+  REQUIRE(four_stats.has_value());
+  auto ok = magmaan::estimate::prepare_ordinal_partable(
+      fixed.pt, *four_stats, parameterization, nullptr, &fixed.names.row_user);
+  REQUIRE(ok.has_value());
+  auto fixed_rep = magmaan::model::build_matrix_rep(fixed.pt, &fixed.names);
+  REQUIRE(fixed_rep.has_value());
+  auto unavailable = fr::check_structural_identification(fixed.pt, *fixed_rep, *four_stats, parameterization);
+  REQUIRE(unavailable.has_value());
+  CHECK(unavailable->status == IdentificationStatus::Unchecked);
+  CHECK(unavailable->reason == IdentificationReason::UnsupportedModel);
+  CHECK(identification_checks == 2);
+}
+#endif

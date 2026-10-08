@@ -6,12 +6,15 @@
 // is the shared spec->numeric bridge used by estimate/inference/measures/robust.
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "magmaan/expected.hpp"
 #include "magmaan/spec/partable.hpp"
+
+namespace magmaan::estimate { struct IdentificationReport; }
 
 namespace magmaan::model {
 
@@ -92,6 +95,10 @@ struct BlockInfo {
 // partable; consumed by ModelEvaluator. No floating-point math here —
 // just integer indexing and variable orderings.
 struct MatrixRep {
+  // Immutable prepared-model owners attach a data-free report. Copies used
+  // for new datasets share it; rebuild/clear it after structural changes.
+  std::shared_ptr<const estimate::IdentificationReport> identification = {};
+  std::int32_t identification_n_free = -1;
   RepForm                form = RepForm::PureCFA;
   std::vector<Cell>      cell_for_row;     // cell_for_row.size() == ptable.size()
   std::vector<StructuralCell> structural_cells;  // phantom-Λ identity, etc.

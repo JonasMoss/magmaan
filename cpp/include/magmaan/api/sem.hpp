@@ -94,6 +94,9 @@ public:
   const spec::Starts &starts() const noexcept { return starts_; }
   const model::MatrixRep &matrix_rep() const noexcept { return rep_; }
   const ModelOptions &options() const noexcept { return options_; }
+  const estimate::IdentificationReport* identification() const noexcept {
+    return rep_.identification.get();
+  }
 
 private:
   friend Result<MplusModel> model_from_mplus(std::string_view source);

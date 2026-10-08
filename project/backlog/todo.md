@@ -1530,9 +1530,10 @@ separate final decision for each explicitly covered scope.
   calibration and the corpus sweep are in the
   [terminal audit](../design/terminal-audit.md#structural-identification-2026-10-07).
   Open: ordinal association ML, ordinal/mixed PSD and multi-information,
-  two-level and FC-SEM routes report unchecked; whether the ordinary
-  `magmaan()` refuses an unidentified model before fitting awaits the user's
-  decision on the board card.
+  two-level and FC-SEM routes report unchecked. TASK-33.3.1 adds immutable-model
+  construction caching, the standalone lab report and ordinary refusal before
+  fitting with `magmaan_identification_error`; unchecked models fit normally.
+  Gauge classification and specific suggested fixes remain in TASK-33.3.2.
 
 - [ ] **M — finish common-verdict and stopping-control integration.** Preserve
   evaluable candidates on soft exits, report effective controls/raw reasons
