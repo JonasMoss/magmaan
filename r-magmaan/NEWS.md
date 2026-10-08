@@ -15,6 +15,11 @@
   explicitly refuses switched marker coordinates. FIML and DWLS adaptation
   follows separately; their preset currently reports `marker = "default"`.
 
+- Fits using `convergence = "lavaan-0.7.2"` (including the preset) report
+  lavaan's post-estimation check separately from convergence. The six flags
+  are available in `fitting$post_check` on the lab fit; ordinary fits expose
+  them through `as_lab_fit()`. This adds no warning or inference restriction.
+
 - ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
   within-group observed variances differ by more than a factor of 1000,
   with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit

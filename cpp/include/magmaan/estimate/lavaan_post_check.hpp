@@ -1,0 +1,15 @@
+#pragma once
+
+#include "magmaan/estimate/fitting_options.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+
+namespace magmaan::estimate {
+
+// lavaan 0.7.2 post.check; continuous indices follow each block's ov order.
+// Empty indices mean there are no continuous responses in that block.
+model_expected<LavaanPostCheck> lavaan_post_check(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    Eigen::Ref<const Eigen::VectorXd> theta,
+    const std::vector<std::vector<int>>& continuous_indices);
+
+} // namespace magmaan::estimate

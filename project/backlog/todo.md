@@ -326,8 +326,10 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   lavaan 0.7.2's `bad.marker.crit = 0.1` rule in C++, a builder marker map with
   `lav_pt_flat` semantics, switched fit with all attempts and revert, and the
   fit reporting the identification actually fitted.
-- [ ] **0.2.1 — report lavaan's `post.check` (TASK-129.2)** for every fit under
-  lavaan's acceptance rule, separate from `converged` and admissibility.
+- [x] **0.2.1 — report lavaan's `post.check` (TASK-129.2).** The shared C++
+  checker reports the six flags for every configured ML, FIML and ordinal/mixed
+  DWLS fit using lavaan acceptance, independently of `converged`, inference
+  gating and admissibility. Literal edge cases and live lavaan 0.7.2 gates pass.
 - [ ] **0.2.1 — marker switch for FIML and ordinal/mixed DWLS (TASK-129.3)**,
   reading lavaan's saturated (h1) covariance of each route.
 - [ ] **0.2.1 — hard-case parity gate (TASK-129.4).** Opt-in comparison with

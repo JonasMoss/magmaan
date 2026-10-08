@@ -107,6 +107,7 @@ add_library(magmaan STATIC
   src/data/ordinal.cpp
   src/estimate/fit.cpp
   src/estimate/marker.cpp
+  src/estimate/lavaan_post_check.cpp
   src/estimate/configured_ml.cpp
   src/estimate/ml_psd_fallback.cpp
   src/estimate/evaluate.cpp

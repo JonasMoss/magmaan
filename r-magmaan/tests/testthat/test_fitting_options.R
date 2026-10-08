@@ -6,10 +6,12 @@ test_that("ordinary advanced fitting choices use the shared engine", {
       options = list(preset = "lavaan-0.7.2"))
   lab <- as_lab_fit(fit)
   expect_equal(lab$fitting$effective$convergence, "lavaan-0.7.2")
+  expect_true(lab$fitting$post_check$ok)
   expect_equal(lab$verdict$policy, "lavaan-0.7.2")
   hybrid <- magmaan(m, d, inference = FALSE,
       options = list(preset = "lavaan-0.7.2", convergence = "newton"))
   expect_true(as_lab_fit(hybrid)$fitting$modified_preset)
+  expect_null(as_lab_fit(hybrid)$fitting$post_check)
   expect_equal(as_lab_fit(hybrid)$verdict$status, as_lab_fit(hybrid)$diagnostics$verdict$status)
   # An explicit start overrides the preset's.
   fabin <- magmaan(m, d, inference = FALSE,

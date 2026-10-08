@@ -10,6 +10,7 @@
 #include "magmaan/api/policy.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 #include "magmaan/estimate/configured_ml.hpp"
+#include "magmaan/estimate/lavaan_post_check.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/optim/optimizers.hpp"
@@ -29,10 +30,12 @@ struct Fixture {
   magmaan::model::MatrixRep rep;
   magmaan::data::SampleStats sample;
 };
-Fixture fixture(std::string_view syntax, const Eigen::MatrixXd& covariance) {
+Fixture fixture(std::string_view syntax, const Eigen::MatrixXd& covariance,
+                bool fixed_x = true) {
   auto parsed = magmaan::parse::Parser::parse(syntax);
   REQUIRE(parsed);
-  auto pt = magmaan::spec::build(*parsed);
+  magmaan::spec::BuildOptions options; options.fixed_x = fixed_x;
+  auto pt = magmaan::spec::build(*parsed, options);
   REQUIRE(pt);
   auto rep = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(rep);
@@ -950,3 +953,61 @@ TEST_CASE("configured mixed DWLS matches lavaan starts coordinates gradients ret
   }
 }
 #endif
+
+TEST_CASE("lavaan post.check literal flags and eigenvalue boundary") {
+  using namespace magmaan;
+  const double tolerance = std::pow(std::numeric_limits<double>::epsilon(), 0.75);
+  auto check = [&](std::string_view syntax, bool continuous = true) {
+    auto f = fixture(syntax, Eigen::MatrixXd::Identity(2,2), false);
+    std::vector<std::vector<int>> indices(1);
+    if (continuous) for (int j=0; j<f.rep.dims[0].n_observed; ++j) indices[0].push_back(j);
+    Eigen::VectorXd theta = Eigen::VectorXd::Ones(f.pt.n_free());
+    return estimate::lavaan_post_check(f.pt, f.rep, theta, indices);
+  };
+  auto proper = check("f =~ 1*x1+1*x2\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2");
+  REQUIRE_OR_RETURN(proper); CHECK(proper->ok);
+  auto ov = check("f =~ 1*x1+1*x2\nf ~~ 1*f\nx1 ~~ -1*x1\nx2 ~~ 1*x2");
+  REQUIRE_OR_RETURN(ov); CHECK(ov->ov_variance_negative); CHECK_FALSE(ov->theta_not_pd); CHECK_FALSE(ov->ok);
+  auto lv = check("f =~ 1*x1+1*x2\nf ~~ -1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2");
+  REQUIRE_OR_RETURN(lv); CHECK(lv->lv_variance_negative); CHECK_FALSE(lv->cov_lv_not_pd);
+  auto cov = check("f =~ 1*x1\ng =~ 1*x2\nf ~~ 1*f\ng ~~ 1*g\nf ~~ 2*g\nx1 ~~ 1*x1\nx2 ~~ 1*x2");
+  REQUIRE_OR_RETURN(cov); CHECK(cov->cov_lv_not_pd);
+  auto residual = check("f =~ 1*x1+1*x2\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx1 ~~ 2*x2");
+  REQUIRE_OR_RETURN(residual); CHECK(residual->theta_not_pd);
+  auto ordinal = check("f =~ 1*x1+1*x2\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx1 ~~ 2*x2", false);
+  REQUIRE_OR_RETURN(ordinal); CHECK(ordinal->ok);
+  for (double multiplier : {0.5, 2.0}) {
+    std::ostringstream model;
+    model << std::setprecision(17) << "f =~ 1*x1\ng =~ 1*x2\nf ~~ 1*f\ng ~~ 1*g\nf ~~ "
+          << 1 + multiplier*tolerance << "*g\nx1 ~~ 1*x1\nx2 ~~ 1*x2";
+    auto result = check(model.str()); REQUIRE_OR_RETURN(result);
+    CHECK(result->cov_lv_not_pd == (multiplier > 1));
+    model.str(""); model.clear();
+    model << std::setprecision(17) << "f =~ 1*x1+1*x2\nf ~~ 1*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx1 ~~ "
+          << 1 + multiplier*tolerance << "*x2";
+    result = check(model.str()); REQUIRE_OR_RETURN(result);
+    CHECK(result->theta_not_pd == (multiplier > 1));
+  }
+  auto regressor = check("f =~ 1*x1\nf ~ 0*x2\nf ~~ 0.1*f\nx2 ~~ 1*x2\nf ~~ 0.5*x2\nx1 ~~ 1*x1");
+  REQUIRE_OR_RETURN(regressor); CHECK_FALSE(regressor->cov_lv_not_pd);
+  auto propagated = check("f =~ 1*x1\nf ~ 2*x2\nf ~~ 1*f\nx2 ~~ -1*x2\nx1 ~~ 5*x1");
+  REQUIRE_OR_RETURN(propagated); CHECK(propagated->cov_lv_not_pd);
+  auto f = fixture("f =~ x1+x2\nf ~~ f\nx1 ~~ x1\nx2 ~~ x2\nx1 ~~ x2", Eigen::MatrixXd::Identity(2,2));
+  Eigen::VectorXd theta = Eigen::VectorXd::Ones(f.pt.n_free());
+  for (std::size_t r=0; r<f.pt.size(); ++r) {
+    if (f.pt.op[r] != parse::Op::Covariance || f.pt.free[r] == 0) continue;
+    if (f.pt.lhs_var[r] == f.pt.rhs_var[r] && !f.pt.is_user_latent[static_cast<std::size_t>(f.pt.lhs_var[r])])
+      theta(f.pt.free[r]-1) = std::numeric_limits<double>::quiet_NaN();
+    else if (f.pt.lhs_var[r] != f.pt.rhs_var[r]) theta(f.pt.free[r]-1) = 2;
+  }
+  auto na = estimate::lavaan_post_check(f.pt, f.rep, theta, {{0,1}});
+  REQUIRE_OR_RETURN(na); CHECK(na->var_na); CHECK(na->ok);
+  CHECK_FALSE(na->cov_lv_not_pd); CHECK_FALSE(na->theta_not_pd);
+  for (std::size_t r=0; r<f.pt.size(); ++r)
+    if (f.pt.op[r] == parse::Op::Covariance && f.pt.lhs_var[r] == f.pt.rhs_var[r] &&
+        f.pt.is_user_latent[static_cast<std::size_t>(f.pt.lhs_var[r])] && f.pt.free[r] > 0)
+      theta(f.pt.free[r]-1) = -1;
+  na = estimate::lavaan_post_check(f.pt, f.rep, theta, {{0,1}});
+  REQUIRE_OR_RETURN(na); CHECK(na->var_na); CHECK(na->lv_variance_negative); CHECK_FALSE(na->ok);
+
+}

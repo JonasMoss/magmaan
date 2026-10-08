@@ -46,8 +46,18 @@ struct FittingAttempt {
   std::string error;
 };
 
+struct LavaanPostCheck {
+  bool ok = true;
+  bool var_na = false;
+  bool ov_variance_negative = false;
+  bool lv_variance_negative = false;
+  bool cov_lv_not_pd = false;
+  bool theta_not_pd = false;
+};
+
 struct FittingReport {
   FittingSetup setup;
+  std::optional<LavaanPostCheck> post_check = {};
   std::vector<FittingAttempt> attempts;
   std::size_t selected_attempt = 0;
   bool explicit_start = false; // values were supplied, not constructed

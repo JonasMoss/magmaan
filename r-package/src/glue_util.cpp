@@ -61,11 +61,22 @@ Rcpp::List fitting_report_to_r(const magmaan::estimate::FittingReport& report) {
             Rcpp::_["coordinate_scaling"] = magmaan::estimate::coordinate_scaling_name(c.coordinate_scaling),
             Rcpp::_["center_locations"] = c.center_locations));
   }
+  Rcpp::RObject post_check = R_NilValue;
+  if (report.post_check) {
+    const auto& p = *report.post_check;
+    post_check = Rcpp::List::create(
+        Rcpp::_["ok"] = p.ok, Rcpp::_["var_na"] = p.var_na,
+        Rcpp::_["ov_variance_negative"] = p.ov_variance_negative,
+        Rcpp::_["lv_variance_negative"] = p.lv_variance_negative,
+        Rcpp::_["cov_lv_not_pd"] = p.cov_lv_not_pd,
+        Rcpp::_["theta_not_pd"] = p.theta_not_pd);
+  }
   return Rcpp::List::create(
       Rcpp::_["marker_switch"] = Rcpp::DataFrame::create(
           Rcpp::_["lv"] = Rcpp::CharacterVector(), Rcpp::_["old"] = Rcpp::CharacterVector(),
           Rcpp::_["new"] = Rcpp::CharacterVector(), Rcpp::_["r_old"] = Rcpp::NumericVector(),
           Rcpp::_["r_new"] = Rcpp::NumericVector(), Rcpp::_["reverted"] = Rcpp::LogicalVector()),
+      Rcpp::_["post_check"] = post_check,
       Rcpp::_["requested"] = request,
       Rcpp::_["effective"] = Rcpp::List::create(
           Rcpp::_["starts"] = setup.starts, Rcpp::_["optimizer"] = setup.optimizer,

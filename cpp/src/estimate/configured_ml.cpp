@@ -1,3 +1,4 @@
+#include "magmaan/estimate/lavaan_post_check.hpp"
 #include "magmaan/estimate/configured_ml.hpp"
 #include "magmaan/estimate/fiml.hpp"
 
@@ -423,6 +424,20 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
   FittingReport report;
   report.setup = *setup;
   report.explicit_start = explicit_start.size() > 0;
+  auto attach_report = [&](Estimates& est) -> fit_expected<void> {
+    if (lavaan_convergence) {
+      if (auto ok = resolve_fixed_x_from_sample(pt, rep, sample); !ok)
+        return std::unexpected(ok.error());
+      std::vector<std::vector<int>> continuous(rep.dims.size());
+      for (std::size_t b = 0; b < rep.dims.size(); ++b)
+        for (int j = 0; j < rep.dims[b].n_observed; ++j) continuous[b].push_back(j);
+      auto check = lavaan_post_check(pt, rep, est.theta, continuous);
+      if (!check) return std::unexpected(invalid(check.error().detail));
+      report.post_check = *check;
+    }
+    est.fitting = std::move(report);
+    return {};
+  };
   if (!lavaan_search) {
     auto backend = backend_from_string(setup->optimizer);
     if (!backend) return std::unexpected(backend.error());
@@ -448,7 +463,7 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     attempt.iterations = est->iterations;
     attempt.fmin = est->fmin;
     report.attempts.push_back(std::move(attempt));
-    est->fitting = std::move(report);
+    if (auto ok = attach_report(*est); !ok) return std::unexpected(ok.error());
     return est;
   }
 #ifndef MAGMAAN_WITH_PORT
@@ -498,7 +513,7 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     auto est = evaluate_endpoint(*x0);
     // The pinned oracle reports no optimization as unconverged, while the
     // native Newton policy accepts a fully fixed model vacuously.
-    if (est) { if (lavaan_convergence) select_verdict(*est, false); est->fitting = std::move(report); }
+    if (est) { if (lavaan_convergence) select_verdict(*est, false); if (auto ok = attach_report(*est); !ok) return std::unexpected(ok.error()); }
     return est;
   }
   auto coordinates = lavaan_ml_coordinates(pt);
@@ -652,7 +667,7 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     selected = std::move(*est);
     if (report.attempts.back().accepted) break;
   }
-  selected->fitting = std::move(report);
+  if (auto ok = attach_report(*selected); !ok) return std::unexpected(ok.error());
   return std::move(*selected);
 #endif
 }

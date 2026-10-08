@@ -81,6 +81,21 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   the relevant compile definition into the R shared object so the accepted
   optimizer strings are executable from the R dev surface in one install.
 
+### Versioned fitting post-check
+
+Fits whose resolved convergence component is `lavaan-0.7.2` retain
+`FittingReport::post_check`, exposed as `fit$fitting$post_check` in magmaanlab
+and `as_lab_fit(fit)$fitting$post_check` in magmaan. The list contains `ok`,
+`var_na`, `ov_variance_negative`, `lv_variance_negative`, `cov_lv_not_pd`, and
+`theta_not_pd`; other convergence components report `NULL`.
+The shared C++ check follows lavaan 0.7.2's variance-row NA/negative branches,
+uses the propagated latent covariance with dummy latents removed, and checks
+only continuous response entries of theta at the absolute eigenvalue cutoff
+`-epsilon^(3/4)`. Ordinal checks use reconstructed partable estimates.
+This report emits no warning and leaves convergence, inference gating and
+magmaan admissibility diagnostics unchanged.
+
+
 The opt-in installed-lavaan 0.7.2 simulation gate is
 [`test_preset_simulation_parity.R`](../../../r-package/tests/testthat/test_preset_simulation_parity.R)
 (`MAGMAAN_PARITY=1`). Its eight named cases cover complete ML, FIML and
