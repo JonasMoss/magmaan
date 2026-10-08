@@ -21,21 +21,23 @@ pt <- read.csv(paths[5]); uncertainty <- read.csv(paths[6])
 
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
-| Ordinary association-ML inference | Typed unavailable | Open | Production calibration pending |
-| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; bounded pilot mechanics |
-| Lab global / nested references | All, SB, PEBA4 | Open | Bounded pilot; no reference choice yet |
-| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; bounded pilot mechanics |
+| Ordinary association-ML inference | Typed unavailable | Open | Production complete; user decision pending |
+| Lab covariance | Exact Stage-1 IJ, observed sensitivity | Provisional for exposure | Component gates; frozen production; user decision pending |
+| Lab global / nested references | All, SB, PEBA4 | Open | Production complete; user reference decision pending |
+| Lab MI | Robust projected meat, observed Schur metric | Provisional for exposure | Component gates; frozen production; user decision pending |
 
 ## Question and short answer
 
 Does the lab association-ML recipe calibrate well enough for ordinary exposure?
-The smoke and bounded pilot exercise all four components and the DWLS comparator,
-but cannot answer the calibration question. The pilot contains two draws each
-in two cells (two-factor, five skewed categories, chi-square2 innovations,
-omitted cross-loading, total N=300). It records `r nrow(failures)` unavailable
-panel results. Ordinary exposure remains pending production.
+Production is complete: 192 cells with 2,000 draws each, frozen at `b37ebefb`.
+Association ML has no coverage flags, seven global size flags and one nested
+size flag; DWLS has one correlation-coverage flag. No MI size cell is flagged,
+subject to the population approximation caveat below. Sparse ordinal samples
+cause substantial unavailability. The production tables below
+retain cell denominators and uncertainty. Ordinary exposure and the global and
+nested reference choices remain user decisions.
 
-## Evidence
+## Pilot mechanics and development evidence
 
 The pilot covers a difficult non-Gaussian misspecified population, single-group
 coverage/global/MI and two-group metric nesting. It prices only
@@ -69,7 +71,7 @@ difference is `r signif(max(abs(uncertainty$target_difference)),3)`; production
 interpretation must assess these errors relative to interval widths and MI
 null sensitivity.
 
-## Cost and caveats
+## Pilot cost and caveats
 
 ```{r}
 priced <- cost[cost$priced,]
@@ -82,7 +84,7 @@ Population construction took `r round(sum(pt$elapsed_seconds),1)` seconds on
 this workstation. The cost CSV lists every unpriced cell explicitly; the
 per-cell estimates above exclude population setup and driver/package startup.
 They do not price the full study. Worker parallelism is bounded at two and
-math libraries use one thread. Simbox remains unavailable.
+math libraries use one thread. This pilot preceded the authorized simbox production.
 
 Coverage targets are finite population-draw approximations. Gaussian correct
 models supply global size gates; global rejection under non-normality or
@@ -96,6 +98,231 @@ nested `p_all` is intentionally unavailable in that returned bundle. The final
 runner computes All from its spectrum using the lab reference primitive.
 The corrected smoke and pilot were rerun before freezing; no library change,
 criterion change or inference-policy choice followed those attempts.
+
+
+## Production confirmation
+
+```{r}
+production_dir <- 'results/production-2026-10-05'
+read_production <- function(name) {
+  path <- file.path(production_dir, paste0(name, '.csv'))
+  if (!file.exists(path)) stop('Frozen production evidence absent: ', path)
+  read.csv(path, stringsAsFactors=FALSE)
+}
+ps <- read_production('summary'); cells <- read_production('cells')
+pf <- read_production('failure_counts'); runtime <- read_production('timing_summary')
+pc <- read_production('cost'); pu <- read_production('population_uncertainty')
+pp <- read_production('population_targets'); ppt <- read_production('population_timing')
+pm <- read_production('metadata')
+stopifnot(nrow(cells)==192, all(ps$attempted==2000),
+          !anyDuplicated(ps[c('cell_id','arm','target')]))
+z <- merge(ps,cells,by='cell_id',sort=FALSE)
+z$family <- ifelse(startsWith(z$arm,'association'),'Association ML','DWLS')
+z$coverage <- z$target %in% c('loading','threshold','correlation')
+z$eligible <- (z$coverage & z$n>=300) |
+  (z$target=='global' & z$n>=1000 & z$generator=='gaussian' & !z$misspecified) |
+  (z$target %in% c('nested','mi') & z$n>=1000 & !grepl('power',z$arm))
+z$flag <- z$eligible & is.finite(z$rate) &
+  ifelse(z$coverage,z$rate<.93,z$rate<.03 | z$rate>.07)
+z$clear_flag <- z$flag & ifelse(z$coverage,z$upper<.93,z$upper<.03 | z$lower>.07)
+stopifnot(identical(z$flag, z$mechanical_flag))
+z$mc_se <- sqrt(z$rate*(1-z$rate)/z$successful)
+pct <- function(x) sprintf('%.2f',100*x)
+interval <- function(lo,hi) paste0(pct(lo),'–',pct(hi))
+cell_label <- function(d) paste0(d$cell_id, ': ',d$factors,'F/',d$categories,' categories/',
+  d$imbalance,'/',d$generator,'/',ifelse(d$misspecified,'misspecified','correct'),
+  '/N=',d$n,'/G=',d$groups)
+rate_table <- function(d) data.frame(Cell=cell_label(d),Arm=d$arm,Target=d$target,
+  Attempted=d$attempted,Successful=d$successful,`Rate (%)`=pct(d$rate),
+  `Wilson 95% (%)`=interval(d$lower,d$upper),`MC SE (pp)`=pct(d$mc_se),
+  Flag=d$flag,check.names=FALSE)
+show <- function(d) knitr::kable(d,row.names=FALSE)
+```
+
+The registered grid crosses one/two factors, binary/five-category responses,
+symmetric/skewed cuts, Gaussian/chi-square2 innovations, correct/misspecified
+models, N=300/1,000/4,000 and one/two groups. Each cell uses fresh draws. Rates
+are conditional on successful inference; attempted denominators also retain
+failures. There is no pooled calibration verdict. Cell IDs below identify the
+full design in `cells.csv`; exact rates and Wilson intervals are in `summary.csv`.
+
+### Population approximation before MI interpretation
+
+The first million-row population draw fixes each family's targets; the second
+independent draw measures their uncertainty and never replaces the target.
+
+```{r}
+show(do.call(rbind,lapply(split(pu,list(pu$estimator,pu$target),drop=TRUE),function(d)
+  data.frame(Family=ifelse(d$estimator[1]=='ML','Association ML','DWLS'),Target=d$target[1],
+    Populations=nrow(d),`Median absolute target shift`=signif(median(abs(d$target_difference)),3),
+    `Largest absolute target shift`=signif(max(abs(d$target_difference)),3),check.names=FALSE))))
+```
+
+These are finite population approximations, including for Gaussian correct
+models. Population loading shifts can perturb the fixed-loading MI null.
+The frozen summaries do not contain replicate standard errors or MI null
+sensitivity, and population `se_first` is absent: they cannot establish that
+this perturbation is negligible relative to sampling interval widths or MI
+size. MI flags below are therefore measured against the registered approximate
+null, with this unresolved uncertainty. Group symmetry supplies the nested
+pseudo-true null without fixing a numerically approximated loading.
+
+::: {.callout-note collapse="true" title="Population uncertainty and descriptive global rejection, per cell"}
+```{r}
+show(pu[c('key','estimator','target','estimate_first','estimate_second','target_difference')])
+global_descriptive <- z[z$interpretation=='descriptive_global',]
+global_descriptive$key <- with(global_descriptive,paste(factors,categories,imbalance,generator,misspecified,sep='_'))
+global_descriptive$estimator <- ifelse(global_descriptive$family=='Association ML','ML','DWLS')
+global_descriptive <- merge(global_descriptive,pp[pp$draw==1 & pp$target=='loading',
+  c('key','estimator','population_fmin')],by=c('key','estimator'))
+show(cbind(rate_table(global_descriptive),`Population discrepancy`=signif(global_descriptive$population_fmin,4)))
+```
+:::
+
+Global rejection outside Gaussian correct models is descriptive, alongside the
+family's population discrepancy; it is never a size gate.
+
+### Registered flags and Monte Carlo uncertainty
+
+Coverage below 93% is flagged at every registered N. Global size outside
+[3%,7%] is flagged only at N≥1,000 for Gaussian correct models. Nested and MI
+size use that band at N≥1,000 wherever their pseudo-true null holds. Power has
+no gate. The point estimate triggers a flag; a Wilson interval wholly beyond
+the relevant boundary identifies flags that remain beyond it at 95% precision.
+At 2,000 successes, the MC standard error is about 0.49 percentage points for
+5% size and 0.49 points for 95% coverage; losses of availability increase it.
+Intervals are pointwise, with no simultaneous multiplicity claim.
+
+```{r}
+flag_counts <- do.call(rbind,lapply(split(z,list(z$family,z$arm,z$target),drop=TRUE),function(d)
+ data.frame(Family=d$family[1],Arm=d$arm[1],Target=d$target[1],
+   `Eligible cells`=sum(d$eligible),Flags=sum(d$flag),
+   `Wilson wholly beyond boundary`=sum(d$clear_flag),check.names=FALSE)))
+show(flag_counts[flag_counts$`Eligible cells`>0,])
+```
+
+::: {.callout-note collapse="true" title="Every flagged cell, with Wilson intervals and denominators"}
+```{r}
+show(rate_table(z[z$flag,][order(z$family[z$flag],z$arm[z$flag],z$cell_id[z$flag]),]))
+```
+:::
+
+::: {.callout-note collapse="true" title="Covariance coverage per cell, separately by family"}
+```{r}
+coverage_rows <- z[z$coverage,]
+show(rate_table(coverage_rows[order(coverage_rows$family,coverage_rows$cell_id,coverage_rows$target),]))
+```
+:::
+
+::: {.callout-note collapse="true" title="All global/nested/MI rates, including reported power"}
+```{r}
+show(rate_table(z[!z$coverage,]))
+```
+:::
+
+### Availability and failure classes
+
+**NonPositiveDefiniteSample accounts for `r format(sum(pf$count[grepl('NonPositiveDefiniteSample',pf$error_class)]),big.mark=',')`
+unavailable panel results. Association-ML cell/arm availability falls as low as
+`r pct(min(z$successful[z$family=='Association ML']/z$attempted[z$family=='Association ML']))`%;
+DWLS remains at or above
+`r pct(min(z$successful[z$family=='DWLS']/z$attempted[z$family=='DWLS']))`%.
+This is a panel-result count, not a count of distinct
+draws:** a single failed sample is recorded across targets, references and both
+families. Raw replicate keys are not in the frozen failure counts, so distinct
+failed draws cannot be recovered by summing these rows.
+
+```{r}
+show(do.call(rbind,lapply(split(z,list(z$family,z$arm,z$target),drop=TRUE),function(d)
+ data.frame(Family=d$family[1],Arm=d$arm[1],Target=d$target[1],
+   Attempted=sum(d$attempted),Successful=sum(d$successful),Unavailable=sum(d$failures),
+   `Lowest cell availability (%)`=pct(min(d$successful/d$attempted)),check.names=FALSE))))
+pf$family <- ifelse(startsWith(pf$arm,'association'),'Association ML','DWLS')
+show(aggregate(count~family+error_class,pf,sum))
+stopifnot(sum(pf$count)==sum(z$failures))
+npd <- pf[grepl('NonPositiveDefiniteSample',pf$error_class),]
+npd_cells <- merge(aggregate(count~cell_id+family,npd,sum),cells,by='cell_id')
+show(data.frame(Cell=cell_label(npd_cells),Family=npd_cells$family,
+  `Unavailable panel results`=npd_cells$count,check.names=FALSE))
+```
+
+Availability totals above count target/reference results, and every arm's
+individual cell denominator remains visible in the detailed rate tables.
+Zero rejections among attempted draws are not substituted for unavailable tests.
+
+### Comparator losses
+
+All is the within-family reference comparator. A comparator loss means lower
+availability, or a larger absolute deviation from nominal 5% size in eligible
+null cells; descriptive global rejection and power do not select references.
+Every loss is listed below, including differences smaller than MC uncertainty.
+There are no paired uncertainty estimates in the frozen summaries.
+
+```{r}
+comparators <- z[grepl('_(SB|PEBA4)$',z$arm),]
+comparators$baseline_arm <- sub('_(SB|PEBA4)$','_All',comparators$arm)
+baseline <- z[c('cell_id','arm','target','rate','successful')]
+names(baseline)[2:5] <- c('baseline_arm','target','all_rate','all_successful')
+comparators <- merge(comparators,baseline,by=c('cell_id','baseline_arm','target'))
+comparators$size_loss <- comparators$eligible &
+  abs(comparators$rate-.05)>abs(comparators$all_rate-.05)
+comparators$availability_loss <- comparators$successful<comparators$all_successful
+losses <- comparators[comparators$size_loss | comparators$availability_loss,]
+show(aggregate(cbind(size_loss,availability_loss)~family+arm,comparators,sum))
+```
+
+::: {.callout-note collapse="true" title="Every within-family comparator loss"}
+```{r}
+show(cbind(rate_table(losses),`All rate (%)`=pct(losses$all_rate),
+  `All successful`=losses$all_successful,`Size distance loss`=losses$size_loss,
+  `Availability loss`=losses$availability_loss))
+```
+:::
+
+DWLS is a separate estimand comparator, with its own targets and policy. The
+following inventory lists every cell where DWLS has lower coverage, lower
+availability or greater eligible size deviation than association ML for the
+matching target/reference. These are descriptive losses, not paired effects
+or evidence that either family's target is preferable. DWLS has no MI arm.
+
+::: {.callout-note collapse="true" title="Every same-draw DWLS comparator loss against association ML"}
+```{r}
+dw <- z[z$family=='DWLS',]; dw$matched_arm <- sub('^dwls','association',dw$arm)
+ml <- z[z$family=='Association ML',c('cell_id','arm','target','rate','successful')]
+names(ml)[2:5] <- c('matched_arm','target','ml_rate','ml_successful')
+dw <- merge(dw,ml,by=c('cell_id','matched_arm','target'))
+dw$coverage_loss <- dw$coverage & dw$rate<dw$ml_rate
+dw$size_loss <- dw$eligible & !dw$coverage & abs(dw$rate-.05)>abs(dw$ml_rate-.05)
+dw$availability_loss <- dw$successful<dw$ml_successful
+dw_losses <- dw[dw$coverage_loss | dw$size_loss | dw$availability_loss,]
+show(cbind(rate_table(dw_losses),`Association ML rate (%)`=pct(dw_losses$ml_rate),
+  `Association ML successful`=dw_losses$ml_successful,Coverage_loss=dw_losses$coverage_loss,
+  Size_loss=dw_losses$size_loss,Availability_loss=dw_losses$availability_loss))
+```
+:::
+
+### Runtime
+
+```{r}
+stopifnot(all(runtime$draws==2000),all(pc$priced),
+          abs(sum(runtime$total_seconds)/3600-sum(pc$production_cpu_hours))<1e-6)
+rt <- merge(runtime,cells,by='cell_id')
+show(do.call(rbind,lapply(split(rt,list(rt$groups,rt$n),drop=TRUE),function(d)
+ data.frame(Groups=d$groups[1],N=d$n[1],Cells=nrow(d),
+   `Summed elapsed hours`=round(sum(d$total_seconds)/3600,2),
+   `Cell median seconds range`=paste(round(range(d$median_seconds),3),collapse='–'),
+   `Largest cell p99 seconds`=round(max(d$p99_seconds),3),check.names=FALSE))))
+```
+
+The sum of draw elapsed times is `r round(sum(runtime$total_seconds)/3600,2)`
+hours; `cost.csv` agrees and prices all 192 cells. These are measured serial
+draw costs, not independently measured CPU utilization or parallel wall time.
+Population timing rows include repeated reuse across cells; deduplicating
+key/draw/N/time gives `r round(sum(unique(ppt)$elapsed_seconds)/3600,2)` hours
+of recorded population setup. Startup, combine and transfer are excluded.
+The metadata records source/package/criteria fingerprints and the simbox
+combine command; its git-commit field is empty, so `b37ebefb` identifies the
+repository freeze rather than a recorded executor commit.
 
 ## Reproduce
 
@@ -119,5 +346,24 @@ Run compute under `nice -n 10` with `OPENBLAS_NUM_THREADS=1`,
 `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1`. The local two-cell fan-out check
 matches serial smoke statistical summaries and population targets; times are
 allowed to vary. Use `--population-dir` only with a complete directory carrying
-the same source/package fingerprint and mode. Production commands are supported
-for the later driver, but no production was run or authorized here.
+the same source/package fingerprint and mode. Production subsequently ran on simbox with the registered fresh seed base
+2117000001; its combined evidence is frozen in `results/production-2026-10-05/`.
+
+
+## Implication under the registered rules
+
+Association ML has `r sum(z$flag[z$family=='Association ML' & z$coverage])`
+coverage flags and `r sum(z$flag[z$family=='Association ML' & !z$coverage])`
+size flags across target/reference cells; DWLS has
+`r sum(z$flag[z$family=='DWLS' & z$coverage])` coverage flags and
+`r sum(z$flag[z$family=='DWLS' & !z$coverage])` size flags. The flag table
+separates global, nested and MI rules and identifies uncertainty at each boundary.
+Sparse-sample non-positive-definiteness and the other listed failures limit
+availability. Population approximation uncertainty remains unresolved for MI
+null interpretation. These facts request finite-sample and availability review;
+flags never justify OPG, expected bread or another inconsistent recipe.
+
+Production reporting is complete. The user decision remains: should ordinary
+association-ML inference be exposed, and with which global and nested reference
+(All, SB or PEBA4), given the flags, MC uncertainty and availability? No adoption
+or reference choice is made here.

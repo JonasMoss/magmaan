@@ -435,3 +435,11 @@ Open work only; landed generator slices are inventoried in the roadmap.
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
   explicit policy for pairwise-calibrated latent matrices that are not positive
   definite. Error-only is the current behavior.
+
+## Association-ML calibration evidence
+
+The [decisions/08 report](../../experiments/decisions/08-association-ml-policy/report.qmd)
+applies the registered rules to production frozen at `b37ebefb` in
+`results/production-2026-10-05/` (TASK-128.1). Production reporting is complete;
+ordinary exposure and global/nested reference decisions remain pending user
+review of per-family flags, availability and population approximation uncertainty.
