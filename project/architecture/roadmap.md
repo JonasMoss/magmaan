@@ -335,6 +335,11 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: complete-data ordinal preparation skips per-pair diagnostics
+(expected, residual and Pearson tables, diagnostic influence copies) when the
+caller does not request them; every `OrdinalStats` field and the diagnostic
+route are unchanged, gated field by field (TASK-124).
+
 2026-10-08: structural identification reports classify each null direction
 as a scale, location or rotation freedom by membership in the constrained
 generator span (fixed and absent cells and linear equalities enforced first),
