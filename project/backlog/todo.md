@@ -57,6 +57,7 @@ entries into 0.2.0. 0.2.0 was released on 2026-10-07 as tag `v0.2.0`
 | --- | --- |
 | **0.1.0, shipped 2026-10-01** | Simulation prerelease of `magmaan` and `magmaanlab` (tag `v0.1.0`); API hardening and its gates are recorded in the [roadmap](../architecture/capabilities/r_bindings.md#r-bindings-and-public-namespace-transition) and package NEWS |
 | **0.2.0, released 2026-10-07** | The simulation release (tag `v0.2.0`). The adopted ordinary API; lavaan-compatible fitting through `options`; ordinary-policy inference for ML, FIML and all-ordinal DWLS (exact first stage, All/PEBA4 references, reconfirmed by decisions/05 and 07); uniform test tables with `references` for comparing tests; MI/release-score completion across weights; and, landed early, standardized estimates, robust `modindices()`, policy and lavaan-compatible `fit_measures()` |
+| **0.2.1, in progress: complete lavaan-0.7.2 preset** | Cut from `main` when the hard-case parity gate passes (TASK-129, user 2026-10-08): lavaan 0.7.2's marker switch as a `marker` fitting-options component with an off switch, lavaan's `post.check` reported beside `converged`, and a hard-case gate against live lavaan for ML, FIML and DWLS. First consumer: the sem-psd rerun, which pins this release. The tag needs the user's explicit go |
 | **0.3.0, current: feature completeness** | magmaan's own fitting reliability (starts, optimization, convergence, PSD finalization, stress and normalization); mixed continuous/ordered workflows and their calibration (TASK-80); barrier hardening and inference; association-ML policy calibration (decisions/08) and MI; fit-index intervals (TASK-103); a stable Mplus input frontend for the linear SEM subset; latent non-normality evidence for the DWLS policy (TASK-84) |
 | **0.4.0: documentation, cleanup and clarity** | User and simulation guides; one decision register that states every default with its evidence; `magmaanlab` export tiering (stable, research, superseded) and retirement of legacy names; consolidated error messages and help; CRAN-readiness checks for both packages |
 | **After 0.4.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md); then 1.0 |
@@ -307,6 +308,27 @@ augmented Lagrangian) and PSD, pairwise and two-level routes remain explicit
 errors under the preset. Gates compare starts, search coordinates, derivatives
 at identical points, endpoint/objective tolerances, soft failures and retries,
 with each actual endpoint's declared acceptance checked separately.
+
+0.2.1 completes the preset (TASK-129, user 2026-10-08; design in
+[the R-interface vision](../design/r-interface-vision.md#advanced-fitting-choices)).
+lavaan's `meanstructure = FALSE`/`fixed.x = TRUE` defaults are deliberately
+not emulated: comparisons run lavaan with `meanstructure = TRUE` and
+`fixed.x = FALSE`. The constraint-violating standardized retry stays an error.
+
+- [ ] **0.2.1 — marker switch for complete-data ML (TASK-129.1).** A `marker`
+  fitting-options component (`"default"`, `"lavaan-0.7.2"`) set by the preset;
+  lavaan 0.7.2's `bad.marker.crit = 0.1` rule in C++, a builder marker map with
+  `lav_pt_flat` semantics, switched fit with all attempts and revert, and the
+  fit reporting the identification actually fitted.
+- [ ] **0.2.1 — report lavaan's `post.check` (TASK-129.2)** for every fit under
+  lavaan's acceptance rule, separate from `converged` and admissibility.
+- [ ] **0.2.1 — marker switch for FIML and ordinal/mixed DWLS (TASK-129.3)**,
+  reading lavaan's saturated (h1) covariance of each route.
+- [ ] **0.2.1 — hard-case parity gate (TASK-129.4).** Opt-in comparison with
+  live lavaan at small N (Heywood cases, non-convergence, retries, marker
+  switches), structured means with equality constraints, random covariates,
+  FIML, DWLS and two groups, with pre-registered classes: no rule differences
+  may remain; floating-point path divergence is reported per cell.
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,

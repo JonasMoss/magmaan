@@ -403,14 +403,31 @@ magmaan's existing common verdict (Newton where supported, first-order
 fallback otherwise); thresholds remain internal. This does not change the
 ordinary inference policy or default fitting behavior.
 
-`options = list(preset = "lavaan-0.7.2")` supplies all three pinned conventions.
-Explicit components replace preset defaults and the fit reports a modified
-preset. There is no implicit current/installed-version alias. Resolution and
-fitting live in C++; R validates argument shapes. The first gate covers
-ordinary complete continuous ML without equality constraints; FIML, ordinal,
-PSD, pairwise, two-level and general constrained parity remain explicit gaps.
-Only zero/infinite bounds are initially supported by the versioned search.
-Unknown versions and unsupported routes error.
+`options = list(preset = "lavaan-0.7.2")` supplies every pinned convention:
+start, optimizer, convergence and, from 0.2.1, marker. Explicit components
+replace preset defaults and the fit reports a modified preset. There is no
+implicit current/installed-version alias. Resolution and fitting live in C++;
+R validates argument shapes. The preset covers continuous ML and FIML and
+ordinal or complete mixed DWLS, with supported linear equality constraints.
+PSD, barrier, pairwise and two-level routes, nonzero bounds and nonlinear
+constraints error, as do unknown versions.
+
+Adopted 2026-10-08 (user, for 0.2.1): the preset reproduces lavaan 0.7.2's
+default fitting completely, except for two model conventions it does not
+emulate. magmaan always fits a mean structure and treats observed covariates
+as random, so the preset matches lavaan run with `meanstructure = TRUE` and
+`fixed.x = FALSE`. lavaan's constraint-violating standardized retry stays an
+explicit error ([oracle ledger](../validation/oracle-defects.md)). The
+`marker` component reproduces lavaan 0.7.2's automatic marker switch
+(`bad.marker.crit = 0.1`): when a factor's first indicator is its only
+loading fixed at one and its absolute corrected item-total correlation in
+lavaan's saturated covariance, averaged over groups, is below .1 while another
+observed indicator reaches .1, the fit uses the indicator with the largest
+such correlation as the marker. If that fit is not accepted, the requested
+markers are refitted. The fit reports the identification actually fitted and
+records the switch. `options$marker = "default"` keeps the requested markers,
+as lavaan's `bad.marker.crit = 0` does. The preset also reports lavaan's
+post-estimation check (`post.check`) beside `converged`, as lavaan does.
 
 The lavaan start convention uses native-identification FABIN3, observed-only
 OLS starts, predictor sample moments and single-indicator latent starts.
@@ -436,6 +453,12 @@ identification problem. Another marker or the sphere may be used internally
 for diagnosis, but its estimates must not replace the requested result.
 Retain the diagnostic point and implied covariance where available; choosing
 a different identification is an explicit user action.
+
+Exception adopted 2026-10-08 (user): the lavaan compatibility `marker`
+component switches markers exactly as lavaan 0.7.2 does, because reproducing
+lavaan is its purpose ([advanced fitting choices](#advanced-fitting-choices)).
+It is opt-in through the preset or `options$marker`, and the fit reports the
+switched identification. The rule above still governs magmaan's own fitting.
 
 The concrete promotion witness is the retained fresh weak-marker N=100 draw 4
 in engineering/active/15-sphere-reference-fits: a marker loading near 184,000 becomes 1 under a different
