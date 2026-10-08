@@ -605,6 +605,10 @@ prepared_data_impl <- function(model, X, kind, ordered) {
     .Call(`_magmaanlab_prepared_data_impl`, model, X, kind, ordered)
 }
 
+prepared_fiml_h1_impl <- function(model, data) {
+    .Call(`_magmaanlab_prepared_fiml_h1_impl`, model, data)
+}
+
 prepared_weight_impl <- function(data, method, W, full, model, dls_a = 0.5) {
     .Call(`_magmaanlab_prepared_weight_impl`, data, method, W, full, model, dls_a)
 }

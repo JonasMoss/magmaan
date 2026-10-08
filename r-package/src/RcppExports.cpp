@@ -2194,6 +2194,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prepared_fiml_h1_impl
+Rcpp::List prepared_fiml_h1_impl(SEXP model, SEXP data);
+RcppExport SEXP _magmaanlab_prepared_fiml_h1_impl(SEXP modelSEXP, SEXP dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_fiml_h1_impl(model, data));
+    return rcpp_result_gen;
+END_RCPP
+}
 // prepared_weight_impl
 Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full, SEXP model, double dls_a);
 RcppExport SEXP _magmaanlab_prepared_weight_impl(SEXP dataSEXP, SEXP methodSEXP, SEXP WSEXP, SEXP fullSEXP, SEXP modelSEXP, SEXP dls_aSEXP) {
@@ -4844,6 +4856,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_policy_mi_alternative_impl", (DL_FUNC) &_magmaanlab_policy_mi_alternative_impl, 7},
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},
     {"_magmaanlab_prepared_data_impl", (DL_FUNC) &_magmaanlab_prepared_data_impl, 4},
+    {"_magmaanlab_prepared_fiml_h1_impl", (DL_FUNC) &_magmaanlab_prepared_fiml_h1_impl, 2},
     {"_magmaanlab_prepared_weight_impl", (DL_FUNC) &_magmaanlab_prepared_weight_impl, 6},
     {"_magmaanlab_prepared_estimate_impl", (DL_FUNC) &_magmaanlab_prepared_estimate_impl, 11},
     {"_magmaanlab_prepare_inference_impl", (DL_FUNC) &_magmaanlab_prepare_inference_impl, 3},

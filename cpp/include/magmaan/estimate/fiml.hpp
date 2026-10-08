@@ -76,6 +76,9 @@ struct FIMLH1Options {
   // Native H1 retains its pairwise covariance initializer.
   bool marginal_diagonal_start = false;
   bool squarem_acceleration = false;
+  // Pinned single-level lavaan uses a small scale-dependent ridge below
+  // 1e-6, rather than the native absolute covariance floor.
+  bool lavaan_covariance_ridge = false;
   int    max_iter = 10000;
   // Lavaan-style absolute max update in the saturated H1 parameters
   // (mu, vech(Sigma)). This is the primary EM convergence gate because the

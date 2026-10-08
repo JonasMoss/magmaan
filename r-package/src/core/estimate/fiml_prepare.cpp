@@ -572,6 +572,19 @@ h1_em_step_block(const FIMLCache& cache,
   Sigma_next = sum_xx / static_cast<double>(n_block) -
                mu_next * mu_next.transpose();
   Sigma_next = 0.5 * (Sigma_next + Sigma_next.transpose());
+  if (options.lavaan_covariance_ridge) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(Sigma_next, Eigen::EigenvaluesOnly);
+    if (eig.info() != Eigen::Success)
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "FIML H1 EM covariance eigen decomposition failed"));
+    SymmetricFloorReport repair;
+    repair.min_eigen_before = eig.eigenvalues().minCoeff();
+    repair.applied = repair.min_eigen_before < 1e-6;
+    repair.ridge = repair.applied ? Sigma_next.diagonal().maxCoeff() * 1e-8 : 0.0;
+    Sigma_next.diagonal().array() += repair.ridge;
+    repair.min_eigen_after = repair.min_eigen_before + repair.ridge;
+    return H1EMStep{f, repair};
+  }
   auto repair = floor_symmetric_fit(
       Sigma_next, options.covariance_floor, /*relative_floor=*/0.0,
       "FIML H1 EM covariance update");

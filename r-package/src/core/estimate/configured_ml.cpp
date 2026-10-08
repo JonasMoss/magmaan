@@ -687,7 +687,9 @@ fit_expected<fiml::FIMLH1> lavaan_fiml_h1(
   fiml::FIMLH1Options options;
   options.marginal_diagonal_start = true;
   options.squarem_acceleration = true;
+  options.lavaan_covariance_ridge = true;
   options.max_iter = 500;
+  options.error_on_nonconvergence = false;
   return fiml::fiml_h1_moments(raw, pack, options);
 }
 

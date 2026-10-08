@@ -96,6 +96,23 @@ SEXP prepared_data_impl(SEXP model, SEXP X, std::string kind, Rcpp::List ordered
   return prepared::dataset(model, X, kind, ordered);
 }
 
+// Internal oracle probe: compute the preset H1 without estimating the SEM.
+// [[Rcpp::export]]
+Rcpp::List prepared_fiml_h1_impl(SEXP model, SEXP data) {
+  const auto& m = prepared::get<prepared::Model>(model, "magmaan_prepared_model");
+  const auto& d = prepared::get<prepared::Data>(data, "magmaan_prepared_data");
+  if (d.kind != "raw" || !d.pack || d.names != m.ctx.rep.ov_names ||
+      d.meanstructure != m.ctx.meanstructure)
+    Rcpp::stop("magmaan: preset H1 requires matching prepared FIML model/data");
+  auto h1 = magmaan::estimate::lavaan_fiml_h1(d.raw, *d.pack);
+  if (!h1) stop_fit(h1.error());
+  Rcpp::IntegerVector iterations(h1->solver_blocks.size());
+  for (std::size_t b = 0; b < h1->solver_blocks.size(); ++b)
+    iterations[b] = h1->solver_blocks[b].iterations;
+  return Rcpp::List::create(Rcpp::_["mean"] = h1->mu,
+      Rcpp::_["cov"] = h1->sigma, Rcpp::_["iterations"] = iterations);
+}
+
 // [[Rcpp::export]]
 Rcpp::List prepared_weight_impl(SEXP data, std::string method, SEXP W, bool full,
                                 SEXP model, double dls_a = 0.5) {

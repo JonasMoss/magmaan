@@ -1009,5 +1009,37 @@ TEST_CASE("lavaan post.check literal flags and eigenvalue boundary") {
       theta(f.pt.free[r]-1) = -1;
   na = estimate::lavaan_post_check(f.pt, f.rep, theta, {{0,1}});
   REQUIRE_OR_RETURN(na); CHECK(na->var_na); CHECK(na->lv_variance_negative); CHECK_FALSE(na->ok);
+}
 
+TEST_CASE("lavaan FIML H1 matches small-N pinned EM moments") {
+  using namespace magmaan;
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) + "/fitting/lavaan_fiml_h1_0_7_2.json");
+  REQUIRE_OR_RETURN(in.good());
+  const auto root = nlohmann::json::parse(in, nullptr, false);
+  REQUIRE_OR_RETURN(!root.is_discarded());
+  for (const auto& c : root["cases"]) {
+    CAPTURE(c["seed"]);
+    const auto& rows = c["raw"];
+    const Eigen::Index n = static_cast<Eigen::Index>(rows.size());
+    const Eigen::Index p = static_cast<Eigen::Index>(rows.front().size());
+    data::RawData raw;
+    Eigen::MatrixXd x(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask(n, p);
+    for (Eigen::Index i = 0; i < n; ++i) for (Eigen::Index j = 0; j < p; ++j) {
+      const auto& v = rows[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)];
+      mask(i, j) = v.is_null() ? 0 : 1;
+      x(i, j) = v.is_null() ? 0.0 : v.get<double>();
+    }
+    raw.X.push_back(std::move(x)); raw.mask.push_back(std::move(mask));
+    auto pack = estimate::fiml::fiml_pack(raw); REQUIRE_OR_RETURN(pack);
+    auto h1 = estimate::lavaan_fiml_h1(raw, *pack); REQUIRE_OR_RETURN(h1);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      const double mean = c["mean"][static_cast<std::size_t>(i)].get<double>();
+      CHECK(std::abs(h1->mu[0](i) - mean) <= 1e-10 * std::max(1.0, std::abs(mean)));
+      for (Eigen::Index j = 0; j < p; ++j) {
+        const double cov = c["cov"][static_cast<std::size_t>(i)][static_cast<std::size_t>(j)].get<double>();
+        CHECK(std::abs(h1->sigma[0](i, j) - cov) <= 1e-10 * std::max(1.0, std::abs(cov)));
+      }
+    }
+  }
 }
