@@ -1328,11 +1328,8 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
       if (!family_matches(r1) || !will_be_free(r1) || in_group_partial(r1)) {
         continue;
       }
-      // Marker-map rebuilds expose lavaan's generated group label. Keep the
-      // existing names for callers using the default builder contract.
       const std::string shared =
-          r1.label.empty() ? (opts.marker.empty() ? ".eqg" + std::to_string(off) + "."
-                                                : ".p" + std::to_string(off + 1) + ".") : r1.label;
+          r1.label.empty() ? (".eqg" + std::to_string(off) + ".") : r1.label;
       for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
         // Explicit group templates may have different row counts and order.
         auto found = group_blocks ? std::find_if(rows.begin(), rows.end(),

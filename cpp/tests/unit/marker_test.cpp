@@ -2,9 +2,21 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <cmath>
+#include <cctype>
+#include <unordered_map>
 #include "magmaan/estimate/marker.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/parse/parser.hpp"
+
+namespace {
+// A builder-generated label: prefix, digits, closing dot (".p3.", ".eqg2.").
+bool generated_label(const std::string& s, const std::string& prefix) {
+  if (s.size() <= prefix.size() + 1 || s.rfind(prefix, 0) != 0 || s.back() != '.') return false;
+  for (std::size_t i = prefix.size(); i + 1 < s.size(); ++i)
+    if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+  return true;
+}
+} // namespace
 
 TEST_CASE("lavaan marker adaptation and builder match frozen 0.7.2 components") {
   using namespace magmaan;
@@ -29,6 +41,10 @@ TEST_CASE("lavaan marker adaptation and builder match frozen 0.7.2 components") 
     auto pt = compat::lavaan::to_lavaan_partable(*model, names, hints);
     if (std::string(family) == "build") {
       REQUIRE(pt.size() == c["pt"].size()); if (pt.size() != c["pt"].size()) return;
+      // magmaan names generated group-equality labels .eqgN.; lavaan reuses the
+      // first group's plabel. Both synthesize the same plabel == rows, so the
+      // generated labels must correspond one to one; all other labels match.
+      std::unordered_map<std::string, std::string> to_magmaan, to_lavaan;
       for (std::size_t i = 0; i < pt.size(); ++i) {
         CAPTURE(i);
         const auto& r = c["pt"][i];
@@ -36,7 +52,14 @@ TEST_CASE("lavaan marker adaptation and builder match frozen 0.7.2 components") 
         CHECK(pt.rhs[i] == r["rhs"].get<std::string>());
         CHECK(parse::to_string(pt.op[i]) == r["op"].get<std::string>());
         CHECK(pt.free[i] == r["free"].get<int>());
-        CHECK(pt.label[i] == r["label"].get<std::string>());
+        const auto expected = r["label"].get<std::string>();
+        if (generated_label(expected, ".p")) {
+          CHECK(generated_label(pt.label[i], ".eqg"));
+          CHECK(to_magmaan.try_emplace(expected, pt.label[i]).first->second == pt.label[i]);
+          CHECK(to_lavaan.try_emplace(pt.label[i], expected).first->second == expected);
+        } else {
+          CHECK(pt.label[i] == expected);
+        }
         CHECK(pt.plabel[i] == r["plabel"].get<std::string>());
         if (r["ustart"].is_null()) CHECK(std::isnan(pt.ustart[i]));
         else CHECK(pt.ustart[i] == doctest::Approx(r["ustart"].get<double>()));
