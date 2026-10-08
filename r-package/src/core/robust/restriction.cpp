@@ -354,10 +354,7 @@ Eigen::MatrixXd moment_jacobian(const model::Evaluation& e) {
   if (e.J_mu.rows()) out.bottomRows(e.J_mu.rows())=e.J_mu;
   return out;
 }
-post_expected<void> interior_tangent(const spec::LatentStructure& pt,
-                                    model::ModelEvaluator& ev,
-                                    const Eigen::VectorXd& theta,
-                                    const EqConstraints& con,
+post_expected<void> interior_tangent(const EqConstraints& con,
                                     const model::Evaluation& eval) {
   Eigen::MatrixXd tangent=moment_jacobian(eval)*con.Kmat;
   // Rank must not depend on observed or latent measurement units. Equilibrate
@@ -375,30 +372,9 @@ post_expected<void> interior_tangent(const spec::LatentStructure& pt,
   if (svd.rank()!=con.n_alpha)
     return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
         "nested embedding: alternative tangent loses rank at the null point"));
-  auto matrices=ev.assembled(theta);
-  if (!matrices) return std::unexpected(make_err(PostError::Kind::NumericIssue,matrices.error().detail));
-  std::vector<int> latent;
-  for (std::size_t i=0;i<pt.lv_ext_order.size();++i)
-    if (pt.is_user_latent[static_cast<std::size_t>(pt.lv_ext_order[i])]) latent.push_back(static_cast<int>(i));
-  for (const auto& block:matrices->blocks) {
-    // Test user-factor covariance, excluding the structural zero rows of
-    // phantom latents. Fixed zero residuals are valid identification choices.
-    if (!latent.empty()) {
-      Eigen::MatrixXd psi(static_cast<Eigen::Index>(latent.size()),static_cast<Eigen::Index>(latent.size()));
-      for (std::size_t i=0;i<latent.size();++i)
-        for (std::size_t j=0;j<latent.size();++j) psi(static_cast<Eigen::Index>(i),static_cast<Eigen::Index>(j))=block.Psi(latent[i],latent[j]);
-      if ((psi.diagonal().array()<=0.0).any())
-        return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
-            "nested embedding: null point is on the factor-variance boundary"));
-      const Eigen::VectorXd scale=psi.diagonal().array().sqrt().inverse();
-      psi=scale.asDiagonal()*psi*scale.asDiagonal();
-      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(psi);
-      if (es.info()!=Eigen::Success || es.eigenvalues().minCoeff()<=
-          1e-9*std::max(1.0,psi.norm()))
-        return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
-            "nested embedding: null point is on the factor-covariance boundary"));
-    }
-  }
+  // Inference assumes an interior population, not an interior fitted factor
+  // covariance. Improper and PSD-boundary estimates retain the same tangent
+  // test; only actual rank loss prevents the restriction map.
   return {};
 }
 post_expected<NestedEmbedding> embed_moment_nested_null(
@@ -460,7 +436,7 @@ post_expected<NestedEmbedding> embed_moment_nested_null(
   if (!point) return std::unexpected(make_err(PostError::Kind::NumericIssue,point.error().detail));
   auto equal=check_moments(*point,*target);
   if (!equal) return std::unexpected(equal.error());
-  auto interior=interior_tangent(p1,*ev1,out.theta,c1,*point);
+  auto interior=interior_tangent(c1,*point);
   if (!interior) return std::unexpected(interior.error());
   const Eigen::MatrixXd J1=moment_jacobian(*point)*c1.Kmat;
   const Eigen::MatrixXd J0=moment_jacobian(*target)*c0.Kmat;
@@ -501,7 +477,7 @@ post_expected<NestedEmbedding> embed_nested_null(
       if (!ev) return std::unexpected(make_err(PostError::Kind::NumericIssue,ev.error().detail));
       auto e=ev->evaluate(key->theta,true,true);
       if (!e) return std::unexpected(make_err(PostError::Kind::NumericIssue,e.error().detail));
-      auto interior=interior_tangent(p1,*ev,key->theta,c1,*e);
+      auto interior=interior_tangent(c1,*e);
       if (!interior) return std::unexpected(interior.error());
     }
     return key;

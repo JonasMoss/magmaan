@@ -4,6 +4,14 @@
   "table"` and `effective$starts = "<resolved convention>+table"` in fitting
   reports, identifying first-attempt values and the unmatched-parameter fallback.
 
+- Nested tests now refuse `boundary_nesting` only when a required tangent
+  loses rank, rather than because the fitted factor covariance is improper or
+  singular. PSD-boundary comparisons compute under the same interior-population
+  assumption as global tests and retain `psd_boundary`; `anova()` also flags
+  computed table rows. A 500-replicate weak-factor null check at each of
+  N=100/200 gave score rejection 5.6%/6.0% and LR 6.4%/7.0% at nominal 5%,
+  including 10.0%/1.8% improper null fits (SB and PEBA4, one restriction).
+
 - The `lavaan-0.7.2` marker component now also covers FIML and ordinal/mixed
   DWLS, using each route's saturated H1 covariance. Switched fits replay the
   selected fitting attempts and revert when rejected; `marker = "default"`

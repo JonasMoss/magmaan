@@ -1,5 +1,13 @@
 # magmaanlab 0.2.1
 
+- Nested tests now refuse `boundary_nesting` only when a required tangent
+  loses rank, rather than because the fitted factor covariance is improper or
+  singular. PSD-boundary comparisons compute under the same interior-population
+  assumption as global tests and retain `psd_boundary`; `anova()` also flags
+  computed table rows. A 500-replicate weak-factor null check at each of
+  N=100/200 gave score rejection 5.6%/6.0% and LR 6.4%/7.0% at nominal 5%,
+  including 10.0%/1.8% improper null fits (SB and PEBA4, one restriction).
+
 - Imported lavaan tables now reproduce the syntax-built variable inventory.
   This may change starts and iteration counts for models with regressions and
   mean structure.

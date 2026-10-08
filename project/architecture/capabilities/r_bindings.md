@@ -442,10 +442,26 @@
   the embedded null point, with the lifted null nuisance tangent. ML/FIML
   moment reparameterizations use a damped analytic moment fit of H1 to H0's
   fitted moments and both Jacobians at that solution; tangent inclusion and
-  interior rank/covariance checks are required. Other estimators support the
+  tangent rank checks are required. Other estimators support the
   key embedding and return typed `unsupported_nesting` for unavailable
-  correspondences. Singular tangent/factor-covariance nestings return
-  `boundary_nesting`. The shared map also feeds complete-data/FIML/ML2S exact
+  correspondences. Only singular tangent nestings return `boundary_nesting`;
+  improper or singular fitted factor covariances do not refuse an otherwise
+  regular embedding. Inference assumes an interior population, even when a
+  finite-sample estimate is improper. Nested PSD fits use the global test's
+  `policy_fit_state` boundary diagnostic for either input; lab results and
+  `anova()` retain `psd_boundary`, computed table rows carry that reason, and
+  printing explains the interior-population assumption (TASK-129.13).
+  A seeded normal two-factor CFA (loadings .7, residual variances .51, factor
+  correlation .9), releasing one shared loading label under the true null,
+  gave 500/500 available comparisons at each of N=100 and N=200. At nominal
+  .05, score SB/PEBA4 rejected 5.6%/6.0% and LR SB/PEBA4 6.4%/7.0%,
+  respectively (one restriction, so SB and PEBA4 coincide). Improper null
+  shares were 10.0%/1.8%; among proper nulls (450/491), score rejected
+  5.78%/5.91% and LR 6.44%/6.92%. Seed base 129130000, seed per draw
+  `base + N*1000 + replicate`; resumable runner and raw evidence are under
+  `~/.cache/magmaan-logs/task-129.13/`. These rates remain within the card's
+  .02–.10 criterion without filtering improper estimates. The shared map also
+  feeds complete-data/FIML/ML2S exact
   Satorra-2000, ordinal/mixed-ordinal, pairwise-composite, continuous weighted
   inference and the SB2010 null-point injection. Mixed-point delta remains
   the lavaan compatibility option. In the expected geometry SB matches

@@ -343,7 +343,13 @@ print.magmaan_model <- function(x, ...) {
 #' @section Covariance policies:
 #' `"psd"` constrains every model-implied covariance matrix to be positive
 #' semidefinite. A PSD estimate on the boundary gets inference for an interior
-#' population, and says so.
+#' population, and says so. This applies to global and nested tests: a
+#' comparison with either PSD fit on the boundary retains `psd_boundary` and
+#' reports that inference is computed assuming an interior population.
+#' An improper unrestricted null fit also receives nested inference when its
+#' required tangents have full rank. `boundary_nesting` means a required
+#' tangent loses rank at the embedded null point, not that its fitted factor
+#' covariance is improper or singular.
 #'
 #' `barrier(lambda)` maximizes the log-likelihood plus `lambda` times the sum,
 #' over groups, of the log determinant of the model-implied correlation matrix

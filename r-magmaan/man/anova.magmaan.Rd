@@ -64,4 +64,8 @@ is reported because it is the standard statistic, not recommended;
 use the same policy statistic and retained nested spectrum (\code{spectra} attribute),
 including after recovery. Select by \code{test} and \code{reference} rather than position.
 References cannot be combined with \code{lavaan_compat}.
+A PSD-boundary input retains the \code{psd_boundary} attribute and marks computed
+rows with that \code{reason}; inference is computed assuming an interior
+population. Improper unrestricted fits also receive inference when the
+required tangents have full rank; tangent rank loss is \code{boundary_nesting}.
 }

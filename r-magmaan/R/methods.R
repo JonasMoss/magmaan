@@ -494,6 +494,10 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' use the same policy statistic and retained nested spectrum (`spectra` attribute),
 #' including after recovery. Select by `test` and `reference` rather than position.
 #' References cannot be combined with `lavaan_compat`.
+#' A PSD-boundary input retains the `psd_boundary` attribute and marks computed
+#' rows with that `reason`; inference is computed assuming an interior
+#' population. Improper unrestricted fits also receive inference when the
+#' required tangents have full rank; tangent rank loss is `boundary_nesting`.
 #' @return A data frame of class `magmaan_anova`.
 #' @export
 anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) {
@@ -529,8 +533,8 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
     t <- res$test
     reasons <- if (isTRUE(t$available)) character() else
       c(lr = paste0(t$reason, ": ", t$detail))
-    return(structure(.lavaan_compat_test_row(t,
-      if (fits[[1L]]$estimator %in% c("ML", "FIML")) "lr" else "fit_function_difference"), class = c("magmaan_anova", "data.frame"),
+    return(structure(.nested_boundary_rows(.lavaan_compat_test_row(t,
+      if (fits[[1L]]$estimator %in% c("ML", "FIML")) "lr" else "fit_function_difference"), res), class = c("magmaan_anova", "data.frame"),
       lavaan_compat = lavaan_compat, restricted = labels[[null]], alternative = labels[[3L - null]],
       unavailable = reasons, psd_boundary = isTRUE(res$psd_boundary),
       verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed))
@@ -559,7 +563,7 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
         "fit_function_difference" else "lr"
     .policy_test_rows(t, label, references)
   })
-  out <- .bind_test_rows(rows)
+  out <- .nested_boundary_rows(.bind_test_rows(rows), res)
   reasons <- vapply(res[c("score", "lr")], function(t)
     if (isTRUE(t$available)) "" else paste0(t$reason, if (nzchar(t$detail)) paste0(": ", t$detail)),
     character(1))
@@ -570,6 +574,15 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
             unavailable = reasons[nzchar(reasons)],
             psd_boundary = isTRUE(res$psd_boundary),
             verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed)
+}
+
+# Keep typed refusal reasons; a computed boundary row records the population
+# assumption using the same diagnostic and wording as global inference.
+.nested_boundary_rows <- function(rows, result) {
+  if (isTRUE(result$psd_boundary)) {
+    rows$reason[is.na(rows$reason)] <- "psd_boundary"
+  }
+  rows
 }
 
 .nested_recovery <- function(result, alternative, null, compare, component) {

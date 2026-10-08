@@ -156,7 +156,6 @@ result under an unstated convention.
   bias / intervals require the registered task-103 evaluation. Unsupported
   estimator corrections carry explicit missing-ingredient reasons.
 
-
 - [x] **M/L — implement the adopted ordinary API surface** (2026-10-02).
   `magmaan_model()` with frozen group/category schema and zero-row prototypes;
   `magmaan(model, data, estimator, covariance, inference, options)` with
@@ -370,6 +369,13 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   divergence is diagnosed by TASK-129.8; D1 N=15 is 5%, all others zero.
   Marker decisions agree on 360/360 pairs; post-check agrees on 298/298 required
   endpoint comparisons. The existing 160-fit gate and full lab testthat suite pass.
+
+- [x] **0.2.1 — regular nested tests at improper/PSD-boundary fits (TASK-129.13).**
+  Only tangent rank loss triggers `boundary_nesting`; PSD comparisons retain
+  the global boundary flag and interior-population assumption in lab results
+  and `anova()` tables. Seeded improper-null expected-geometry SB parity and
+  boundary gates pass; 500 draws each at N=100/200 yielded score 5.6%/6.0%
+  and LR 6.4%/7.0% rejection including improper fits (SB/PEBA4).
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,

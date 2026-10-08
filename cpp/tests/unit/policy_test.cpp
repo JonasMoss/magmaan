@@ -654,16 +654,66 @@ TEST_CASE("policy nested embedding: reparameterized null and boundary have typed
   CHECK(policy.lr.reason == api::InferenceReason::Available);
   CHECK(policy.score.reason == api::InferenceReason::Available);
 
+  // A released loading label is regular even when the fitted factor
+  // covariance is indefinite or singular. The observed covariance remains PD.
+  auto released = named_model("f =~ x1 + x2 + x3\ng =~ x4 + x5 + x6", false);
+  auto shared = named_model("f =~ x1 + a*x2 + a*x3\ng =~ x4 + x5 + x6", false);
+  auto renamed = named_model("h =~ x1 + a*x2 + a*x3\ni =~ x4 + x5 + x6", false);
+  auto kn = magmaan::estimate::build_eq_constraints(renamed.pt);
+  REQUIRE(kn);
+  auto kr = magmaan::estimate::build_eq_constraints(released.pt);
+  auto ks = magmaan::estimate::build_eq_constraints(shared.pt);
+  REQUIRE(kr); REQUIRE(ks);
+  for (double correlation : {1.05, 1.0}) {
+    Eigen::VectorXd theta = Eigen::VectorXd::Constant(shared.pt.n_free(), 0.7);
+    for (std::size_t row=0; row<shared.pt.free.size(); ++row) {
+      if (shared.pt.free[row]<=0) continue;
+      const auto& cell=shared.rep.cell_for_row[row];
+      if (cell.mat==magmaan::model::MatId::Psi)
+        theta(shared.pt.free[row]-1)=cell.row==cell.col ? 1.0 : correlation;
+      if (cell.mat==magmaan::model::MatId::Theta)
+        theta(shared.pt.free[row]-1)=2.0;
+    }
+    auto embedded=magmaan::robust::embed_nested_null(released.pt,released.rep,
+        shared.pt,shared.rep,theta,*kr,*ks,true);
+    REQUIRE_MESSAGE(embedded.has_value(), (embedded ? "" : embedded.error().detail));
+    CHECK(embedded->restriction.A.rows()==1);
+    auto moments=magmaan::robust::embed_nested_null(released.pt,released.rep,
+        renamed.pt,renamed.rep,theta,*kr,*kn,true,&embedded->theta);
+    REQUIRE_MESSAGE(moments.has_value(), (moments ? "" : moments.error().detail));
+    CHECK(moments->through_moments);
+    CHECK(moments->restriction.A.rows()==1);
+  }
+
+  // A one-factor null in a two-factor parameterization has correlation one,
+  // but with these nonzero loadings its alternative tangent retains rank.
   auto two = named_model("f =~ x1 + x2\ng =~ x3 + x4", true);
   auto one = named_model("h =~ x1 + x2 + x3 + x4", true);
   auto single = prepare_on(*data,one);
   auto ct = magmaan::estimate::build_eq_constraints(two.pt);
   auto cs = magmaan::estimate::build_eq_constraints(one.pt);
   REQUIRE(ct.has_value()); REQUIRE(cs.has_value());
-  auto boundary = magmaan::robust::embed_nested_null(two.pt,two.rep,
+  auto singular = magmaan::robust::embed_nested_null(two.pt,two.rep,
       one.pt,one.rep,single->estimates.theta,*ct,*cs,true);
+  REQUIRE_MESSAGE(singular.has_value(), (singular ? "" : singular.error().detail));
+  CHECK(singular->through_moments);
+
+  // Collapse g completely: its variance and cross-covariance are zero,
+  // so its free loading directions no longer change any observed moments.
+  Eigen::VectorXd collapsed = Eigen::VectorXd::Constant(shared.pt.n_free(), 0.7);
+  for (std::size_t row=0; row<shared.pt.free.size(); ++row) {
+    if (shared.pt.free[row]<=0) continue;
+    const auto& cell=shared.rep.cell_for_row[row];
+    if (cell.mat==magmaan::model::MatId::Psi)
+      collapsed(shared.pt.free[row]-1)=cell.row==0 && cell.col==0 ? 1.0 : 0.0;
+    if (cell.mat==magmaan::model::MatId::Theta)
+      collapsed(shared.pt.free[row]-1)=2.0;
+  }
+  auto boundary = magmaan::robust::embed_nested_null(released.pt,released.rep,
+      shared.pt,shared.rep,collapsed,*kr,*ks,true);
   REQUIRE_FALSE(boundary.has_value());
   CHECK(boundary.error().kind == magmaan::PostError::Kind::BoundaryNesting);
+  CHECK(boundary.error().detail.find("rank") != std::string::npos);
 }
 
 TEST_CASE("policy nested embedding: frozen lavaan dropped-loading score and exact LR") {
