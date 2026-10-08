@@ -335,6 +335,16 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: model-contract repair. `from_lavaan_partable()` now rebuilds the
+same variable inventory as the direct syntax build: synthesized intercept rows
+no longer promote indicators to `ov.y` (which, with any regression, added
+phantom latents), while analysis variables mentioned only in generated Mplus
+rows keep their direct-build role. Every R fit goes through this import, so R
+and C++ now share one matrix representation; starts and iteration counts may
+change for models with regressions and a mean structure. A round-trip
+inventory invariant gates 28 Geiser models, Mplus growth and hand-written cases
+(TASK-133, found by TASK-132).
+
 2026-10-08: the `lavaan-0.7.2` fitting preset reproduces lavaan 0.7.2's
 automatic marker switch for complete-data ML as a fourth fitting-options
 component, `marker` (`"default"` keeps the requested markers). The C++ rule
