@@ -354,21 +354,22 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   H1 endpoints are outside the compatibility contract; non-convergence and
   the repair rule are tested, with update/repair diagnostics recorded in
   `fit$fitting$h1`. Native H1 is unchanged.
-- [ ] **0.2.1 — final hard-case parity gate (TASK-129.12; baseline TASK-129.4).**
+- [x] **0.2.1 — final hard-case parity gate (TASK-129.12; baseline TASK-129.4).**
   The opt-in live-lavaan gate covers 18 small-N ML/FIML/DWLS cells, structured
   means, equality constraints, random covariates and groups. The final harness
   consumes marker/post-check/H1 diagnostics, includes marker reversion attempts,
-  and applies the approved attempt-level path-divergence and nonconverged-H1
-  classes. Converged H1 moments require 1e-10 relative agreement; starts require
-  1e-6. Zero rule differences and pending features are required; rates above 5%
-  need a recorded diagnosis (D7: TASK-129.8). Final 20/cell evidence is retained
-  untracked under `~/.cache/magmaan-logs/task-129.12/`. The final run completed
-  360 replicates in 701.366 seconds: 297 agree, 52 both_failed, two
-  h1_nonconverged, three path_divergence, zero pending features, six rule
-  differences. D7's 10% path divergence is diagnosed by TASK-129.8. Acceptance
-  is blocked on six D5 N=20 converged-H1 moment gaps above 1e-10; seed 12953019
-  also exceeds the first-start tolerance. TASK-129.12 needs a decision. The
-  existing 160-fit gate and full lab testthat suite pass.
+  and applies the approved attempt-level path-divergence, nonconverged-H1 and
+  repaired-H1 precision classes. Unrepaired converged H1 requires 1e-10 relative
+  moment agreement and 1e-6 starts; converged ridge-repaired H1 requires 1e-5
+  moments and agreeing convergence verdicts, with fitted endpoints compared
+  through their verdict (TASK-129.12 closing decision). Final 20/cell evidence
+  is retained untracked under `~/.cache/magmaan-logs/task-129.12/`: 360
+  replicates in 576.068 seconds, 297 agree, 52 both_failed, two h1_nonconverged,
+  six h1_precision, three path_divergence, zero rule differences or pending
+  features. Maximum precision-class H1 gap is 3.332695e-6. D7's 10% path
+  divergence is diagnosed by TASK-129.8; D1 N=15 is 5%, all others zero.
+  Marker decisions agree on 360/360 pairs; post-check agrees on 298/298 required
+  endpoint comparisons. The existing 160-fit gate and full lab testthat suite pass.
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,

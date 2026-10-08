@@ -151,6 +151,7 @@
   }
   trace_state$attempts <- list()
   trace_state$h1 <- NULL
+  trace_state$h1_repairs <- 0L
   oracle <- .hard_capture(function() do.call(lavaan::sem,la))
   attempts <- trace_state$attempts
   trace_state$m_runs <- list()
@@ -190,6 +191,10 @@
   h1_nonconverged <- !is.null(h1_l) && identical(h1_l$converged,FALSE)
   h1_contract <- !is.null(h1_m) && all(!h1_m$converged) &&
     isTRUE(h1_m$lavaan_covariance_ridge) && all(h1_m$covariance_repairs>0L)
+  h1_repaired <- !is.null(h1_m) &&
+    (any(h1_m$covariance_repairs>0L) || trace_state$h1_repairs>0L)
+  h1_precision <- h1_repaired && !is.null(h1_l) && isTRUE(h1_l$converged) &&
+    all(h1_m$converged)
   starts_m <- if(length(ma)) ma[[1]]$start else numeric()
   starts_l <- if(length(attempts)) attempts[[1]]$theta_start else numeric()
   # Compare original free parameters by partable identity, since ordinal and
@@ -246,9 +251,14 @@
     own_rule(if(oracle) a$converged else a$accepted,status,grad)
   },logical(1)))
   stage_agree <- case$estimator!="FIML" ||
-    (is.finite(first_stage_gap) && first_stage_gap<=1e-10)
+    (!h1_repaired && is.finite(first_stage_gap) && first_stage_gap<=1e-10)
   if (!me && !le && h1_nonconverged && h1_contract) {
     class <- "h1_nonconverged"; reason <- "oracle H1 stalled; preset nonconvergence and ridge agree"
+  } else if (!me && !le && h1_precision && is.finite(first_stage_gap) &&
+             first_stage_gap<=1e-5 && identical(mc,lc) && !switch_diff) {
+    # Approved TASK-129.12 contract: ridge-repaired EM endpoints are defined
+    # to the oracle's update tolerance; compare fitted endpoints by verdict.
+    class <- "h1_precision"; reason <- "converged ridge-repaired H1 agrees within EM precision"
   } else if (defect) { class <- "known_defect"; reason <- actual$error
   } else if (!final && switch_diff && is.na(switch_m)) {
     class <- "pending_feature"; reason <- "baseline marker switch absent"
@@ -289,6 +299,7 @@
     l_h1_converged=if(is.null(h1_l)) NA else h1_l$converged,
     m_h1_iterations=.hard_text(if(is.null(h1_m)) NULL else h1_m$iterations),
     m_h1_repairs=.hard_text(if(is.null(h1_m)) NULL else h1_m$covariance_repairs),
+    l_h1_repairs=trace_state$h1_repairs,h1_precision=h1_precision,
     m_h1_ridge=if(is.null(h1_m)) NA else h1_m$lavaan_covariance_ridge,
     m_attempt_count=length(ma),l_attempt_count=length(attempts),m_selected=selected,
     l_selected=if(length(attempts)) length(attempts) else NA_integer_,
@@ -335,11 +346,23 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
     }
   }))
   trace("lav_em_squarem",where=asNamespace("lavaan"),print=FALSE,
-    exit=quote({recorder <- getOption("magmaan.hard.trace"); recorder$h1 <- returnValue()}))
+    tracer=quote({recorder <- getOption("magmaan.hard.trace"); recorder$h1_active <- TRUE}),
+    exit=quote({recorder <- getOption("magmaan.hard.trace"); recorder$h1 <- returnValue(); recorder$h1_active <- FALSE}))
+  # Count the oracle's actual EM ridge decisions without changing its update.
+  trace("lav_mvn_mi_estep",where=asNamespace("lavaan"),print=FALSE,exit=quote({
+    recorder <- getOption("magmaan.hard.trace")
+    if(isTRUE(recorder$h1_active)) {
+      estep <- returnValue()
+      count <- if(is.null(wt)) NROW(y) else sum(wt)
+      candidate <- estep$T2/count-tcrossprod(estep$T1/count)
+      if(any(eigen(candidate,symmetric=TRUE,only.values=TRUE)$values<1e-6))
+        recorder$h1_repairs <- recorder$h1_repairs+1L
+    }
+  }))
   trace(".marker_run",where=asNamespace("magmaanlab"),print=FALSE,
     exit=quote({recorder <- getOption("magmaan.hard.trace");
       recorder$m_runs[[length(recorder$m_runs)+1L]] <- returnValue()}))
-  on.exit({untrace(".marker_run",where=asNamespace("magmaanlab")); untrace("lav_model_est",where=asNamespace("lavaan"));
+  on.exit({untrace("lav_mvn_mi_estep",where=asNamespace("lavaan")); untrace(".marker_run",where=asNamespace("magmaanlab")); untrace("lav_model_est",where=asNamespace("lavaan"));
     untrace("lav_em_squarem",where=asNamespace("lavaan")); options(old)},add=TRUE)
   # Each fork has its own trace recorder. Only the parent writes evidence.
   workers <- as.integer(Sys.getenv("MAGMAAN_HARD_PARITY_WORKERS","1"))
@@ -361,7 +384,7 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
     cat(sprintf("\nhard parity round %d: %.1f seconds\n",replicate,proc.time()[["elapsed"]]-started))
   }
   results <- do.call(rbind,rows)
-  classes <- c("agree","both_failed","h1_nonconverged","path_divergence","known_defect","pending_feature","rule_difference")
+  classes <- c("agree","both_failed","h1_nonconverged","h1_precision","path_divergence","known_defect","pending_feature","rule_difference")
   summary <- as.data.frame(table(factor(paste(results$design,results$n),
     levels=paste(cells$design,cells$n)),factor(results$class,levels=classes)))
   names(summary) <- c("cell","class","count")

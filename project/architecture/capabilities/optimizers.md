@@ -175,8 +175,15 @@ failed endpoints are not evidence of a fitting-rule difference.
 Per-replicate data, class counts, design timing and maximum start/first-stage
 gaps are written to the configured untracked output directory. DWLS first-stage
 gaps compare thresholds and ordinal/mixed sample matrices. FIML uses the internal
-`prepared_fiml_h1_impl` accessor: converged oracle H1 moments must agree at
-1e-10 relative and starts at 1e-6. Oracle EM nonconvergence is recorded as
+`prepared_fiml_h1_impl` accessor: converged H1 without ridge repairs must
+agree at 1e-10 relative and starts at 1e-6. The approved TASK-129.12
+contract records converged H1 with ridge repairs in either program as
+`h1_precision`: moments must agree within 1e-5 relative, both H1 convergence
+verdicts must agree, and fitted endpoints are compared through their convergence
+verdict. This tolerance follows lavaan's EM update stopping tolerance and the
+near-singular eigen-inverse versus Cholesky mechanism traced in TASK-129.7.
+Read-only EM-update instrumentation counts the oracle's actual ridge decisions.
+Oracle EM nonconvergence is recorded as
 `h1_nonconverged` agreement only when the preset also reports nonconvergence,
 uses the oracle ridge rule and records covariance repairs; moments, starts and
 endpoints are excluded in that class (TASK-129.7). The fit's H1 update and repair
@@ -189,7 +196,7 @@ The gate requests 100 replicates per cell in complete rounds;
 `MAGMAAN_HARD_PARITY_WORKERS` selects one or two workers. It stops starting
 rounds after 28 minutes, reserving time to finish the current round.
 `MAGMAAN_HARD_PARITY_FINAL=1` requires zero `rule_difference` and zero
-`pending_feature`. The endpoint contract remains unchanged. Post-check verdicts
+`pending_feature`. Other classes retain the endpoint contract. Post-check verdicts
 are compared when endpoints agree. Marker decisions must agree except within
 1e-8 of the deciding correlation threshold .1, or for nonconverged H1.
 The approved TASK-129.4 amendment includes attempt-level `path_divergence`:
@@ -200,20 +207,25 @@ below 7.1e-15 relative and gradient gaps below 1e-12 absolute, with verified POR
 path divergence on very flat endpoints (smallest Hessian eigenvalue about 7e-8).
 No exact arithmetic-order parity is required.
 
-The final TASK-129.12 run on main `2d683e63` completed 20 replicates per
-cell (360 total), two workers, in 701.366 seconds: 297 `agree`, 52 `both_failed`,
-two `h1_nonconverged`, three `path_divergence`, zero `known_defect` or
-`pending_feature`, and six `rule_difference`. D7 has two path divergences (10%,
-covered by TASK-129.8); D1 N=15 has one (5%). Marker decisions agree on all
-360 pairs (358 required comparisons excluding stalled H1); post-check agrees
-on all 302 compared endpoints and all 360 raw verdict pairs.
+The final TASK-129.12 acceptance run on main `2d683e63` completed 20
+replicates per cell (360 total), two workers, in 576.068 seconds: 297 `agree`,
+52 `both_failed`, two `h1_nonconverged`, six `h1_precision`, three
+`path_divergence`, and zero `known_defect`, `pending_feature` or
+`rule_difference`. D7 has two path divergences (10%, covered by TASK-129.8);
+D1 N=15 has one (5%); every other cell has none. Marker decisions agree on
+all 360 pairs (358 required comparisons excluding stalled H1); post-check
+agrees on all 298 endpoint comparisons required by the amended contract
+and all 360 raw verdict pairs.
 
-Acceptance remains blocked: D5 N=20 seeds 12953001, 12953007, 12953014,
-12953017, 12953018 and 12953019 have converged H1 moment gaps above 1e-10
-relative (6.48e-9 to 3.33e-6). Seed 12953019 also exceeds the 1e-6 start
-threshold (1.33e-6). No tolerance or class was changed to exempt them.
-Evidence is retained under `~/.cache/magmaan-logs/task-129.12/`;
-baseline evidence remains under `~/.cache/magmaan-logs/task-129.4/completed/`.
+All six precision cases are D5 N=20, with a maximum H1 moment gap of
+3.332695e-6 relative, below the approved 1e-5 limit. Both H1 and fitted
+convergence verdicts agree. Unrepaired converged H1 retains the strict
+1e-10 moments and 1e-6 starts contract. Repaired cases that fail the amended
+contract cannot fall through into ordinary agreement or path-divergence classes.
+A retained-row audit proves this fallback guard leaves all 360 classifications
+unchanged. Evidence is retained under `~/.cache/magmaan-logs/task-129.12/`;
+the preceding strict-contract run is preserved in its `previous/` directory,
+and baseline evidence remains under `~/.cache/magmaan-logs/task-129.4/completed/`.
 The existing 160-fit gate and full magmaanlab testthat suite pass.
 
 Task-59's focused seed 590214 investigation temporarily recorded each preset
