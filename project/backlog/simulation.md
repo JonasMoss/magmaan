@@ -90,6 +90,18 @@ calibrates/diagnoses one of those steps.
 
 ## Planned Surface
 
+- **Unified simulation setup with complexity tiers (user direction,
+  2026-10-08; design principles to be set jointly before any registration).**
+  Decision studies keep re-deriving the same ingredients. Plan one shared
+  setup in `experiments/_support`: a representative model basis (seeded from
+  the sem-score study's 11 models, one natural restriction or misspecification
+  each) plus bespoke per-study additions; shared generator families (normal,
+  VM, IG, discretized; thresholded latents for ordinal data); a simple
+  single-cause MAR base tier in the Savalei-Falk style, with richer mechanisms
+  in higher tiers after a dedicated MAR reasoning session (including the FIML
+  population target under MAR and misspecification); and tiers that run from a
+  small priced basis up to stress panels. First consumer: the fit-index study
+  ([draft](../design/fit-index-evaluation-study.md), TASK-103).
 - Keep the landed model-implied simulation bridge moment-based: it lowers
   fitted or hand-authored SEM state to population moments and projection specs,
   then calls the normal/elliptical mixed-population stack. Do not route it into
