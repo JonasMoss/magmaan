@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <cstring>
 #include <string_view>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/layered_start.hpp"
+#include "../../src/estimate/detail_layered_start_probe.hpp"
 #include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -325,5 +327,19 @@ TEST_CASE("simple and FABIN starts: a zero disturbance is not a std.lv scale") {
     const auto k = b.pt.free[i] - 1;
     CHECK((*a1)(k) == doctest::Approx((*a2)(k)));
     CHECK((*f1)(k) == doctest::Approx((*f2)(k)));
+  }
+}
+
+TEST_CASE("layered start: non-overlap hand-written models retain bit-identical starts") {
+  for (const std::string_view model : {"f =~ y1 + y2 + y3", "f =~ y1 + y2 + y3\ng =~ y4 + y5 + y6\ng ~ f", "y2 ~ y1"}) {
+    const auto b = build(model);
+    const auto sample = stats(sigma(b, truth(b)));
+    auto current = layered_start_report(b.pt, b.rep, sample, b.starts);
+    auto original = magmaan::estimate::layered_start_test::alternating_candidate(b.pt, b.rep, sample, b.starts);
+    REQUIRE(current.has_value()); REQUIRE(original.has_value());
+    REQUIRE(current->theta.size() == original->theta.size());
+    CHECK(std::memcmp(current->theta.data(), original->theta.data(),
+                     static_cast<std::size_t>(current->theta.size()) * sizeof(double)) == 0);
+    CHECK(current->notes == original->notes);
   }
 }

@@ -7,6 +7,7 @@ if ("--help" %in% commandArgs(TRUE)) {
       "  --corpus PATH    Optional textbook-corpus mount (default: external/textbook-corpus)\n",
       "  --results PATH   Output directory (default: results/current)\n",
       "  --arms name,name Restrict policies (useful for isolated timeout follow-ups)\n",
+      "  --start POLICY   current|layered (default: current); layered uses native transport\n",
       "  --workers N      Concurrent case/estimator processes (default: 3)\n",
       "  --timeout SEC    Wall-clock cap per case/estimator, all arms (default: 180)\n",
       "  --engine-source REV  Commit used to build installed magmaanlab (optional provenance)\n",
@@ -30,6 +31,8 @@ suppressPackageStartupMessages({library(magmaanlab);library(lavaan);library(json
 source(file.path(here,"R/inputs.R"));source(file.path(here,"R/arms.R"))
 argv<-commandArgs(TRUE)
 value<-function(key,default=NULL) {i<-match(key,argv);if(is.na(i)) default else argv[i+1L]}
+start_policy<-value("--start","current")
+if(!start_policy %in% c("current","layered")) stop("--start must be current or layered")
 root<-normalizePath(value("--corpus",corpus_root()))
 out<-normalizePath(value("--results",file.path(here,"results/current")),mustWork=FALSE)
 dir.create(out,recursive=TRUE,showWarnings=FALSE)
@@ -49,9 +52,9 @@ worker<-function(id,estimator) {
   save_error<-function(e) {r<-base;r$message<-conditionMessage(e);write_row(r,path)}
   tryCatch({
     case<-read_case(root,manifest$case_dir[match(id,manifest$case_id)],estimator)
-    method<-if(estimator=="ML") "scaled-fabin" else "fabin3"
+    method<-if(start_policy=="layered") "layered" else if(estimator=="ML") "scaled-fabin" else "fabin3"
     x0<-magmaan_core$estimate_start_values(case$model$partable,case$sample,start=method,
-                                          transport=if(estimator=="ML") "auto" else "native")
+                                          transport=if(start_policy=="current" && estimator=="ML") "auto" else "native")
     base$start_method<-attr(x0,"start_method") %||% method
     base$start_transport<-attr(x0,"start_transport") %||% ""
     initial<-tryCatch(magmaan_core$evaluate_at(case$model,case$sample,x0,estimator),error=function(e)NULL)
@@ -99,7 +102,9 @@ write_metadata(file.path(out,"metadata.csv"),values=list(
   engine_source_commit=value("--engine-source","not recorded"),
   corpus_head=system2("git",c("-C",shQuote(root),"rev-parse","HEAD"),stdout=TRUE),
   workers=value("--workers","3"), timeout_seconds=value("--timeout","180"),
-  start_policy="ML auto FABIN3; GLS native FABIN3; same supplied vector for all ordinary arms"),packages=c("magmaanlab","lavaan"))
+  start_selector=start_policy,
+  start_policy=if(start_policy=="layered") "native layered; same supplied vector for all ordinary arms" else
+    "ML auto FABIN3; GLS native FABIN3; same supplied vector for all ordinary arms"),packages=c("magmaanlab","lavaan"))
 library_paths<-list.files(find.package("magmaanlab"),recursive=TRUE,full.names=TRUE)
 library_hashes<-tools::md5sum(library_paths)
 write.csv(data.frame(path=names(library_hashes),md5=unname(library_hashes)),
@@ -109,7 +114,7 @@ statuses<-parallel::mclapply(seq_len(nrow(jobs)),function(i) {
   if(file.exists(path)) unlink(path)
   log<-file.path(out,paste0(j$case,"__",j$estimator,".log"))
   args<-c(value("--timeout","180"),file.path(R.home("bin"),"Rscript"),shQuote(script),
-    "--worker",j$case,"--estimator",j$estimator,"--corpus",shQuote(root),"--results",shQuote(out))
+    "--start",start_policy,"--worker",j$case,"--estimator",j$estimator,"--corpus",shQuote(root),"--results",shQuote(out))
   if(length(value("--arms"))) args<-c(args,"--arms",value("--arms"))
   code<-system2("timeout",args,stdout=log,stderr=log)
   cat(sprintf("[%d/%d] %s %s exit=%d\n",i,nrow(jobs),j$case,j$estimator,code))

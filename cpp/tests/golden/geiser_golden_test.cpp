@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -12,6 +14,8 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/layered_start.hpp"
+#include "../../src/estimate/detail_layered_start_probe.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -341,4 +345,74 @@ TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
                                    kUlsFxAbs, kUlsFxRel);
     }
   }
+}
+
+TEST_CASE("Geiser layered overlap starts recover ML and GLS with L-BFGS and PORT") {
+  for (const std::string estimator : {"ML", "GLS"}) {
+    const std::string file = estimator == "ML" ? "layered_ml_reference.json" : "gls_reference.json";
+    auto raw = magmaan::test::read_fixture(magmaan::test::fixtures_dir() + "/geiser/" + file);
+    REQUIRE(raw.has_value());
+    auto j = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(j.is_discarded());
+    for (const auto& c : j["cases"]) {
+      if (c["id"] != "latent_ar_cross_lagged_extended") continue;
+      auto h = handles_from_case(c);
+      auto samp = sample_stats_from_case(c);
+      const auto perm = perm_to_magmaan(h.rep.ov_names[0], c["ov_names"].get<std::vector<std::string>>());
+      samp.S[0] = reorder_sym(samp.S[0], perm);
+      samp.mean[0] = reorder_vec(samp.mean[0], perm);
+      resolve_handles(h, samp, estimator);
+      auto start = magmaan::estimate::layered_start_report(h.pt, h.rep, samp);
+      REQUIRE(start.has_value());
+      REQUIRE(std::any_of(start->notes.begin(), start->notes.end(), [](const auto& note) {
+        return note.find("FABIN3-seeded overlapping measurement candidate selected") != std::string::npos;
+      }));
+      for (const auto backend : {magmaan::estimate::Backend::NloptLbfgs, magmaan::estimate::Backend::Port}) {
+        INFO(estimator << "/backend=" << static_cast<int>(backend));
+        auto fit = estimator == "ML"
+          ? magmaan::estimate::fit_ml(h.pt, h.rep, samp, start->theta, {}, backend, geiser_opts())
+          : magmaan::estimate::fit_gls(h.pt, h.rep, samp, start->theta, {}, backend, geiser_opts());
+        REQUIRE_MESSAGE(fit.has_value(), (fit ? "" : fit.error().detail));
+        check_implied_against_lavaan(estimator, h.pt, h.rep, *fit,
+          c["lavaan"]["fx"].get<double>(), reorder_sym(matrix_from_json(c["lavaan"]["sigma"]), perm),
+          reorder_vec(vector_from_json(c["lavaan"]["mu"]), perm));
+      }
+    }
+  }
+}
+
+TEST_CASE("Geiser non-overlap layered starts are bit-identical to the alternating construction") {
+  auto raw = magmaan::test::read_fixture(magmaan::test::fixtures_dir() + "/geiser/gls_reference.json");
+  REQUIRE(raw.has_value());
+  const auto j = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(j.is_discarded());
+  int checked = 0;
+  for (const auto& c : j["cases"]) {
+    auto h = handles_from_case(c);
+    std::vector<std::vector<int>> counts;
+    for (const auto& d : h.rep.dims) counts.emplace_back(static_cast<std::size_t>(d.n_observed), 0);
+    for (std::size_t i = 0; i < h.pt.size(); ++i) {
+      const auto& cell = h.rep.cell_for_row[i];
+      if (cell.used && cell.mat == magmaan::model::MatId::Lambda &&
+          (h.pt.free[i] > 0 || h.pt.fixed_value[i] != 0.0))
+        ++counts[static_cast<std::size_t>(cell.block)][static_cast<std::size_t>(cell.row)];
+    }
+    bool overlap = false;
+    for (const auto& block : counts) for (int n : block) overlap = overlap || n > 1;
+    if (overlap) continue;
+    INFO(c["id"]);
+    auto samp = sample_stats_from_case(c);
+    const auto perm = perm_to_magmaan(h.rep.ov_names[0], c["ov_names"].get<std::vector<std::string>>());
+    samp.S[0] = reorder_sym(samp.S[0], perm);
+    samp.mean[0] = reorder_vec(samp.mean[0], perm);
+    auto current = magmaan::estimate::layered_start_report(h.pt, h.rep, samp);
+    auto original = magmaan::estimate::layered_start_test::alternating_candidate(h.pt, h.rep, samp);
+    REQUIRE(current.has_value()); REQUIRE(original.has_value());
+    REQUIRE(current->theta.size() == original->theta.size());
+    CHECK(std::memcmp(current->theta.data(), original->theta.data(),
+                      static_cast<std::size_t>(current->theta.size()) * sizeof(double)) == 0);
+    CHECK(current->notes == original->notes);
+    ++checked;
+  }
+  CHECK(checked >= 3);
 }

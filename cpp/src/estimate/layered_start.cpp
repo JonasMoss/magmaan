@@ -16,6 +16,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -60,6 +61,15 @@ struct Pattern {
   int p = 0, m = 0;
   Grid lam, the, bet, psi, nu, alp;
 };
+
+bool has_overlap(const Pattern& P) {
+  for (int i = 0; i < P.p; ++i) {
+    int count = 0;
+    for (int j = 0; j < P.m; ++j) count += P.lam(i, j).nonzero();
+    if (count > 1) return true;
+  }
+  return false;
+}
 
 struct Loc {
   int block = -1;
@@ -379,7 +389,8 @@ void update_uniqueness(Work& W, const Pattern& P) {
   }
 }
 
-bool measurement(Work& W, const Pattern& P, std::vector<std::string>& notes, int block) {
+bool measurement(Work& W, const Pattern& P, std::vector<std::string>& notes, int block,
+                 const VectorXd* fabin = nullptr) {
   const int p = P.p, m = P.m;
   W.sd = W.S.diagonal().cwiseSqrt();
   for (int i = 0; i < p; ++i) if (!(W.sd(i) > 0.0) || !std::isfinite(W.sd(i))) return false;
@@ -447,6 +458,24 @@ bool measurement(Work& W, const Pattern& P, std::vector<std::string>& notes, int
       W.Lw(U[q], j) = clamp_to(r(to_int(q)) * root, -std::sqrt(0.95), std::sqrt(0.95));
     W.ref_row[us(j)] = U[0];
   }
+  if (fabin) {
+    // Keep the FABIN3 loading ratios, in the same standardized working chart.
+    // Alternating row refits can reverse relative signs in overlapping blocks.
+    for (int j = 0; j < m; ++j) {
+      if (!W.estimated[us(j)]) continue;
+      const int r = W.ref_row[us(j)];
+      const Slot& ref = P.lam(r, j);
+      const double loading = ref.is_free() ? (*fabin)(ref.free) : ref.fixed();
+      if (!std::isfinite(loading) || std::abs(loading) < 1e-12) return false;
+      const double scale = W.Lw(r, j) * W.sd(r) / loading;
+      for (int i = 0; i < p; ++i) {
+        const Slot& slot = P.lam(i, j);
+        if (!slot.nonzero()) continue;
+        const double value = slot.is_free() ? (*fabin)(slot.free) : slot.fixed();
+        W.Lw(i, j) = scale * value / W.sd(i);
+      }
+    }
+  }
   // Rows loading on several latents, or outside every shape set, start at zero
   // on their unknown entries and are refitted against the latent covariance in
   // alternating sweeps with the covariance fit.
@@ -455,7 +484,7 @@ bool measurement(Work& W, const Pattern& P, std::vector<std::string>& notes, int
     bool needs = nnz[us(i)] > 1;
     for (int j = 0; j < m; ++j)
       if (std::isnan(W.Lw(i, j))) { needs = true; W.Lw(i, j) = 0.0; }
-    if (needs) refit_rows.push_back(i);
+    if (needs && !fabin) refit_rows.push_back(i);
   }
   // Uniqueness priors: standardized communality of the shape rows; rows of
   // latents with fixed loadings (user-chart working loadings) use the squared
@@ -1079,11 +1108,9 @@ StructuralResult structural_fit(const Pattern& P, Work& W) {
   return out;
 }
 
-}  // namespace
-
 fit_expected<LayeredStartReport>
-layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& rep,
-                     const data::SampleStats& samp, const spec::Starts& starts) {
+layered_candidate(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                  const data::SampleStats& samp, const spec::Starts& starts, bool fabin_seed) {
   LayeredStartReport report;
   auto base = fabin_start_values(pt, rep, samp, starts, FabinVariant::Fabin3);
   if (!base) return std::unexpected(base.error());
@@ -1115,7 +1142,8 @@ layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& re
       report.notes.push_back("block " + std::to_string(b + 1) + ": sample covariance size mismatch");
       continue;
     }
-    W.ok = measurement(W, P, report.notes, to_int(b));
+    W.ok = measurement(W, P, report.notes, to_int(b),
+                       fabin_seed && has_overlap(P) ? &report.theta : nullptr);
     if (!W.ok) {
       report.notes.push_back("block " + std::to_string(b + 1) +
                              ": measurement step failed; FABIN3 starts kept");
@@ -1334,6 +1362,48 @@ layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& re
   report.theta = std::move(theta);
   return report;
 }
+
+}  // namespace
+
+fit_expected<LayeredStartReport>
+layered_start_report(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                     const data::SampleStats& samp, const spec::Starts& starts) {
+  auto original = layered_candidate(pt, rep, samp, starts, false);
+  if (!original || pt.n_free() == 0 || pt.n_levels() > 1 || pt.composite_mode == spec::CompositeMode::FcSem ||
+      !pt.composite_blocks.empty()) return original;
+  spec::LatentStructure resolved = pt;
+  (void)resolve_fixed_x_from_sample(resolved, rep, samp);
+  auto con = build_eq_constraints(resolved, /*allow_nonlinear=*/true);
+  const Layout lay = build_layout(resolved, rep, con ? &*con : nullptr);
+  const bool overlap = std::any_of(lay.blocks.begin(), lay.blocks.end(), has_overlap);
+  // Leave the established construction and provenance untouched without overlap.
+  if (!overlap) return original;
+  auto alternative = layered_candidate(pt, rep, samp, starts, true);
+  auto ev = model::ModelEvaluator::build(resolved, rep);
+  auto score = [&](const LayeredStartReport& report) {
+    if (!ev) return std::numeric_limits<double>::infinity();
+    auto moments = ev->sigma(report.theta);
+    if (!moments) return std::numeric_limits<double>::infinity();
+    auto value = ml_value(samp, *moments);
+    return value && std::isfinite(*value) ? *value : std::numeric_limits<double>::infinity();
+  };
+  if (alternative && score(*alternative) < score(*original)) {
+    alternative->notes.push_back("layered: FABIN3-seeded overlapping measurement candidate selected by ML discrepancy");
+    return alternative;
+  }
+  original->notes.push_back("layered: alternating measurement candidate retained by ML discrepancy");
+  return original;
+}
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace layered_start_test {
+fit_expected<LayeredStartReport>
+alternating_candidate(const spec::LatentStructure& pt, const model::MatrixRep& rep,
+                      const data::SampleStats& samp, const spec::Starts& starts) {
+  return layered_candidate(pt, rep, samp, starts, false);
+}
+}  // namespace layered_start_test
+#endif
 
 fit_expected<Eigen::VectorXd>
 layered_start_values(const spec::LatentStructure& pt, const model::MatrixRep& rep,

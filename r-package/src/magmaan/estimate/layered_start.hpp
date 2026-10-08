@@ -26,6 +26,10 @@
 //      nonzero magnitudes from the moments, with the first path of each such
 //      latent positive. A start on a sign-reflection fixed subspace, where the
 //      gradient in those paths is exactly zero, is avoided by construction.
+//   Overlapping measurement blocks also retain a candidate with FABIN3 loading
+//   ratios in place of the alternating row refits. Both complete all later
+//   stages; the lower caller-sample ML discrepancy wins, with a provenance note.
+//
 //   5. Means are a linear least-squares fit in the reduced constraint
 //      coordinates. All parameters are then projected onto the linear equality
 //      constraints (unit-weighted, so the projection is scale equivariant),
