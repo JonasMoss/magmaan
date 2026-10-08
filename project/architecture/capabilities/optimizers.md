@@ -140,21 +140,43 @@ The hard-case companion
 uses literal populations across 18 small-sample cells: weak markers, regression,
 linear and constrained latent-basis growth, MIMIC, MCAR FIML, ordinal/mixed DWLS,
 and loading-invariant groups. Run with `MAGMAAN_PARITY=1`; lavaan must be exactly
-0.7.2. Both fits use structured means and random covariates; other lavaan options
-retain their defaults. Temporary optimizer-exit instrumentation records starts,
-PORT statuses and retries, excluding the independence model. Per-replicate data,
-class counts and run metadata go to `~/.cache/magmaan-logs/task-129.4/`.
-The gate requests 100 replicates per cell, visits cells round-robin and stops
-starting fits after 29 minutes; `MAGMAAN_HARD_PARITY_REPS` can reduce replication.
-The baseline permits only documented missing marker/post-check features and the
+0.7.2. Both fits use structured means and random covariates. Lavaan uses
+`se = "none", test = "none"`; post.check remains available. Oracle SEs are
+computed only when the alternative endpoint contract needs them. Temporary
+optimizer-exit instrumentation records unscaled starts before constraint
+projection, PORT statuses and retries, excluding the independence model.
+Starts are aligned by `(lhs, op, rhs, group)` on every route, with maximum
+relative gap `|a-b|/max(1,|a|,|b|)` and the planner-amended 1e-6 threshold.
+When both searches fail with equal attempt counts and matching starts and
+reported decisions, `both_failed` counts as agreement and is reported separately;
+failed endpoints are not evidence of a fitting-rule difference.
+
+Per-replicate data, class counts, design timing and maximum start/first-stage
+gaps go to `~/.cache/magmaan-logs/task-129.4/`. DWLS first-stage gaps compare
+thresholds and ordinal/mixed sample matrices; FIML compares saturated h1 means
+and covariances. The baseline's opaque FIML h1 pointer requires a read-only
+accessor supplied through `options(magmaan.hard.h1_accessor = function(pointer))`,
+returning `mean` and `cov`; unavailable diagnostics are explicit in the CSV and
+fail final acceptance. The measurement helper and runner are retained beside
+the untracked evidence, without changing fitting code.
+
+The gate requests 100 replicates per cell in complete rounds;
+`MAGMAAN_HARD_PARITY_REPS` reduces replication and
+`MAGMAAN_HARD_PARITY_WORKERS` selects one or two workers. It stops starting
+rounds after 28 minutes, reserving time to finish the current round.
+The baseline permits documented missing marker/post-check features and the
 proved standardized affine-retry defect as separate classes. Rule differences
 fail the gate. The merger sets `MAGMAAN_HARD_PARITY_FINAL=1` after TASK-129.1–.3:
 missing features also fail, and path-divergence rates above 5% require a decision.
-Starts must agree within 1e-9 relative before path divergence is admissible;
-endpoints use the same estimate/gradient/statistic/SE-unit contract above.
-The main baseline (9ad5cb3d, five replicates per cell, 486 seconds) records
-64 agreements, eight pending marker cases and 18 rule differences; acceptance
-remains blocked. The existing 160-fit gate still passes (108 seconds).
+Endpoints use the existing estimate/gradient/statistic/SE-unit contract above.
+
+The amended main baseline (9ad5cb3d) stopped for the prescribed FIML decision
+after four complete rounds (72 replicates; 407 seconds through the last round):
+60 agree, four both_failed, seven pending marker cases and one rule_difference.
+D5 N=20 seed 12953003 has start gap 5.984397e-5 and h1 gap 9.476329e-5.
+The requested minimum 20 replicates per cell remains outstanding; no final
+acceptance is implied. Evidence is in the `amended/` subdirectory. The existing
+160-fit gate still passes.
 
 Task-59's focused seed 590214 investigation temporarily recorded each preset
 objective callback's coordinates/value/gradient and traced installed lavaan's

@@ -99,6 +99,13 @@
   gradient <- lavaan:::lav_model_grad(endpoint,endpoint@GLIST,oracle@SampleStats,oracle@Data)
   result$chisq_gap <- 2*lavaan::lavInspect(oracle,"ntotal")*abs(objective-oracle@optim$fx)
   result$endpoint_gradient <- max(abs(c(gradient,oracle@optim$dx)))
+  if (!any(is.finite(lp$se[free]) & lp$se[free]>0)) {
+    vc <- suppressWarnings(lavaan:::lav_model_vcov(lavmodel=oracle@Model, lavsamplestats=oracle@SampleStats,
+      lavdata=oracle@Data, lavoptions=modifyList(oracle@Options,list(se="standard")),
+      lavpartable=oracle@ParTable, lavcache=oracle@Cache, lavimplied=oracle@implied,
+      lavh1=oracle@h1))
+    if(!is.null(vc)) lp$se[free] <- suppressWarnings(sqrt(diag(vc)))[lp$free[free]]
+  }
   result$se_units <- if (all(is.finite(lp$se[free]) & lp$se[free]>0))
     max(delta[free]/lp$se[free]) else NA_real_
   result$ok <- all(is.finite(unlist(result[c("chisq_gap","endpoint_gradient","se_units")]))) &&
@@ -107,11 +114,12 @@
   result
 }
 .hard_replicate <- function(design,n,seed,trace_state,final) {
+  tick <- proc.time()[["elapsed"]]
   set.seed(seed); case <- .hard_design(design,n)
   args <- list(model=case$model,data=case$data,meanstructure=TRUE,fixed_x=FALSE,
     estimator=case$estimator,control=list(fitting_options=list(preset="lavaan-0.7.2")))
   la <- list(model=case$model,data=case$data,meanstructure=TRUE,fixed.x=FALSE,
-             estimator=if(case$estimator=="FIML") "ML" else case$estimator)
+             se="none",test="none",estimator=if(case$estimator=="FIML") "ML" else case$estimator)
   if (case$estimator=="FIML") la$missing <- "ml"
   if (!is.null(case$ordered)) args$ordered <- la$ordered <- case$ordered
   if (design=="D7") {
@@ -145,20 +153,39 @@
   starts_l <- if(length(attempts)) attempts[[1]]$theta_start else numeric()
   # Compare original free parameters by partable identity, since ordinal and
   # constrained optimizer coordinates have different storage orders.
-  starts_agree <- FALSE
-  if (!me && length(attempts) && isTRUE(attempts[[1]]$constrained)) {
-    starts_agree <- .hard_close(ma[[1]]$optimizer_start,attempts[[1]]$start,1e-9)
-  } else if (!me && length(attempts) && length(starts_m)>0) {
+  start_gap <- NA_real_
+  if (!me && length(attempts) && length(starts_m)>0) {
     mp <- m$partable[m$partable$free>0,]
     lp <- attempts[[1]]$partable
     lk <- .hard_key(lp); mk <- .hard_key(mp)
-    if(setequal(mk,lk) && !anyDuplicated(mk) && !anyDuplicated(lk))
-      starts_agree <- .hard_close(starts_m[mp$free],
-        starts_l[lp$free[match(mk,lk)]],1e-9)
+    if(setequal(mk,lk) && !anyDuplicated(mk) && !anyDuplicated(lk)) {
+      sm <- starts_m[mp$free]
+      sl <- starts_l[lp$free[match(mk,lk)]]
+      start_gap <- max(abs(sm-sl)/pmax(1,abs(sm),abs(sl)))
+    }
+  }
+  starts_agree <- is.finite(start_gap) && start_gap<=1e-6
+  first_stage_gap <- NA_real_
+  stage_error <- ""
+  if (!me && !le && case$estimator %in% c("FIML","DWLS")) {
+    stage <- tryCatch({
+      if(case$estimator=="FIML") {
+        accessor <- getOption("magmaan.hard.h1_accessor")
+        if(!is.function(accessor)) stop("FIML h1 accessor unavailable")
+        h <- accessor(m$fiml_h1); ref <- lavaan::lavInspect(l,"h1")
+        max(abs(c(h$mean-ref$mean,h$cov-ref$cov)))
+      } else {
+        st <- if(isTRUE(m$mixed_ordinal)) m$mixed_ordinal_stats else m$ordinal_stats
+        ref <- lavaan::lavInspect(l,"sampstat")
+        # Both sample matrices follow the model's observed-variable order.
+        max(abs(c(st$R[[1]]-ref$cov,st$thresholds[[1]]-ref$th)))
+      }
+    },error=identity)
+    if(inherits(stage,"error")) stage_error <- conditionMessage(stage) else first_stage_gap <- stage
   }
   endpoint <- list(ok=FALSE,estimate_gap=NA_real_,chisq_gap=NA_real_,
                    endpoint_gradient=NA_real_,se_units=NA_real_,reason="fit error")
-  if (!me && !le) endpoint <- tryCatch(.hard_endpoint(m,l),error=function(e) {
+  if (!me && !le && !(identical(mc,FALSE) && identical(lc,FALSE))) endpoint <- tryCatch(.hard_endpoint(m,l),error=function(e) {
     endpoint$reason <- conditionMessage(e); endpoint
   })
   reason <- endpoint$reason; class <- "rule_difference"
@@ -173,6 +200,9 @@
   if (defect) { class <- "known_defect"; reason <- actual$error
   } else if (!final && switch_diff && is.na(switch_m)) {
     class <- "pending_feature"; reason <- "baseline marker switch absent"
+  } else if (!me && !le && starts_agree && !switch_diff && !post_diff &&
+             identical(mc,FALSE) && identical(lc,FALSE) && length(ma)==length(attempts)) {
+    class <- "both_failed"; reason <- "both searches failed; equal attempt counts"
   } else if (!me && !le && starts_agree && !switch_diff && !post_diff && endpoint$ok &&
              identical(mc,lc) && length(ma)==length(attempts)) {
     class <- "agree"
@@ -197,7 +227,8 @@
     m_post_check=post_m,l_post_check=post_l,m_marker_switch=switch_m,l_marker_switch=switch_l,
     m_attempt_count=length(ma),l_attempt_count=length(attempts),m_selected=selected,
     l_selected=if(length(attempts)) length(attempts) else NA_integer_,
-    starts_agree=starts_agree,m_first_start=.hard_text(starts_m),l_first_start=.hard_text(starts_l),
+    seconds=proc.time()[["elapsed"]]-tick,start_gap=start_gap,
+    first_stage_gap=first_stage_gap,first_stage_error=stage_error,starts_agree=starts_agree,m_first_start=.hard_text(starts_m),l_first_start=.hard_text(starts_l),
     m_estimates=.hard_text(if(me) NULL else m$partable),
     l_estimates=.hard_text(if(le) NULL else lavaan::parTable(l)),
     m_attempts=.hard_text(ma),l_attempts=.hard_text(attempts),
@@ -230,8 +261,7 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
       recorder <- getOption("magmaan.hard.trace")
       recorder$attempts[[length(recorder$attempts)+1L]] <- list(
         start=start_x,constrained=lavmodel@eq.constraints || lavmodel@ceq.simple.only,
-        theta_start=as.numeric(if(lavmodel@eq.constraints)
-          lavmodel@eq.constraints.K %*% start_x + lavmodel@eq.constraints.k0 else start_x)/parscale,
+        theta_start=x_unpack,
         partable=as.data.frame(lavpartable)[lavpartable$free>0,c("lhs","op","rhs","group","free")],
         status=status,message=message,parscale=lavoptions$optim.parscale,
         converged=attr(returnValue(),"converged"),
@@ -240,28 +270,36 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
     }
   }))
   on.exit({untrace("lav_model_est",where=asNamespace("lavaan")); options(old)},add=TRUE)
-  # Round-robin cells ensures every design is represented if the time budget
-  # cuts replication short. A single worker leaves the aggregate lane budget free.
+  # Each fork has its own trace recorder. Only the parent writes evidence.
+  workers <- as.integer(Sys.getenv("MAGMAAN_HARD_PARITY_WORKERS","1"))
+  stopifnot(workers %in% 1:2)
   exhausted <- FALSE
   for (replicate in seq_len(reps)) {
-    for (cell in seq_len(nrow(cells))) {
-      if (proc.time()[["elapsed"]]-started>1740) {exhausted <- TRUE; break}
-      row <- .hard_replicate(cells$design[cell],cells$n[cell],12940000L+1000L*cell+replicate,state,final)
+    if (proc.time()[["elapsed"]]-started>1680) {exhausted <- TRUE; break}
+    batch <- parallel::mclapply(seq_len(nrow(cells)),function(cell) {
+      .hard_replicate(cells$design[cell],cells$n[cell],
+        12940000L+1000L*cell+replicate,state,final)
+    },mc.cores=workers,mc.set.seed=FALSE,mc.preschedule=FALSE)
+    for(row in batch) {
       rows[[length(rows)+1L]] <- row
       utils::write.table(row,file=file.path(directory,"replicates.csv"),sep=",",
         row.names=FALSE,col.names=length(rows)==1L,append=length(rows)>1L,qmethod="double")
     }
     cat(sprintf("\nhard parity round %d: %.1f seconds\n",replicate,proc.time()[["elapsed"]]-started))
-    if(exhausted) break
   }
   results <- do.call(rbind,rows)
-  classes <- c("agree","path_divergence","known_defect","pending_feature","rule_difference")
+  classes <- c("agree","both_failed","path_divergence","known_defect","pending_feature","rule_difference")
   summary <- as.data.frame(table(factor(paste(results$design,results$n),
     levels=paste(cells$design,cells$n)),factor(results$class,levels=classes)))
   names(summary) <- c("cell","class","count")
   utils::write.csv(summary,file.path(directory,"summary.csv"),row.names=FALSE)
+  timings <- aggregate(seconds~design,results,function(x) c(mean=mean(x),max=max(x)))
+  utils::write.csv(timings,file.path(directory,"timings.csv"),row.names=FALSE)
+  gaps <- aggregate(cbind(start_gap,first_stage_gap)~design,results,
+                    function(x) if(all(is.na(x))) NA_real_ else max(x,na.rm=TRUE),na.action=na.pass)
+  utils::write.csv(gaps,file.path(directory,"gaps.csv"),row.names=FALSE)
   elapsed <- proc.time()[["elapsed"]]-started
-  writeLines(c(sprintf("elapsed_seconds=%.3f",elapsed),paste0("final=",final),
+  writeLines(c(sprintf("elapsed_seconds=%.3f",elapsed),paste0("final=",final),paste0("workers=",workers),
     paste0("requested_replicates=",reps),paste0("budget_exhausted=",exhausted),
     paste0("revision=",Sys.getenv("MAGMAAN_HARD_PARITY_REVISION","unspecified")),
     paste0("lavaan=",utils::packageVersion("lavaan")),
@@ -271,6 +309,10 @@ test_that("hard cases retain the pinned live lavaan preset rules", {
   expect_equal(sum(results$class=="rule_difference"),0L)
   if(final) {
     expect_equal(sum(results$class=="pending_feature"),0L)
+    stage_rows <- results$design %in% c("D5","D6","D6b") &
+      !nzchar(results$m_error) & !nzchar(results$l_error)
+    expect_true(all(is.finite(results$first_stage_gap[stage_rows])),
+                info="first-stage diagnostics must be available for final acceptance")
     rates <- tapply(results$class=="path_divergence",paste(results$design,results$n),mean)
     expect_true(all(rates<=.05),info=paste(names(rates)[rates>.05],collapse=", "))
   }

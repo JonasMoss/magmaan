@@ -342,7 +342,10 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   live lavaan at small N (Heywood cases, non-convergence, retries, marker
   switches), structured means with equality constraints, random covariates,
   FIML, DWLS and two groups, with pre-registered classes: no rule differences
-  may remain; floating-point path divergence is reported per cell. The harness
+  may remain; floating-point path divergence is reported per cell. The planner's
+  amendment compares starts by parameter key at 1e-6 relative, records first-stage
+  gaps and timing, and reports equal-attempt non-converged pairs as `both_failed`
+  agreement without comparing their failed endpoints. The harness
   is `r-package/tests/testthat/test_preset_hard_parity.R`; baseline evidence is
   untracked under `~/.cache/magmaan-logs/task-129.4/`. Final acceptance remains
   with the merger after TASK-129.1–.3.
