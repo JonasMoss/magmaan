@@ -175,7 +175,9 @@ test_that("references are validated even for unavailable tests and printing show
 
 test_that("fitted roundoff-negative spectra retain explicit SB and PEBA4 tails", {
   # More residual degrees of freedom than independent casewise rows gives a
-  # rank-deficient law. Seed 1 produces a negative roundoff eigenvalue.
+  # rank-deficient law with roundoff-zero eigenvalues. Their sign depends on
+  # the build (seed 1 is negative in the opt build, not under R CMD check);
+  # the literal-spectrum tests cover a negative entry deterministically.
   set.seed(1)
   n <- 30; p <- 12
   d <- as.data.frame(.7 * matrix(rnorm(n), n, p) + matrix(rnorm(n*p), n, p))
@@ -186,7 +188,8 @@ test_that("fitted roundoff-negative spectra retain explicit SB and PEBA4 tails",
   expect_true(fit$lab$converged)
   native <- magmaanlab::policy_inference(fit$lab)
   expect_true(native$lr$available)
-  expect_true(any(native$lr$eigenvalues < 0))
+  scale <- max(1, abs(native$lr$eigenvalues))
+  expect_true(any(abs(native$lr$eigenvalues) <= 1e-10 * scale))
   expect_gt(min(native$lr$eigenvalues),
             -1e-10 * max(1, abs(native$lr$eigenvalues)))
   rows <- summary(fit, references = c("sb", "peba4"))$tests
