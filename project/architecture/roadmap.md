@@ -362,6 +362,19 @@ change for models with regressions and a mean structure. A round-trip
 inventory invariant gates 28 Geiser models, Mplus growth and hand-written cases
 (TASK-133, found by TASK-132).
 
+2026-10-08: lavaan-0.7.2 marker switching now covers FIML (lavaan's EM h1)
+and ordinal/mixed DWLS (polychoric/polyserial h1), with conditional-x residual
+h1 typed unsupported (TASK-129.3). Fully fixed latent-regression and
+higher-order ML models with fixed means return their fixed estimates and
+implied moments instead of crashing in the zero-direction stationarity audit
+(TASK-129.9). Explicit SB/PEBA4 references clip roundoff-negative spectrum
+eigenvalues and reject materially negative spectra, while fit-time FMG keeps
+its clipping (TASK-129.10). Ordinary fits report supplied start tables in
+their fitting metadata (TASK-129.11). The opt-in hard-case gate compares the
+preset with live lavaan 0.7.2 at small N, with structured means, random
+covariates, FIML, DWLS and two groups; its classes and acceptance are in the
+optimizer capability file (TASK-129.4, .8, .12).
+
 2026-10-08: the `lavaan-0.7.2` fitting preset reproduces lavaan 0.7.2's
 automatic marker switch for complete-data ML as a fourth fitting-options
 component, `marker` (`"default"` keeps the requested markers). The C++ rule
