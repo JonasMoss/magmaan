@@ -81,6 +81,19 @@ of the optimizer stop. A returned estimate need not pass that verdict.
   the relevant compile definition into the R shared object so the accepted
   optimizer strings are executable from the R dev surface in one install.
 
+### Equality-constrained automatic start fallback
+
+When equality constraints prevent std.lv start transport, the automatic start
+pipeline constructs the fallback in normalized sample units and maps it back
+to caller units. This scales the simple baseline's latent variance constants
+with the data, including for FABIN2/3, and preserves supplied start hints.
+The branch remains native and reports `equality-constraints-unsupported`:
+normalizing data units does not change the identification chart. Explicit
+native starts retain their constructor conventions; required transport still
+refuses equality constraints. Nonlinear constraints retain the native fallback
+because ML normalization does not support them. This repair does not change
+barrier weights, marker rules, defaults or near-pole verdicts.
+
 ### Versioned fitting post-check
 
 Fits whose resolved convergence component is `lavaan-0.7.2` retain

@@ -1740,12 +1740,14 @@ release, including dependencies otherwise shared with the primary programme.
   [normalization contract](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27)
   and [barrier defaults](../../experiments/decisions/02-barrier-defaults/report.qmd).
 
-- [ ] **M — fix barrier fallback units and near-pole verdicts.** At ×0.01 in
-  equality-constrained models, `native-fabin-fallback` supplies wrongly scaled
-  starts; extreme accepted marker-chart endpoints also need chart-proximity
-  diagnosis. **Check:** replay retained failures, then a fresh paired lane with
-  losses retained. Chart extent is not proof of nonattainment; do not change
-  markers automatically. Evidence: barrier defaults and
+- [ ] **M — finish near-pole verdicts after the barrier fallback units fix.**
+  TASK-131 repairs the equality-constrained automatic `native-fabin-fallback`
+  by constructing in normalized sample units. Three retained ×0.01 chain
+  failures now certify; their native and ×100 controls retain the same minima.
+  Extreme accepted marker-chart endpoints still need chart-proximity diagnosis.
+  **Check:** a fresh paired lane with losses retained remains open. Chart extent
+  is not proof of nonattainment; do not change markers automatically. Evidence:
+  barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
 The shared barrier fitting baseline is recorded in the

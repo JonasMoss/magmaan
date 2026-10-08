@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "magmaan/estimate/ml_numerics.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/frontier/multiinfo_penalty.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
@@ -50,7 +51,19 @@ TEST_CASE("ML numerical policy falls back for fixed values and equalities") {
     auto start=estimate::scaled_fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(start);
     auto native=estimate::fabin_start_values(c.pt,c.rep,c.sample); REQUIRE(native);
     CHECK(start->branch==estimate::MlStartBranch::NativeFabin);
-    CHECK((start->theta-*native).norm()==0);
+    if (start->fallback_reason == estimate::StartTransportIssue::EqualityConstraints &&
+        c.pt.nl_constraints.empty()) {
+      for (std::size_t i = 0; i < c.pt.size(); ++i) {
+        const auto cell = c.rep.cell_for_row[i];
+        if (!cell.used || c.pt.free[i] <= 0) continue;
+        const auto k = c.pt.free[i] - 1;
+        const double expected = cell.mat == model::MatId::Psi && cell.row == cell.col
+            ? .05 * c.sample.S[0](0, 0) : (*native)(k);
+        CHECK(start->theta(k) == doctest::Approx(expected).epsilon(1e-14));
+      }
+    } else {
+      CHECK((start->theta-*native).norm()==0);
+    }
   }
 }
 TEST_CASE("ML numerical policy preserves fitted objective under scaling and bounds") {
@@ -144,7 +157,18 @@ TEST_CASE("Start policy reports fallback and supports requiring or disabling tra
     auto native = estimate::start_values(c.pt, c.rep, c.sample,
         {estimate::StartMethod::Fabin3, estimate::StartTransport::Native}); REQUIRE(native);
     CHECK(native->fallback_reason == estimate::StartTransportIssue::None);
-    CHECK((native->theta - automatic->theta).norm() == 0);
+    if (automatic->fallback_reason == estimate::StartTransportIssue::FixedValues)
+      CHECK((native->theta - automatic->theta).norm() == 0);
+    else {
+      for (std::size_t i = 0; i < c.pt.size(); ++i) {
+        const auto cell = c.rep.cell_for_row[i];
+        if (!cell.used || cell.mat != model::MatId::Psi || cell.row != cell.col ||
+            c.pt.free[i] <= 0) continue;
+        const auto k = c.pt.free[i] - 1;
+        CHECK(native->theta(k) == doctest::Approx(.05));
+        CHECK(automatic->theta(k) == doctest::Approx(.05 * c.sample.S[0](0, 0)));
+      }
+    }
   }
 }
 
@@ -244,4 +268,32 @@ TEST_CASE("ML and GLS route nonlinear equalities to SLSQP and record it") {
   auto unconstrained = estimate::fit_ml(plain.pt, plain.rep, plain.sample, p0->theta);
   REQUIRE(unconstrained);
   CHECK_FALSE(unconstrained->substituted_backend.has_value());
+}
+
+TEST_CASE("Equality fallback starts and barrier fits follow common data units") {
+  auto c = example("f =~ x1 + a*x2 + a*x3 + x4");
+  c.sample.S[0] = Eigen::Matrix4d::Constant(.49);
+  c.sample.S[0].diagonal().setOnes();
+  auto baseline = estimate::scaled_fabin_start_values(c.pt, c.rep, c.sample);
+  REQUIRE(baseline);
+  auto evaluator = model::ModelEvaluator::build(c.pt, c.rep); REQUIRE(evaluator);
+  auto moments = evaluator->evaluate(baseline->theta, false, false); REQUIRE(moments);
+  for (double scale : {.01, 1., 100.}) {
+    auto sample = c.sample;
+    sample.S[0] *= scale * scale;
+    auto start = estimate::scaled_fabin_start_values(c.pt, c.rep, sample); REQUIRE(start);
+    CHECK(start->fallback_reason == estimate::StartTransportIssue::EqualityConstraints);
+    auto scaled_moments = evaluator->evaluate(start->theta, false, false); REQUIRE(scaled_moments);
+    CHECK((scaled_moments->moments.sigma[0] / (scale * scale) - moments->moments.sigma[0]).norm() < 1e-10);
+    auto fit = estimate::frontier::fit_ml_multiinfo(c.pt, c.rep, sample, start->theta,
+        {}, {}, estimate::Backend::Port);
+    REQUIRE(fit);
+    CHECK((fit->estimates.theta - start->theta).norm() > 1e-8);
+    CHECK(estimate::common_fit_verdict(fit->estimates.diagnostics).status == estimate::FitCheck::Passed);
+    spec::Starts hints;
+    hints.hint.assign(static_cast<std::size_t>(c.pt.n_free()), std::numeric_limits<double>::quiet_NaN());
+    hints.hint[0] = .123;
+    auto hinted = estimate::start_values(c.pt, c.rep, sample, {}, hints); REQUIRE(hinted);
+    CHECK(hinted->theta(0) == doctest::Approx(.123));
+  }
 }

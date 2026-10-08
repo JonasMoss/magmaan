@@ -182,6 +182,26 @@ fit_expected<StartValues> start_values(
           start_transport_reason(reason), 0, 0});
   }
   std::vector<std::string> notes;
+  // Equality constraints prevent the std.lv chart change, but not a change
+  // of data units. Construct the fallback in normalized sample units so
+  // the simple constructor's latent variance constants scale with the data.
+  if (reason == StartTransportIssue::EqualityConstraints &&
+      ml_normalization_supported(pt, rep)) {
+    // A model the normalizer rejects keeps the plain native fallback below.
+    if (auto normalized = normalize_ml_model(pt, rep, samp)) {
+      auto scaled_hints = hints;
+      for (std::size_t k = 0; k < scaled_hints.hint.size() &&
+           k < static_cast<std::size_t>(normalized->parameter_units.size()); ++k)
+        scaled_hints.hint[k] /= normalized->parameter_units(static_cast<Eigen::Index>(k));
+      auto native = construct_start_values(normalized->structure, normalized->representation,
+          normalized->sample, policy.method, scaled_hints, &notes);
+      if (!native) return std::unexpected(native.error());
+      native->array() *= normalized->parameter_units.array();
+      StartValues out{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
+      out.notes = std::move(notes);
+      return out;
+    }
+  }
   auto native = construct_start_values(pt, rep, samp, policy.method, hints, &notes);
   if (!native) return std::unexpected(native.error());
   StartValues out{std::move(*native), StartBranch::Native, reason, policy.method, policy.transport};
