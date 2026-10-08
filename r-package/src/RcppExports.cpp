@@ -2308,6 +2308,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// quadratic_spectrum_impl
+Rcpp::NumericVector quadratic_spectrum_impl(Rcpp::NumericVector eigenvalues);
+RcppExport SEXP _magmaanlab_quadratic_spectrum_impl(SEXP eigenvaluesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigenvalues(eigenvaluesSEXP);
+    rcpp_result_gen = Rcpp::wrap(quadratic_spectrum_impl(eigenvalues));
+    return rcpp_result_gen;
+END_RCPP
+}
 // score_reference_impl
 Rcpp::List score_reference_impl(SEXP projected, bool spectrum);
 RcppExport SEXP _magmaanlab_score_reference_impl(SEXP projectedSEXP, SEXP spectrumSEXP) {
@@ -4864,6 +4875,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_score_components_impl", (DL_FUNC) &_magmaanlab_score_components_impl, 4},
     {"_magmaanlab_project_scores_impl", (DL_FUNC) &_magmaanlab_project_scores_impl, 3},
     {"_magmaanlab_score_quadratic_impl", (DL_FUNC) &_magmaanlab_score_quadratic_impl, 3},
+    {"_magmaanlab_quadratic_spectrum_impl", (DL_FUNC) &_magmaanlab_quadratic_spectrum_impl, 1},
     {"_magmaanlab_score_reference_impl", (DL_FUNC) &_magmaanlab_score_reference_impl, 2},
     {"_magmaanlab_resample_scores_impl", (DL_FUNC) &_magmaanlab_resample_scores_impl, 5},
     {"_magmaanlab_score_sandwich_impl", (DL_FUNC) &_magmaanlab_score_sandwich_impl, 1},

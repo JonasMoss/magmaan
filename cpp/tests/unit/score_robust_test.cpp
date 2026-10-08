@@ -3878,3 +3878,16 @@ TEST_CASE("observed ML release: scalar and joint workers match explicit nuisance
   auto previous = inf::frontier::score_for_direction_robust({}, score, *H, *H, B, con->K(), d); REQUIRE(previous);
   CHECK(releases->rows[0].mi_scaled == doctest::Approx(previous->mi_scaled).scale(0.0).epsilon(1e-10));
 }
+
+TEST_CASE("quadratic spectrum: roundoff clipping and typed material-negative failure") {
+  Eigen::VectorXd values(5);
+  values << -6e-15, .2, .5, 1.7, 3;
+  auto checked = inf::frontier::validate_quadratic_spectrum(values);
+  REQUIRE(checked.has_value());
+  CHECK((*checked)(0) == 0.0);
+  CHECK(checked->tail(4).isApprox(values.tail(4), 0.0));
+  values(0) = -.01;
+  auto invalid = inf::frontier::validate_quadratic_spectrum(values);
+  REQUIRE_FALSE(invalid.has_value());
+  CHECK(invalid.error().kind == magmaan::PostError::Kind::NumericIssue);
+}

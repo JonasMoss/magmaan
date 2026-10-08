@@ -637,6 +637,10 @@ score_quadratic_impl <- function(score, metric, meat) {
     .Call(`_magmaanlab_score_quadratic_impl`, score, metric, meat)
 }
 
+quadratic_spectrum_impl <- function(eigenvalues) {
+    .Call(`_magmaanlab_quadratic_spectrum_impl`, eigenvalues)
+}
+
 score_reference_impl <- function(projected, spectrum) {
     .Call(`_magmaanlab_score_reference_impl`, projected, spectrum)
 }

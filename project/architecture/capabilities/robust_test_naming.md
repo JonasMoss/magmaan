@@ -94,3 +94,8 @@ Continuous LS retains sample-centered fitting-weight influence, conditional on
 fixed group allocation; arbitrary joint allocation with nonzero group equation
 means remains unsupported by that centered law. See the per-family derivation
 and numerical gates in [the lab inventory](../../validation/lab_inference_defaults.md#task-77-estimating-equations-and-consistent-meats).
+
+Explicit quadratic references reuse the projected-score PSD validator
+(`1e-10 * max(1, max|lambda|)`), clipping roundoff-negative entries and
+rejecting materially negative spectra with `NumericIssue`; fit-time FMG
+continues to clip every negative entry, a deliberate difference for now.

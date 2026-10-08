@@ -36,3 +36,18 @@ test_that("projected-score calibration obtains spectra for all new laws", {
   expect_identical(calibrate_quadratic(projected, methods)$p_value,
                    calibrate_quadratic(explicit, methods)$p_value)
 })
+
+test_that("explicit spectra share projected-score roundoff validation", {
+  values <- c(-6e-15, .2, .5, 1.7, 3)
+  zero <- replace(values, 1, 0)
+  actual <- quadratic_reference(8, 5, values)
+  expect_equal(actual$eigenvalues, zero, tolerance = 0)
+  expect_identical(calibrate_quadratic(actual, c("sb", "peba4")),
+                   calibrate_quadratic(quadratic_reference(8, 5, zero), c("sb", "peba4")))
+  projected <- score_quadratic(rep(1, 5), diag(5), diag(values))
+  expect_equal(score_spectrum(projected)$eigenvalues, zero, tolerance = 0)
+  expect_error(quadratic_reference(8, 5, replace(values, 1, -.01)),
+               "[NumericIssue]: quadratic spectrum: eigenvalues are not positive semidefinite", fixed = TRUE)
+  expect_error(score_spectrum(score_quadratic(rep(1, 5), diag(5),
+               diag(replace(values, 1, -.01)))), "[NumericIssue]: quadratic spectrum: eigenvalues are not positive semidefinite", fixed = TRUE)
+})

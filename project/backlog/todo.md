@@ -62,6 +62,10 @@ entries into 0.2.0. 0.2.0 was released on 2026-10-07 as tag `v0.2.0`
 | **0.4.0: documentation, cleanup and clarity** | User and simulation guides; one decision register that states every default with its evidence; `magmaanlab` export tiering (stable, research, superseded) and retirement of legacy names; consolidated error messages and help; CRAN-readiness checks for both packages |
 | **After 0.4.0** | Review what remains and bank items without a consumer in the [speculative register](speculative.md); then 1.0 |
 
+- [x] **TASK-129.10 — explicit quadratic-reference roundoff handling:** reuse
+  the projected-score PSD validator for SB/PEBA4 reporting; preserve typed
+  errors for materially negative spectra and leave fit-time FMG unchanged.
+
 Sphere-chart development remains outside 0.2.0; the minimal unrestricted
 starts/search/audit programme and chart failure handling are high-priority
 [0.3.0 work](#optimization-and-convergence). Broader promotion stays in the

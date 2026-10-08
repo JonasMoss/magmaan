@@ -8,6 +8,10 @@
 - Fully fixed models with latent regressions or higher-order factors and fixed
   means now return their implied moments without crashing in the stationarity audit.
 
+- Explicit quadratic references (including summary/anova SB and PEBA4) now
+  clip roundoff-negative spectrum entries using the projected-score validator;
+  materially negative spectra still raise a numeric error.
+
 - Identification refusals now suggest specific scale, location and rotation
   restrictions. Information deficits name affected parameters without suggesting
   an automatic fix; no identifying constraints are added.

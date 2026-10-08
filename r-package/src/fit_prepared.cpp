@@ -157,6 +157,14 @@ Rcpp::List score_quadratic_impl(Rcpp::NumericVector score, Rcpp::NumericMatrix m
 }
 
 // [[Rcpp::export]]
+Rcpp::NumericVector quadratic_spectrum_impl(Rcpp::NumericVector eigenvalues) {
+  auto values = magmaan::inference::frontier::validate_quadratic_spectrum(
+      Rcpp::as<Eigen::VectorXd>(eigenvalues));
+  if (!values) stop_post(values.error());
+  return Rcpp::NumericVector(values->data(), values->data() + values->size());
+}
+
+// [[Rcpp::export]]
 Rcpp::List score_reference_impl(SEXP projected, bool spectrum) {
   return score_bindings::reference(projected,spectrum);
 }

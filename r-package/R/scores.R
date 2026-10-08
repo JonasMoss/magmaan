@@ -103,8 +103,9 @@ quadratic_reference <- function(statistic, df, eigenvalues = NULL) {
       length(df) != 1L || !is.finite(df) || df < 1 || df != floor(df))
     stop("quadratic_reference(): supply a nonnegative statistic and positive integer df")
   if (!is.null(eigenvalues) && (length(eigenvalues) != df ||
-      any(!is.finite(eigenvalues)) || any(eigenvalues < 0)))
-    stop("quadratic_reference(): eigenvalues must be finite, nonnegative and include df entries")
+      any(!is.finite(eigenvalues))))
+    stop("quadratic_reference(): eigenvalues must be finite and include df entries")
+  if (!is.null(eigenvalues)) eigenvalues <- quadratic_spectrum_impl(as.numeric(eigenvalues))
   .score_object(list(statistic = statistic, df = as.integer(df), eigenvalues = eigenvalues),
                 "magmaan_quadratic_reference")
 }

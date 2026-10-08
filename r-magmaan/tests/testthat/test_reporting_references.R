@@ -172,3 +172,28 @@ test_that("references are validated even for unavailable tests and printing show
   expect_equal(nrow(compat), 1L)
   expect_identical(compat$reason, "saturated")
 })
+
+test_that("fitted roundoff-negative spectra retain explicit SB and PEBA4 tails", {
+  # More residual degrees of freedom than independent casewise rows gives a
+  # rank-deficient law. Seed 1 produces a negative roundoff eigenvalue.
+  set.seed(1)
+  n <- 30; p <- 12
+  d <- as.data.frame(.7 * matrix(rnorm(n), n, p) + matrix(rnorm(n*p), n, p))
+  names(d) <- paste0("x", seq_len(p))
+  model <- magmaan_model(paste("f =~", paste(names(d), collapse = " + ")),
+                         prototype = d)
+  fit <- magmaan(model, d)
+  expect_true(fit$lab$converged)
+  native <- magmaanlab::policy_inference(fit$lab)
+  expect_true(native$lr$available)
+  expect_true(any(native$lr$eigenvalues < 0))
+  expect_gt(min(native$lr$eigenvalues),
+            -1e-10 * max(1, abs(native$lr$eigenvalues)))
+  rows <- summary(fit, references = c("sb", "peba4"))$tests
+  for (component in c("score", "lr")) {
+    t <- native[[component]]
+    expect_true(t$available)
+    z <- rows[rows$test == component, ]
+    expect_equal(z$pvalue, c(t$p_sb, t$p_peba4), tolerance = 1e-12)
+  }
+})

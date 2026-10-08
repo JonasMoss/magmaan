@@ -64,7 +64,9 @@ score. This is not within-pattern centering.}
 \item{score}{An observed score or contrast vector in total-likelihood units.}
 \item{meat}{Symmetric score covariance in total units. Required for score_quadratic. For parameter_covariance, NULL derives empirical meat from retained fitting data; explicit "model" requests inverse information.}
 \item{statistic,df,eigenvalues}{A precomputed quadratic statistic, nominal
-positive integer degrees of freedom, and optional spectrum including zero weights.}
+positive integer degrees of freedom, and optional spectrum including zero weights.
+Negative entries within the projected-score roundoff tolerance are clipped to
+zero; materially negative entries raise a NumericIssue error.}
 \item{methods}{Case-insensitive names std, sb, ss, mv, scaled_f, all, pall,
 peba<k>, eba<k>, with integer k >= 1 (up to the C++ integer limit).
 Output names are lower case. Calibration calls the C++ FMG routine.

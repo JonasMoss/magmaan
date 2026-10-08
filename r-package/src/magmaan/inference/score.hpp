@@ -739,6 +739,8 @@ post_expected<ProjectedScore> project_scores(
 post_expected<ProjectedScore> score_quadratic(
     const Eigen::VectorXd& score, const Eigen::MatrixXd& metric,
     const Eigen::MatrixXd& meat);
+// Validate a PSD spectrum, clipping only roundoff-sized negative entries.
+post_expected<Eigen::VectorXd> validate_quadratic_spectrum(const Eigen::VectorXd& values);
 post_expected<Eigen::VectorXd> score_spectrum(const ProjectedScore& score);
 post_expected<double> score_mean_scale(const ProjectedScore& score);
 post_expected<double> score_sandwich(const ProjectedScore& score);

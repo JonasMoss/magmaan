@@ -90,9 +90,15 @@ post_expected<Eigen::VectorXd> score_spectrum(const ProjectedScore& s) {
   if (es.info() != Eigen::Success)
     return std::unexpected(invalid("score spectrum: eigensolver failed"));
   Eigen::VectorXd values = es.eigenvalues();
+  return validate_quadratic_spectrum(values);
+}
+
+post_expected<Eigen::VectorXd> validate_quadratic_spectrum(const Eigen::VectorXd& values) {
+  if (values.size() == 0 || !values.allFinite())
+    return std::unexpected(invalid("quadratic spectrum: empty or non-finite eigenvalues"));
   const double tol = 1e-10 * std::max(1.0, values.cwiseAbs().maxCoeff());
   if (values.minCoeff() < -tol)
-    return std::unexpected(invalid("score spectrum: meat is not positive semidefinite"));
+    return std::unexpected(invalid("quadratic spectrum: eigenvalues are not positive semidefinite"));
   return Eigen::VectorXd(values.cwiseMax(0.0));
 }
 
