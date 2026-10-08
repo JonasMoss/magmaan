@@ -591,3 +591,25 @@ TEST_CASE("continuous fit composers attach LS scaling advice but exempt ML and N
   CHECK(ml->diagnostics.observed_variance_ratio == 1001.0);
   CHECK(ml->diagnostics.numerical_scaling_message.empty());
 }
+
+TEST_CASE("geometric stationarity checks feasibility with no free parameters") {
+  for (const auto* variance : {"0", "-0.1"}) {
+    const std::string source = std::string("f =~ 1*x1 + 0.8*x2 + 0.6*x3\nf ~~ ") +
+        variance + "*f\nx1 ~~ 1*x1\nx2 ~~ 1*x2\nx3 ~~ 1*x3\n"
+        "x1 ~ 0*1\nx2 ~ 0*1\nx3 ~ 0*1";
+    auto bits = build_bits(source);
+    REQUIRE(bits.pt->n_free() == 0);
+    const auto d = audit_geometric_stationarity(
+        Eigen::VectorXd(0), Eigen::VectorXd(0), *bits.pt, bits.ev,
+        bits.con, bits.nl, Bounds{});
+    CHECK(d.checked);
+    CHECK(d.ambient_stationary);
+    CHECK(d.ambient_residual_l2 == 0.);
+    CHECK(d.cone_projection_converged);
+    CHECK(d.cone_residual_l2 == 0.);
+    CHECK(d.covariance_feasible == (std::string_view(variance) == "0"));
+    CHECK(d.feasible == d.covariance_feasible);
+    CHECK(d.cone_stationary == d.covariance_feasible);
+    if (d.covariance_feasible) CHECK(d.covariance_active_blocks == 1);
+  }
+}

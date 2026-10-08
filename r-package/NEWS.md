@@ -9,6 +9,9 @@
   selected fitting attempts and revert when rejected; `marker = "default"`
   keeps the requested markers.
 
+- Fully fixed models with latent regressions or higher-order factors and fixed
+  means now return their implied moments without crashing in the stationarity audit.
+
 - Identification reports classify scale, location and rotation freedoms, enforce
   fixed entries and linear equalities, and expose per-direction suggested fixes.
   Remaining null dimensions are reported as information deficits.

@@ -1,5 +1,10 @@
 ### Complete-data ML and inference
 
+- Fully fixed ML models retain feasibility checks and an empty stationarity
+  residual without applying SVD to zero-row normal matrices (TASK-129.9).
+  Fixed-mean CFA, latent regression and higher-order factor models return
+  their fixed estimates and implied covariance/means on lab and ordinary routes.
+
 - TASK-107 bounds noncentral chi-square CDF work for RMSEA intervals and
   close/not-close tests. The mode-centered Poisson mixture uses log-space
   incomplete-gamma recurrences and geometric remaining-mass bounds (2e-16

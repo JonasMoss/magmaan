@@ -489,3 +489,46 @@ TEST_CASE("ML correlation target: model barrier composes with the shared objecti
   CHECK(zero.f(theta, gradient) == unpenalized);
   CHECK(gradient.isApprox(base_gradient, 0.0));
 }
+
+TEST_CASE("ML: fully fixed latent structures with means have empty tangent spaces") {
+  for (const std::string structure : {
+      "Y =~ 1*y1 + 0.8*y2 + 0.6*y3\nX =~ 1*x1 + 0.8*x2 + 0.6*x3\nY ~~ 1*Y\nX ~~ 1*X\nY ~~ 0*X",
+      "Y =~ 1*y1 + 0.8*y2 + 0.6*y3\nX =~ 1*x1 + 0.8*x2 + 0.6*x3\nY ~ 0.25*X\nY ~~ 1*Y\nX ~~ 1*X",
+      "Y =~ 1*y1 + 0.8*y2 + 0.6*y3\nX =~ 1*x1 + 0.8*x2 + 0.6*x3\nG =~ 0.5*Y + 0.7*X\nG ~~ 1*G\nY ~~ 1*Y\nX ~~ 1*X\nY ~~ 0*X"}) {
+    std::string source = structure;
+    for (const auto* v : {"y1", "y2", "y3", "x1", "x2", "x3"})
+      source += "\n" + std::string(v) + " ~~ 1*" + v + "\n" + v + " ~ 0*1";
+    auto parsed = Parser::parse(source);
+    REQUIRE(parsed.has_value());
+    auto pt = build(*parsed);
+    REQUIRE(pt.has_value());
+    REQUIRE(pt->n_free() == 0);
+    auto rep = build_matrix_rep(*pt);
+    REQUIRE(rep.has_value());
+    auto ev = ModelEvaluator::build(*pt, *rep);
+    REQUIRE(ev.has_value());
+    Eigen::MatrixXd loading = Eigen::MatrixXd::Zero(6, 2);
+    loading.col(0).head(3) << 1., .8, .6;
+    loading.col(1).tail(3) << 1., .8, .6;
+    Eigen::Matrix2d latent = Eigen::Matrix2d::Identity();
+    if (structure.find("Y ~ 0.25") != std::string::npos)
+      latent << 1.0625, .25, .25, 1.;
+    if (structure.find("G =~") != std::string::npos)
+      latent << 1.25, .35, .35, 1.49;
+    const Eigen::MatrixXd expected = loading * latent * loading.transpose() +
+        Eigen::MatrixXd::Identity(6, 6);
+    auto implied = ev->sigma(Eigen::VectorXd(0));
+    REQUIRE(implied.has_value());
+    CHECK((implied->sigma[0] - expected).norm() < 1e-14);
+    CHECK(implied->mu[0].norm() == 0.);
+    SampleStats sample;
+    sample.S = {expected};
+    sample.mean = {Eigen::VectorXd::Zero(6)};
+    sample.n_obs = {200};
+    auto fit = magmaan::test::fit(*pt, *rep, sample);
+    REQUIRE(fit.has_value());
+    CHECK(fit->theta.size() == 0);
+    CHECK(fit->fmin == doctest::Approx(0.).epsilon(1e-12));
+    CHECK(magmaan::estimate::fit_verdict(*fit).status == magmaan::estimate::FitCheck::Passed);
+  }
+}

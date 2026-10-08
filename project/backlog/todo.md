@@ -129,6 +129,10 @@ result under an unstated convention.
 
 ### Ordinary API
 
+- [x] **TASK-129.9 — fully fixed latent models**: empty parameter-space normal
+  projections bypass SVD; fixed means, latent regressions and higher-order
+  factors have C++ and both R-package regression gates.
+
 - [x] **L — lavaan-compatible fit-measures composer** (task-109): C++
   standard/scaled/robust families, lab/ordinary compatibility dispatch and
   analytic categorical independence baselines. Complete ML/MLM/MLR and

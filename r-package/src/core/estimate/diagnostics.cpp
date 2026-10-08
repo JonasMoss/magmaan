@@ -108,7 +108,9 @@ NormalProjectionResult solve_normal_projection(
       metric.array().sqrt().inverse().matrix();
   const Eigen::VectorXd a =
       inverse_sqrt_metric.array() * gradient.array();
-  if (m == 0) {
+  // With no parameter directions the residual is empty, even when fixed
+  // covariance constraints contribute normal columns. Eigen SVD requires rows.
+  if (n == 0 || m == 0) {
     out.residual = a;
     out.converged = true;
     return out;
