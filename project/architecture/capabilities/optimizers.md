@@ -165,18 +165,25 @@ The gate requests 100 replicates per cell in complete rounds;
 `MAGMAAN_HARD_PARITY_WORKERS` selects one or two workers. It stops starting
 rounds after 28 minutes, reserving time to finish the current round.
 The baseline permits documented missing marker/post-check features and the
-proved standardized affine-retry defect as separate classes. Rule differences
-fail the gate. The merger sets `MAGMAAN_HARD_PARITY_FINAL=1` after TASK-129.1–.3:
+proved standardized affine-retry defect as separate classes. The approved
+TASK-129.7 amendment also classifies FIML start gaps above 1e-6 accompanied by
+h1 gaps within a factor of ten as `pending_feature` in the baseline only.
+Rule differences fail the gate. The merger sets `MAGMAAN_HARD_PARITY_FINAL=1`
+after TASK-129.1–.3 and .7:
 missing features also fail, and path-divergence rates above 5% require a decision.
 Endpoints use the existing estimate/gradient/statistic/SE-unit contract above.
 
-The amended main baseline (9ad5cb3d) stopped for the prescribed FIML decision
-after four complete rounds (72 replicates; 407 seconds through the last round):
-60 agree, four both_failed, seven pending marker cases and one rule_difference.
-D5 N=20 seed 12953003 has start gap 5.984397e-5 and h1 gap 9.476329e-5.
-The requested minimum 20 replicates per cell remains outstanding; no final
-acceptance is implied. Evidence is in the `amended/` subdirectory. The existing
-160-fit gate still passes.
+The completed main baseline (9ad5cb3d) uses 20 replicates per cell, two workers,
+and 909.690 seconds: 279 agree, 35 both_failed, 44 pending_feature, one
+path_divergence and one rule_difference. Evidence is in the `completed/`
+subdirectory. D7 N=30/group seed 12958009 has matching starts (5.079077e-16),
+but lavaan rejects its first attempt (gradient .001185135) and accepts a
+standardized retry, while magmaan accepts one attempt (gradient .000148144).
+Both final fits converge; the endpoint contract fails, so the registered
+classification requires a decision. D7 seed 12958008 is path_divergence
+(5% of that cell). Maximum FIML start/h1 gaps are 9.438837e-4/1.080801e-3;
+these remain TASK-129.7 pending features. No final acceptance is implied.
+The existing 160-fit gate still passes.
 
 Task-59's focused seed 590214 investigation temporarily recorded each preset
 objective callback's coordinates/value/gradient and traced installed lavaan's

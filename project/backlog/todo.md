@@ -348,7 +348,13 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   agreement without comparing their failed endpoints. The harness
   is `r-package/tests/testthat/test_preset_hard_parity.R`; baseline evidence is
   untracked under `~/.cache/magmaan-logs/task-129.4/`. Final acceptance remains
-  with the merger after TASK-129.1–.3.
+  with the merger after TASK-129.1–.3 and .7. The approved baseline treats
+  comparable FIML h1/start gaps as TASK-129.7 pending features. The completed
+  360-replicate baseline (20/cell, two workers, 909.690 seconds) has 279 agree,
+  35 both_failed, 44 pending_feature, one path_divergence and one rule_difference.
+  D7 N=30/group seed 12958009 needs a decision: matching starts, both final
+  fits converged, but lavaan retries after first-attempt rejection and magmaan
+  accepts one attempt; endpoints exceed the contract. Evidence: `completed/`.
 
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,

@@ -200,6 +200,11 @@
   if (defect) { class <- "known_defect"; reason <- actual$error
   } else if (!final && switch_diff && is.na(switch_m)) {
     class <- "pending_feature"; reason <- "baseline marker switch absent"
+  } else if (!final && case$estimator=="FIML" && is.finite(start_gap) &&
+             start_gap>1e-6 && is.finite(first_stage_gap) &&
+             first_stage_gap/start_gap>=.1 && first_stage_gap/start_gap<=10) {
+    # Planner amendment: comparable h1/start gaps belong to TASK-129.7.
+    class <- "pending_feature"; reason <- "TASK-129.7 FIML h1/start parity pending"
   } else if (!me && !le && starts_agree && !switch_diff && !post_diff &&
              identical(mc,FALSE) && identical(lc,FALSE) && length(ma)==length(attempts)) {
     class <- "both_failed"; reason <- "both searches failed; equal attempt counts"
