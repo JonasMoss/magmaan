@@ -335,6 +335,10 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: raw complete-data ordinal DWLS FitPlusInference workspaces keep
+full Gamma and the DWLS weight but skip the unused full-WLS inversion, and
+Gamma-cache flags reject empty inverse placeholders (TASK-123).
+
 2026-10-08: decisions/08 association-ML production (192 cells x 2000 draws,
 simbox) is frozen (b37ebefb) and reported against the registered criteria
 (TASK-128). Association ML has no coverage flags. Its global size flags are
