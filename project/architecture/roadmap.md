@@ -335,6 +335,16 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: decisions/08 association-ML production (192 cells x 2000 draws,
+simbox) is frozen (b37ebefb) and reported against the registered criteria
+(TASK-128). Association ML has no coverage flags. Its global size flags are
+confined to two-factor binary Gaussian cells and shrink with N (skewed binary
+All 10.9% at N=1000, 6.1% at N=4000); All is the least liberal reference in
+every flagged cell. One nested All flag is conservative (2.8%), MI size is
+unflagged pending population-approximation evidence, and 98% of panel results
+were available. Ordinary exposure and the reference choice await the user
+(TASK-128.1).
+
 2026-10-08: two post-0.2.0 merges. (1) Structural identification (TASK-33.3):
 continuous ML/LS, direct-FIML and ordinal/mixed DELTA/THETA fits carry a
 data-free generic-rank report of the moment Jacobian
