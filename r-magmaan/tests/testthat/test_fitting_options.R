@@ -89,3 +89,35 @@ test_that("ordinary all-ordinal DWLS exposes the lavaan fitting preset", {
   expect_true(as_lab_fit(magmaan(mixed, d, estimator = "DWLS", inference = FALSE,
       options = list(preset = "lavaan-0.7.2")))$converged)
 })
+
+test_that("preset reports supplied tables and previous fits as first-attempt starts", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  m <- "f =~ x1+x2+x3+x4"
+  preset <- list(preset = "lavaan-0.7.2")
+  anchor <- magmaan(m, d, inference = FALSE, options = preset)
+  base <- as_lab_fit(anchor)
+  expect_null(base$fitting$requested$starts)
+  expect_identical(base$fitting$effective$starts, "lavaan-0.7.2")
+  table <- coef(summary(anchor))
+  # One supplied loading leaves all other parameters on the preset convention.
+  table <- table[table$op == "=~" & table$rhs == "x2", ]
+  table$est <- 0.8
+  partial <- magmaan(m, d, inference = FALSE,
+    options = c(preset, list(start = table)))
+  warm <- magmaan(m, d, inference = FALSE,
+    options = c(preset, list(start = anchor)))
+  for (fit in list(partial, warm)) {
+    report <- as_lab_fit(fit)$fitting
+    expect_identical(report$requested$starts, "table")
+    expect_identical(report$effective$starts, "lavaan-0.7.2+table")
+    expect_identical(fit$fitting, report)
+  }
+  pt <- base$partable
+  free <- pt[pt$free > 0L, ]
+  supplied <- which(free$op == "=~" & free$rhs == "x2")
+  expected <- base$fitting$attempts[[1]]$start
+  expected[supplied] <- 0.8
+  expect_equal(as_lab_fit(partial)$fitting$attempts[[1]]$start, expected)
+  expect_equal(as_lab_fit(warm)$fitting$attempts[[1]]$start, base$theta)
+})

@@ -51,8 +51,12 @@ including every PSD fit, uses by default (not for ordered variables);
 \code{"lavaan-0.7.2"}, lavaan 0.7.2's starts; a previous \code{\link[=magmaan]{magmaan()}} fit; or
 a data frame with columns \code{lhs}, \code{op}, \code{rhs} and \code{est} (and \code{group} for
 several groups). A fit or table sets the start of every free parameter
-it matches, as lavaan's \code{start = fit}; the others keep the default
-start.
+it matches, as lavaan's \code{start = fit}; unmatched parameters use the
+resolved start convention (including the preset). In
+\code{as_lab_fit(fit)$fitting}, \code{requested$starts = "table"} records both
+tables and previous fits; \code{effective$starts} appends \code{"+table"} to
+that convention, describing the first attempt (for example
+\code{"lavaan-0.7.2+table"}).
 \item \code{optimizer}: \code{"default"}, \code{"port"} (PORT, as R's \code{nlminb()}) or
 \code{"lavaan-0.7.2"} (lavaan 0.7.2's PORT search and retries).
 \item \code{convergence}: \code{"default"} or \code{"newton"} (magmaan's convergence check)

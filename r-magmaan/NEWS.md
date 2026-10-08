@@ -1,5 +1,9 @@
 # magmaan (development version)
 
+- Supplied start tables and previous fits now appear as `requested$starts =
+  "table"` and `effective$starts = "<resolved convention>+table"` in fitting
+  reports, identifying first-attempt values and the unmatched-parameter fallback.
+
 - The `lavaan-0.7.2` marker component now also covers FIML and ordinal/mixed
   DWLS, using each route's saturated H1 covariance. Switched fits replay the
   selected fitting attempts and revert when rejected; `marker = "default"`

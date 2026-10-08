@@ -94,6 +94,14 @@ refuses equality constraints. Nonlinear constraints retain the native fallback
 because ML normalization does not support them. This repair does not change
 barrier weights, marker rules, defaults or near-pole verdicts.
 
+### Explicit start reporting
+
+Ordinary fits supplied with a start table or previous fit report
+`fitting$requested$starts = "table"`; `fitting$effective$starts` appends
+`+table` to the resolved convention (for example `lavaan-0.7.2+table`).
+This describes attempt 1: matched parameters use the table, unmatched parameters
+use that convention, and retry attempts retain their own recorded starts.
+
 ### Versioned fitting post-check
 
 Fits whose resolved convergence component is `lavaan-0.7.2` retain

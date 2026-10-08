@@ -299,8 +299,12 @@ print.magmaan_model <- function(x, ...) {
 #'     `"lavaan-0.7.2"`, lavaan 0.7.2's starts; a previous [magmaan()] fit; or
 #'     a data frame with columns `lhs`, `op`, `rhs` and `est` (and `group` for
 #'     several groups). A fit or table sets the start of every free parameter
-#'     it matches, as lavaan's `start = fit`; the others keep the default
-#'     start.
+#'     it matches, as lavaan's `start = fit`; unmatched parameters use the
+#'     resolved start convention (including the preset). In
+#'     `as_lab_fit(fit)$fitting`, `requested$starts = "table"` records both
+#'     tables and previous fits; `effective$starts` appends `"+table"` to
+#'     that convention, describing the first attempt (for example
+#'     `"lavaan-0.7.2+table"`).
 #'   * `optimizer`: `"default"`, `"port"` (PORT, as R's `nlminb()`) or
 #'     `"lavaan-0.7.2"` (lavaan 0.7.2's PORT search and retries).
 #'   * `convergence`: `"default"` or `"newton"` (magmaan's convergence check)
@@ -470,6 +474,12 @@ magmaan <- function(model, data,
     args$model <- handle
     args$data <- prepared_data
     lab <- do.call(magmaanlab::estimate, args)
+  }
+
+  # Validation converts previous fits to tables; retain that input provenance.
+  if (is.data.frame(options$start) && !is.null(lab$fitting)) {
+    lab$fitting$requested$starts <- "table"
+    lab$fitting$effective$starts <- paste0(lab$fitting$effective$starts, "+table")
   }
 
   requested_model <- model
