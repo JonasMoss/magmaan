@@ -9,6 +9,12 @@
   `magmaan_identification_error`, naming the free parameter directions.
   Unchecked models fit normally; deliberate ridge fits remain in magmaanlab.
 
+- The `lavaan-0.7.2` preset now adapts weak markers for complete-data ML.
+  `marker = "default"` keeps the requested identification. Fits retain the
+  actual fitted specification and a switch/revert table; nested inference
+  explicitly refuses switched marker coordinates. FIML and DWLS adaptation
+  follows separately; their preset currently reports `marker = "default"`.
+
 - ULS fits and the continuous part of mixed DWLS/WLS fits now warn when
   within-group observed variances differ by more than a factor of 1000,
   with advice to rescale. ML, GLS, FIML and ordinal-only fits do not emit

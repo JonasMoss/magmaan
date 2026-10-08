@@ -1,0 +1,21 @@
+#pragma once
+#include <unordered_map>
+#include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/optim/problem.hpp"
+
+namespace magmaan::estimate {
+struct MarkerSwitch {
+  std::string lv, old_marker, new_marker;
+  double r_old = 0.0, r_new = 0.0;
+};
+struct MarkerAdaptation {
+  std::unordered_map<std::string, std::string> marker;
+  std::vector<MarkerSwitch> info;
+};
+// Covariances and names are per h1 block, independent of the fitted model's
+// observed ordering. Nonfinite item-rest correlations are omitted per item.
+fit_expected<MarkerAdaptation> lavaan_marker_adapt(
+    const compat::lavaan::LavaanParTable& pt,
+    const std::vector<Eigen::MatrixXd>& cov,
+    const std::vector<std::vector<std::string>>& names);
+} // namespace magmaan::estimate

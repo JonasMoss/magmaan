@@ -209,6 +209,7 @@ wald_test <- function(object, R, vcov, q = NULL) {
   prepared <- inherits(H1, "magmaan_inference") || inherits(H0, "magmaan_inference")
   if (prepared && !is.null(data)) stop("nested inference snapshots already own their data")
   a <- .inference_fit(H1); b <- .inference_fit(H0)
+  .marker_refusal(a, b, caller = "nested inference")
   if (prepared) {
     if (!identical(a$raw_data, b$raw_data)) stop("nested inference snapshots must use the same observations and ordering")
     if (identical(a$estimator, "ML")) {
@@ -359,6 +360,7 @@ policy_inference <- function(fit, data = NULL) {
 policy_nested <- function(fit_H1, fit_H0, data = NULL) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("policy_nested(): supply two fitted magmaan models")
+  .marker_refusal(fit_H1, fit_H0, caller = "policy_nested()")
   states <- list(H0 = .policy_state(fit_H0), H1 = .policy_state(fit_H1))
   if (states$H0[[4]] || states$H1[[4]])
     return(policy_nested_impl(NULL, NULL, states$H0, states$H1))

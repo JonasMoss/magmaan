@@ -5,6 +5,7 @@ model_spec <- function(syntax,
                        auto_cov_y = FALSE,
                        orthogonal = FALSE,
                        auto_fix_first = TRUE,
+                       marker = NULL,
                        auto_fix_single = TRUE,
                        std_lv = FALSE,
                        effect_coding = FALSE,
@@ -56,6 +57,7 @@ model_spec <- function(syntax,
     auto_cov_y = auto_cov_y,
     orthogonal = orthogonal,
     auto_fix_first = auto_fix_first,
+    marker = marker,
     auto_fix_single = auto_fix_single,
     std_lv = std_lv,
     effect_coding = effect_coding,
@@ -74,6 +76,7 @@ model_spec <- function(syntax,
     auto_cov_y = auto_cov_y,
     orthogonal = orthogonal,
     auto_fix_first = auto_fix_first,
+    marker = marker,
     auto_fix_single = auto_fix_single,
     std_lv = std_lv,
     effect_coding = effect_coding,
@@ -1402,6 +1405,18 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
 # Ceres extras; see the C++ `Backend` enum docstring for the supported strings).
 fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                    bounds = NULL, options = NULL) {
+  optimizer_missing <- missing(optimizer)
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options) && !inherits(data, "magmaan_ordinal_data")) {
+    switched <- .marker_fit_spec(as_magmaan_model_spec(model), data, marker_options, function(m, o) {
+      ctl <- control
+      if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
+      if (!length(ctl)) ctl <- NULL
+      if (optimizer_missing) fit_ml(m, data, control = ctl, bounds = bounds, options = o)
+      else fit_ml(m, data, optimizer = optimizer, control = ctl, bounds = bounds, options = o)
+    })
+    if (!is.null(switched)) return(switched)
+  }
   if (!is.null(options)) {
     if (inherits(data, "magmaan_ordinal_data")) stop("fitting options currently require complete continuous ML")
     control <- .fitting_control(options, control, if (missing(optimizer)) NULL else optimizer)
@@ -2615,6 +2630,23 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       stop("[CT01] mixed categorical Mplus fit route unsupported: Mplus uses mixed WLSMV moments; magmaan offers all-ordinal DWLS instead",call.=FALSE)
   }
   group_var <- prep$group_var
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options) && estimator == "ML" && !length(spec$ordered) &&
+      covariance == "unrestricted" && is.null(cluster) && missing != "pairwise") {
+    switched <- .marker_fit_spec(spec, data, marker_options, function(m, o) {
+      args <- route_args
+      args$options <- o
+      if (!is.null(args$control$fitting_options)) args$control$fitting_options <- NULL
+      do.call(fit_model, c(list(model = m, data = data), args))
+    })
+    if (!is.null(switched)) {
+      switched$options$route <- list(fitter = "fit_model", args = route_args)
+      return(switched)
+    }
+    # fit_ml() also accepts direct calls; avoid repeating this preflight there.
+    if (!is.null(options)) options <- .marker_disabled(options)
+    else control$fitting_options <- .marker_disabled(control$fitting_options)
+  }
   if (is.data.frame(control$start)) {
     spec <- .start_from_table(spec, control$start)
     control$start <- NULL
@@ -2690,7 +2722,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     } else if (psd) {
       frontier_fit_fiml_psd(spec, data, optimizer = psd_optimizer, control = control)
     } else {
-      fit_fiml(spec, data, optimizer = optimizer, control = control, options = options)
+      .marker_boundary(function() fit_fiml(spec, data, optimizer = optimizer, control = control, options = options))
     }
     return(done(fit))
   }
@@ -2908,6 +2940,7 @@ finalize_fcsem_fit <- function(fit, spec, missing) {
 }
 
 finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
+  spec <- fit$marker_spec %||% spec
   attr(fit, "policy_cache") <- new.env(parent = emptyenv())
   fit$model <- spec
   fit$syntax <- spec$syntax

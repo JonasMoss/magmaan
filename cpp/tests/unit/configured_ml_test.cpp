@@ -65,6 +65,13 @@ TEST_CASE("configured ML resolves independent components and pins versions") {
   auto full = resolve_fitting_options(options);
   REQUIRE(full);
   CHECK(full->optimizer == "lavaan-0.7.2");
+  CHECK(full->marker == "lavaan-0.7.2");
+  options.marker = "default";
+  auto marker_off = resolve_fitting_options(options);
+  REQUIRE(marker_off);
+  CHECK(marker_off->marker == "default");
+  CHECK(marker_off->modified_preset);
+  options.marker.reset();
   CHECK_FALSE(full->modified_preset);
   options.convergence = "newton";
   auto hybrid = resolve_fitting_options(options);

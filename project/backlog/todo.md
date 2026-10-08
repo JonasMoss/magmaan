@@ -321,7 +321,7 @@ lavaan's `meanstructure = FALSE`/`fixed.x = TRUE` defaults are deliberately
 not emulated: comparisons run lavaan with `meanstructure = TRUE` and
 `fixed.x = FALSE`. The constraint-violating standardized retry stays an error.
 
-- [ ] **0.2.1 — marker switch for complete-data ML (TASK-129.1).** A `marker`
+- [x] **0.2.1 — marker switch for complete-data ML (TASK-129.1).** A `marker`
   fitting-options component (`"default"`, `"lavaan-0.7.2"`) set by the preset;
   lavaan 0.7.2's `bad.marker.crit = 0.1` rule in C++, a builder marker map with
   `lav_pt_flat` semantics, switched fit with all attempts and revert, and the

@@ -45,8 +45,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // lavaan_lavaanify
-Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool orthogonal, bool auto_fix_first, bool auto_fix_single, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, bool int_ov_free, bool int_lv_free, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels, Rcpp::Nullable<Rcpp::CharacterVector> group_equal, Rcpp::Nullable<Rcpp::CharacterVector> group_partial);
-RcppExport SEXP _magmaanlab_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP orthogonalSEXP, SEXP auto_fix_firstSEXP, SEXP auto_fix_singleSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP int_ov_freeSEXP, SEXP int_lv_freeSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP, SEXP group_equalSEXP, SEXP group_partialSEXP) {
+Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool orthogonal, bool auto_fix_first, bool auto_fix_single, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, bool int_ov_free, bool int_lv_free, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels, Rcpp::Nullable<Rcpp::CharacterVector> group_equal, Rcpp::Nullable<Rcpp::CharacterVector> group_partial, Rcpp::Nullable<Rcpp::CharacterVector> marker);
+RcppExport SEXP _magmaanlab_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP orthogonalSEXP, SEXP auto_fix_firstSEXP, SEXP auto_fix_singleSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP int_ov_freeSEXP, SEXP int_lv_freeSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP, SEXP group_equalSEXP, SEXP group_partialSEXP, SEXP markerSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -68,7 +68,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_labels(group_labelsSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_equal(group_equalSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_partial(group_partialSEXP);
-    rcpp_result_gen = Rcpp::wrap(lavaan_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels, group_equal, group_partial));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type marker(markerSEXP);
+    rcpp_result_gen = Rcpp::wrap(lavaan_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels, group_equal, group_partial, marker));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2635,6 +2636,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prepared_marker_adapt_impl
+Rcpp::List prepared_marker_adapt_impl(SEXP model, SEXP data, Rcpp::List options, Rcpp::Nullable<Rcpp::CharacterVector> syntax);
+RcppExport SEXP _magmaanlab_prepared_marker_adapt_impl(SEXP modelSEXP, SEXP dataSEXP, SEXP optionsSEXP, SEXP syntaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type options(optionsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type syntax(syntaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepared_marker_adapt_impl(model, data, options, syntax));
+    return rcpp_result_gen;
+END_RCPP
+}
 // frontier_profile_lrt_parameter_ml_impl
 Rcpp::List frontier_profile_lrt_parameter_ml_impl(Rcpp::List fit, int parameter, double target, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double constraint_tol, SEXP raw_data, bool robust, Rcpp::Nullable<Rcpp::String> reference);
 RcppExport SEXP _magmaanlab_frontier_profile_lrt_parameter_ml_impl(SEXP fitSEXP, SEXP parameterSEXP, SEXP targetSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP constraint_tolSEXP, SEXP raw_dataSEXP, SEXP robustSEXP, SEXP referenceSEXP) {
@@ -4681,7 +4696,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_version", (DL_FUNC) &_magmaanlab_version, 0},
     {"_magmaanlab_parse_parse", (DL_FUNC) &_magmaanlab_parse_parse, 1},
     {"_magmaanlab_eqs_model_impl", (DL_FUNC) &_magmaanlab_eqs_model_impl, 2},
-    {"_magmaanlab_lavaan_lavaanify", (DL_FUNC) &_magmaanlab_lavaan_lavaanify, 18},
+    {"_magmaanlab_lavaan_lavaanify", (DL_FUNC) &_magmaanlab_lavaan_lavaanify, 19},
     {"_magmaanlab_mplus_model_impl", (DL_FUNC) &_magmaanlab_mplus_model_impl, 1},
     {"_magmaanlab_mplus_ordinal_partable_impl", (DL_FUNC) &_magmaanlab_mplus_ordinal_partable_impl, 2},
     {"_magmaanlab_model_matrix_rep", (DL_FUNC) &_magmaanlab_model_matrix_rep, 1},
@@ -4863,6 +4878,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_structural_identification_impl", (DL_FUNC) &_magmaanlab_structural_identification_impl, 2},
     {"_magmaanlab_prepared_identification_count_impl", (DL_FUNC) &_magmaanlab_prepared_identification_count_impl, 0},
     {"_magmaanlab_prepared_identification_partable_impl", (DL_FUNC) &_magmaanlab_prepared_identification_partable_impl, 2},
+    {"_magmaanlab_prepared_marker_adapt_impl", (DL_FUNC) &_magmaanlab_prepared_marker_adapt_impl, 4},
     {"_magmaanlab_frontier_profile_lrt_parameter_ml_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ml_impl, 10},
     {"_magmaanlab_frontier_profile_lrt_parameter_gmm_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_gmm_impl, 12},
     {"_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl", (DL_FUNC) &_magmaanlab_frontier_profile_lrt_parameter_ordinal_impl, 11},

@@ -62,6 +62,7 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
   sensitivity <- match.arg(sensitivity)
+  .marker_refusal(fit_H1, fit_H0, caller = "score_flip_test()")
   h1_is_model <- inherits(fit_H1, "magmaan_model_spec")
   estimator_H0 <- toupper(fit_H0$estimator %||% "ML")
   estimator_H1 <- if (h1_is_model) estimator_H0 else

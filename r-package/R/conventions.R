@@ -32,6 +32,7 @@ convention_inference <- function(fit, convention) {
 convention_nested <- function(fit_H1, fit_H0, convention) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("convention_nested(): supply two fitted models")
+  .marker_refusal(fit_H1, fit_H0, caller = "convention_nested()")
   convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS"))
   if (!identical(fit_H1$raw_data, fit_H0$raw_data))
     stop("convention_nested(): the fits must use the same observations in the same order")

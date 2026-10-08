@@ -184,6 +184,7 @@ case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
   if (!inherits(fit, "magmaan_fit")) {
     stop("case_rerun(): `fit` must be a magmaan_fit", call. = FALSE)
   }
+  .marker_refusal(fit, caller = "case_rerun()")
   estimator <- .case_estimator(fit)
   fit_fun <- .case_refit_fun(fit, estimator)
   spec_warm <- .case_warm_spec(fit, warm_start)
@@ -225,6 +226,7 @@ case_rerun <- function(fit, data = NULL, to_rerun = NULL, warm_start = TRUE) {
   for (j in seq_along(selected)) {
     refit <- tryCatch(fit_fun(spec_warm, make_loo(selected[j])),
                       error = function(e) NULL)
+    if (!is.null(refit)) .marker_refusal(refit, caller = "case_rerun()")
     ok <- !is.null(refit) && isTRUE(refit$converged)
     converged[j] <- ok
     reruns[[j]] <- if (ok) refit else NULL

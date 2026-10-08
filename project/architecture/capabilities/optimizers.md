@@ -133,6 +133,25 @@ and no fitting code was changed.
 Diagnostic scripts and logs are retained under `~/.cache/magmaan-logs/task-59-*`;
 the trace scripts require the temporary callback instrumentation described above.
 
+### lavaan marker component (complete-data ML)
+
+`FittingOptions::marker` resolves to `default` or `lavaan-0.7.2`; the preset
+selects the latter and explicit component overrides mark it modified. The
+core item-rest correlation rule consumes named h1 covariance blocks, averages
+signed correlations ignoring nonfinite entries and switches a weak first
+marker below 0.1 to the first absolute maximum at least 0.1. Builder marker
+maps select loading rows before numbering/constraints without reordering.
+R replays the same fitting route on a rebuilt specification, then the original
+if the switched fit fails its selected convergence rule. Both interfaces retain
+the actual model and signed rounded switch information with a revert flag.
+Inference/reporting consume the fitted partable; nested inference and
+`refit_from_null()` refuse adapted marker coordinates until their mapping is
+implemented. Casewise contrasts also refuse automatic adaptation because a
+changed marker changes the parameter metric. Ordinary fitting calls rerun the
+rule on each dataset.
+FIML and DWLS preset reports currently resolve marker to `default`; explicit
+adaptation on those routes and composite adaptation are unsupported.
+
 ### Unwired objective-coordinate scale primitive
 
 `estimate::frontier::objective_coordinate_scale()` accepts sample units and

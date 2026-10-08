@@ -36,6 +36,7 @@ policy_modification_indices <- function(fit, data = NULL, releases = TRUE) {
 #' @return The fitted augmented model, for [policy_nested()].
 #' @export
 policy_mi_refit <- function(fit, row, candidate_row) {
+  .marker_refusal(fit, caller = "policy_mi_refit()")
   pt <- policy_mi_alternative_impl(fit, row$kind, candidate_row,
       row$lhs, row$op, row$rhs, row$group)
   spec <- as_magmaan_model_spec(pt)

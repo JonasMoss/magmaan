@@ -19,6 +19,11 @@
                        missing = "listwise")
   count <- prepared_structure_count_impl()
   fresh <- suppressWarnings(do.call(fit_model, c(list(model = spec, data = d, estimator = estimator), args)))
+  # A fresh marker-enabled ML fit prepares a temporary handle for h1 preflight.
+  marker_preflight <- estimator == "ML" && !length(spec$ordered) &&
+    .marker_requested(args$options %||% args$control$fitting_options)
+  expect_equal(prepared_structure_count_impl(), count + as.integer(marker_preflight))
+  count <- prepared_structure_count_impl()
   staged <- suppressWarnings(do.call(estimate, c(list(model = m, data = data, estimator = estimator), args)))
   expect_equal(prepared_structure_count_impl(), count)
   columns <- intersect(c("lhs", "op", "rhs", "group", "free", "ustart", "label"), names(fresh$partable))

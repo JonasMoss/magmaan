@@ -15,6 +15,7 @@ struct FittingOptions {
   std::optional<std::string> starts = {};
   std::optional<std::string> optimizer = {};
   std::optional<std::string> convergence = {};
+  std::optional<std::string> marker = {};
 };
 
 struct FittingSetup {
@@ -22,6 +23,7 @@ struct FittingSetup {
   std::string starts = "layered";
   std::string optimizer = "nlopt-lbfgs";
   std::string convergence = "newton";
+  std::string marker = "default";
   bool modified_preset = false;
 };
 

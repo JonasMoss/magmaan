@@ -181,11 +181,14 @@ fit_expected<FittingSetup> resolve_fitting_options(const FittingOptions& request
   if (request.preset) {
     if (*request.preset != lavaan_version)
       return std::unexpected(invalid("supported fitting preset is lavaan-0.7.2; unversioned or unknown presets are unsupported"));
-    out.starts = out.optimizer = out.convergence = *request.preset;
+    out.starts = out.optimizer = out.convergence = out.marker = *request.preset;
   }
   if (request.starts) out.starts = *request.starts;
   if (request.optimizer) out.optimizer = *request.optimizer;
   if (request.convergence) out.convergence = *request.convergence;
+  if (request.marker) out.marker = *request.marker;
+  if (out.marker != "default" && out.marker != lavaan_version)
+    return std::unexpected(invalid("marker must be default or lavaan-0.7.2"));
   if (out.starts == "magmaan" || out.starts == "default") out.starts = "layered";
   if (out.optimizer == "magmaan" || out.optimizer == "default") out.optimizer = "nlopt-lbfgs";
   if (out.convergence == "magmaan" || out.convergence == "default") out.convergence = "newton";
@@ -203,7 +206,7 @@ fit_expected<FittingSetup> resolve_fitting_options(const FittingOptions& request
   if (out.convergence == lavaan_version && out.optimizer != lavaan_version && out.optimizer != "port")
     return std::unexpected(invalid("lavaan acceptance currently requires the PORT optimizer"));
   out.modified_preset = request.preset &&
-      (out.starts != *request.preset || out.optimizer != *request.preset || out.convergence != *request.preset);
+      (out.starts != *request.preset || out.optimizer != *request.preset || out.convergence != *request.preset || out.marker != *request.preset);
   return out;
 }
 
@@ -375,6 +378,12 @@ fit_expected<Estimates> fit_configured(spec::LatentStructure pt,
     const Eigen::VectorXd& explicit_start, Bounds bounds, const FimlInput* missing) {
   auto setup = resolve_fitting_options(options);
   if (!setup) return std::unexpected(setup.error());
+  if (missing) {
+    if (options.marker && *options.marker == lavaan_version)
+      return std::unexpected(invalid("unsupported_model: marker = lavaan-0.7.2 is not yet supported for FIML; use marker = default"));
+    setup->marker = "default";
+    setup->modified_preset = options.preset.has_value();
+  }
   if (auto ok = supported(pt); !ok) return std::unexpected(ok.error());
   const bool lavaan_search = setup->optimizer == lavaan_version;
   const bool lavaan_convergence = setup->convergence == lavaan_version;

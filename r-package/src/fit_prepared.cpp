@@ -6,6 +6,8 @@ using namespace magmaanr;
 using namespace magmaanr::fitglue;
 
 #include "prepared.h"
+#include "magmaan/estimate/marker.hpp"
+#include "magmaan/parse/parser.hpp"
 #include "score_primitives.h"
 #include "magmaan/api/policy.hpp"
 #include "magmaan/api/conventions.hpp"
@@ -753,4 +755,45 @@ SEXP prepared_identification_partable_impl(SEXP partable, SEXP native) {
       Rf_install("magmaan_identification"));
   out.attr("magmaan_identification") = ptr;
   return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List prepared_marker_adapt_impl(SEXP model, SEXP data, Rcpp::List options,
+    Rcpp::Nullable<Rcpp::CharacterVector> syntax = R_NilValue) {
+  auto request = fitting_options_from(options);
+  auto setup = magmaan::estimate::resolve_fitting_options(request);
+  if (!setup) stop_fit(setup.error());
+  auto& m = prepared::get<prepared::Model>(model, "magmaan_prepared_model");
+  auto& d = prepared::get<prepared::Data>(data, "magmaan_prepared_data");
+  Rcpp::CharacterVector lv, old, next;
+  Rcpp::NumericVector r_old, r_new;
+  Rcpp::CharacterVector marker;
+  // The binding partable may already have lowered composites to extra factors.
+  // Inspect the original syntax before applying a regular-factor marker rule.
+  if (setup->marker == "lavaan-0.7.2" && syntax.isNotNull()) {
+    auto source = magmaan::parse::Parser::parse(Rcpp::as<std::string>(Rcpp::CharacterVector(syntax)[0]));
+    if (!source) Rcpp::stop("magmaan marker source parse error: %s", source.error().detail);
+    if (std::any_of(source->rows.begin(), source->rows.end(), [](const auto& row) {
+          return row.op == magmaan::parse::Op::Composite;
+        }))
+      Rcpp::stop("magmaan fit error [unsupported_model]: lavaan marker adaptation excludes composites; use options$marker = default");
+  }
+  if (setup->marker == "lavaan-0.7.2" && d.kind == "moments" && m.kind == "moments") {
+    if (m.ctx.pt.composite_mode != magmaan::spec::CompositeMode::None)
+      Rcpp::stop("magmaan fit error [unsupported_model]: lavaan marker adaptation excludes composites; use options$marker = default");
+    auto pt = magmaan::compat::lavaan::to_lavaan_partable(m.ctx.pt, m.ctx.names, m.starts);
+    auto result = magmaan::estimate::lavaan_marker_adapt(pt, d.sample.S, m.ctx.rep.ov_names);
+    if (!result) stop_fit(result.error());
+    for (const auto& item : result->info) {
+      lv.push_back(item.lv); old.push_back(item.old_marker); next.push_back(item.new_marker);
+      r_old.push_back(item.r_old); r_new.push_back(item.r_new);
+      marker.push_back(item.new_marker, item.lv);
+    }
+  } else if (setup->marker == "lavaan-0.7.2" && request.marker) {
+    Rcpp::stop("magmaan fit error [unsupported_model]: marker = lavaan-0.7.2 is not yet supported on this route; use options$marker = default");
+  }
+  return Rcpp::List::create(Rcpp::_["marker"] = marker,
+      Rcpp::_["info"] = Rcpp::DataFrame::create(Rcpp::_["lv"] = lv, Rcpp::_["old"] = old,
+          Rcpp::_["new"] = next, Rcpp::_["r_old"] = r_old, Rcpp::_["r_new"] = r_new,
+          Rcpp::_["reverted"] = Rcpp::LogicalVector(lv.size(), false)));
 }

@@ -291,7 +291,7 @@ print.magmaan_model <- function(x, ...) {
 #'   experimental).
 #' @param inference Compute inference now. With `FALSE`, call [infer()] later.
 #' @param options Optimization details, a named list with any of `start`,
-#'   `optimizer`, `convergence` and `preset`; omitted entries use magmaan's
+#'   `optimizer`, `convergence`, `marker` and `preset`; omitted entries use magmaan's
 #'   defaults.
 #'   * `start`: `"default"`; `"fabin3"`, the FABIN3 start (Hägglund, 1982),
 #'     which ML, ML2S and GLS used before 2026-09-26 and every other fit,
@@ -305,13 +305,18 @@ print.magmaan_model <- function(x, ...) {
 #'     `"lavaan-0.7.2"` (lavaan 0.7.2's PORT search and retries).
 #'   * `convergence`: `"default"` or `"newton"` (magmaan's convergence check)
 #'     or `"lavaan-0.7.2"` (lavaan 0.7.2's acceptance rule).
-#'   * `preset`: `"lavaan-0.7.2"` selects lavaan 0.7.2's start, search and
+#'   * `marker`: `"default"` keeps requested markers; `"lavaan-0.7.2"` applies
+#'     lavaan's weak-marker rule for complete continuous ML, including its
+#'     original-model retry when the switched fit is rejected.
+#'   * `preset`: `"lavaan-0.7.2"` selects lavaan 0.7.2's marker, start, search and
 #'     acceptance rule; explicit entries override it.
 #'
 #'   `optimizer`, `convergence`, `preset` and `start = "lavaan-0.7.2"` are
 #'   available for continuous ML or FIML, or ordinal or complete mixed DWLS, with unrestricted covariance and
 #'   supported linear equality constraints. Inspect `as_lab_fit(fit)$fitting`
-#'   for the resolved settings and attempts. Fitting computes magmaan's inference policy;
+#'   for the resolved settings, attempts and `marker_switch` table. FIML and DWLS
+#'   currently resolve the preset marker to `"default"`; explicitly requesting
+#'   `marker = "lavaan-0.7.2"` on those routes is unsupported. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
 #'   The policy covers complete-data ML, observed-data FIML and ordinal or mixed DWLS. DWLS
 #'   reports one global test, the fit-function statistic (equal to its score
@@ -431,14 +436,14 @@ magmaan <- function(model, data,
   # barrier(0) maximizes the unpenalized likelihood: it is the unrestricted fit.
   effective <- covariance$policy
   if (identical(effective, "barrier") && covariance$lambda == 0) effective <- "unrestricted"
-  engine <- options[intersect(c("preset", "optimizer", "convergence"), names(options))]
+  engine <- options[intersect(c("preset", "optimizer", "convergence", "marker"), names(options))]
   start <- .start_inputs(options$start, estimator, effective, model$ordered,
                          engine = length(engine) > 0L)
   engine$starts <- start$starts
   if (length(engine) && (!(estimator %in% c("ML", "FIML") && !length(model$ordered) ||
                          estimator == "DWLS" && length(model$ordered)) ||
                          !identical(effective, "unrestricted"))) {
-    stop("magmaan(): options$optimizer, options$convergence, options$preset and ",
+    stop("magmaan(): options$optimizer, options$convergence, options$marker, options$preset and ",
          "options$start = \"lavaan-0.7.2\" are available for continuous ML or FIML, or ordinal or complete mixed DWLS ",
          "with unrestricted covariance so far", call. = FALSE)
   }
@@ -467,8 +472,13 @@ magmaan <- function(model, data,
     lab <- do.call(magmaanlab::estimate, args)
   }
 
+  requested_model <- model
+  switches <- lab$fitting$marker_switch
+  if (!is.null(switches) && nrow(switches) && any(!switches$reverted))
+    model <- magmaan_model(lab$model, prototype = data)
   fit <- structure(
-    list(lab = lab, call = match.call(), model = model, estimator = estimator,
+    list(lab = lab, fitting = lab$fitting, call = match.call(), model = model,
+         requested_model = requested_model, estimator = estimator,
          covariance = covariance,
          experimental = identical(effective, "barrier"),
          rows = .row_accounting(data, model$group, lab),
@@ -600,6 +610,7 @@ as_lab_fit <- function(fit) {
 }
 
 .option_choices <- list(
+  marker = c("default", "lavaan-0.7.2"),
   optimizer = c("default", "port", "lavaan-0.7.2"),
   convergence = c("default", "newton", "lavaan-0.7.2"),
   preset = "lavaan-0.7.2"
@@ -618,7 +629,7 @@ as_lab_fit <- function(fit) {
   unknown <- setdiff(nm, c("start", names(.option_choices)))
   if (length(unknown)) {
     stop("magmaan(): unknown option ", paste0("`", unknown, "`", collapse = ", "),
-         "; `options` takes start, optimizer, convergence and preset", call. = FALSE)
+         "; `options` takes start, optimizer, convergence, marker and preset", call. = FALSE)
   }
   for (name in intersect(nm, names(.option_choices))) {
     .check_choice(options[[name]], paste0("options$", name), .option_choices[[name]])

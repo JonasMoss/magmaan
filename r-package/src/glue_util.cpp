@@ -8,7 +8,7 @@ using namespace magmaanr::fitglue;
 namespace magmaanr::fitglue {
 
 magmaan::estimate::FittingOptions fitting_options_from(const Rcpp::List& value) {
-  check_optim_control_names(value, {"preset", "starts", "optimizer", "convergence"});
+  check_optim_control_names(value, {"preset", "starts", "optimizer", "convergence", "marker"});
   magmaan::estimate::FittingOptions out;
   auto read = [&](const char* name, std::optional<std::string>& target) {
     if (!value.containsElementNamed(name)) return;
@@ -18,7 +18,7 @@ magmaan::estimate::FittingOptions fitting_options_from(const Rcpp::List& value) 
     target = Rcpp::as<std::string>(x);
   };
   read("preset", out.preset); read("starts", out.starts);
-  read("optimizer", out.optimizer); read("convergence", out.convergence);
+  read("optimizer", out.optimizer); read("convergence", out.convergence); read("marker", out.marker);
   return out;
 }
 
@@ -29,7 +29,7 @@ Rcpp::List fitting_report_to_r(const magmaan::estimate::FittingReport& report) {
     if (value) request[name] = *value;
   };
   add("preset", setup.requested.preset); add("starts", setup.requested.starts);
-  add("optimizer", setup.requested.optimizer); add("convergence", setup.requested.convergence);
+  add("optimizer", setup.requested.optimizer); add("convergence", setup.requested.convergence); add("marker", setup.requested.marker);
   Rcpp::List attempts(report.attempts.size());
   for (std::size_t j = 0; j < report.attempts.size(); ++j) {
     const auto& a = report.attempts[j];
@@ -62,10 +62,14 @@ Rcpp::List fitting_report_to_r(const magmaan::estimate::FittingReport& report) {
             Rcpp::_["center_locations"] = c.center_locations));
   }
   return Rcpp::List::create(
+      Rcpp::_["marker_switch"] = Rcpp::DataFrame::create(
+          Rcpp::_["lv"] = Rcpp::CharacterVector(), Rcpp::_["old"] = Rcpp::CharacterVector(),
+          Rcpp::_["new"] = Rcpp::CharacterVector(), Rcpp::_["r_old"] = Rcpp::NumericVector(),
+          Rcpp::_["r_new"] = Rcpp::NumericVector(), Rcpp::_["reverted"] = Rcpp::LogicalVector()),
       Rcpp::_["requested"] = request,
       Rcpp::_["effective"] = Rcpp::List::create(
           Rcpp::_["starts"] = setup.starts, Rcpp::_["optimizer"] = setup.optimizer,
-          Rcpp::_["convergence"] = setup.convergence),
+          Rcpp::_["convergence"] = setup.convergence, Rcpp::_["marker"] = setup.marker),
       Rcpp::_["modified_preset"] = setup.modified_preset,
       Rcpp::_["selected_attempt"] = report.attempts.empty() ? NA_INTEGER : static_cast<int>(report.selected_attempt + 1),
       Rcpp::_["attempts"] = attempts);

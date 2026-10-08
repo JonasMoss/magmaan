@@ -296,7 +296,8 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 std::string group_var = "",
                                 Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue,
                                 Rcpp::Nullable<Rcpp::CharacterVector> group_equal = R_NilValue,
-                                Rcpp::Nullable<Rcpp::CharacterVector> group_partial = R_NilValue) {
+                                Rcpp::Nullable<Rcpp::CharacterVector> group_partial = R_NilValue,
+                                Rcpp::Nullable<Rcpp::CharacterVector> marker = R_NilValue) {
   auto p = magmaan::parse::Parser::parse(syntax);
   if (!p.has_value()) stop_parse(p.error());
 
@@ -306,6 +307,18 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
   opts.orthogonal      = orthogonal;    // fix auto latent covariances at 0 (lavaan orthogonal=)
+  if (marker.isNotNull()) {
+    Rcpp::CharacterVector values(marker.get());
+    if (!values.hasAttribute("names")) Rcpp::stop("marker must be a named character vector");
+    Rcpp::CharacterVector keys = values.names();
+    for (int i = 0; i < values.size(); ++i) {
+      if (keys[i] == NA_STRING || values[i] == NA_STRING || Rcpp::as<std::string>(keys[i]).empty())
+        Rcpp::stop("marker requires nonmissing latent and indicator names");
+      auto name = Rcpp::as<std::string>(keys[i]);
+      if (opts.marker.contains(name)) Rcpp::stop("marker requires unique latent names");
+      opts.marker[name] = Rcpp::as<std::string>(values[i]);
+    }
+  }
   opts.auto_fix_first  = auto_fix_first;
   opts.auto_fix_single = auto_fix_single;
   opts.std_lv          = std_lv;        // when true, forces auto.fix.first off (lavaan parity)

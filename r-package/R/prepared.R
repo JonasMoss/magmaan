@@ -185,6 +185,20 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   covariance_options <- .covariance_options(covariance, psd, !missing(psd), barrier)
   covariance <- covariance_options$covariance
   barrier <- covariance_options$barrier
+  marker_options <- options %||% control$fitting_options
+  if (!is.null(marker_options) && estimator == "ML" && model$kind == "moments" && covariance == "unrestricted") {
+    switched <- .marker_fit(model, data, marker_options, function(m, o) {
+      ctl <- control
+      if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
+      if (!length(ctl)) ctl <- NULL
+      estimate(m, data, estimator, weight, optimizer, ctl, bounds,
+               covariance = covariance, dls_a = dls_a, options = o)
+    })
+    if (!is.null(switched)) {
+      switched$options$route <- list(fitter = "fit_model", args = route_args)
+      return(switched)
+    }
+  }
   spec <- model$input_spec
   start_hints <- NULL
   if (is.data.frame(control$start)) {
@@ -209,9 +223,9 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
     control <- .fitting_control(options, control, optimizer)
     optimizer <- NULL
   }
-  fit <- prepared_estimate_impl(model$native, data$native, if (is.null(weight)) NULL else weight$native,
+  fit <- .marker_boundary(function() prepared_estimate_impl(model$native, data$native, if (is.null(weight)) NULL else weight$native,
                                 estimator, optimizer, control, bounds, covariance,
-                                barrier$target %||% "joint", barrier$weight %||% 0.25, start_hints)
+                                barrier$target %||% "joint", barrier$weight %||% 0.25, start_hints))
   if (data$kind == "moments" && !is.null(weight)) fit$W <- weight$W
   if (data$kind == "moments" && !is.null(data$X)) {
     fit$raw_data <- structure(list(X = data$X, ov_names = model$ov_names,

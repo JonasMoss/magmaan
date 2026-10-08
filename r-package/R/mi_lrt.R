@@ -387,6 +387,7 @@ print.magmaan_score_lrt <- function(x, ...) {
 # fitting options, including ones added later).
 .lrt_refit <- function(fit, data, extra_syntax = "", extra_partial = NULL,
                        weight = NULL) {
+  .marker_refusal(fit, caller = "likelihood-ratio refit")
   model <- fit$model
   syntax <- model$syntax
   if (nzchar(extra_syntax)) syntax <- paste0(syntax, "\n", extra_syntax)

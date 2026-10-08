@@ -251,6 +251,10 @@ nobs.magmaan <- function(object, ...) {
 #' @export
 print.magmaan <- function(x, ...) {
   cat("magmaan fit\n")
+  switches <- x$lab$fitting$marker_switch
+  if (!is.null(switches) && nrow(switches)) for (i in which(!switches$reverted))
+    cat("  Marker switched as lavaan 0.7.2 does: ", switches$lv[i], " ",
+        switches$old[i], " -> ", switches$new[i], "\n", sep = "")
   cat("  estimator:       ", .estimator_label(x), "\n", sep = "")
   cat("  converged:       ", .converged_label(x$lab), "\n", sep = "")
   cat("  observations:    ", .rows_label(x), "\n", sep = "")

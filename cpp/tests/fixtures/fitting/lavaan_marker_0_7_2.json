@@ -1,0 +1,2008 @@
+{
+  "lavaan_version": "0.7.2",
+  "rule": [
+    {
+      "name": "switch",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x2",
+          "r_old": 0.017000000000000001,
+          "r_new": 0.436
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "strong",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.40000000000000002,
+            0.29999999999999999
+          ],
+          [
+            0.40000000000000002,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.29999999999999999,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "no_better",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.01,
+            0.01
+          ],
+          [
+            0.01,
+            1,
+            0.01
+          ],
+          [
+            0.01,
+            0.01,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "tie",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.02
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.02,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x2",
+          "r_old": 0.021999999999999999,
+          "r_new": 0.434
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "zero",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 2,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            -0.02,
+            -0.01
+          ],
+          [
+            -0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            -0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ],
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x3",
+          "r_old": 0,
+          "r_new": 0.42399999999999999
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p8."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 7,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p9."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 8,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p10."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 9,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p11."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 10,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p12."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 11,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p13."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 12,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p14."
+        }
+      ]
+    },
+    {
+      "name": "groups_na",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 2,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0,
+            0.59999999999999998,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ],
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x2",
+          "r_old": 0.017000000000000001,
+          "r_new": 0.51800000000000002
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p8."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 7,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p9."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 8,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p10."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 9,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p11."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 10,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p12."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 11,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p13."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 12,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p14."
+        }
+      ]
+    },
+    {
+      "name": "explicit_one",
+      "syntax": "f =~ 1*x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x2",
+          "r_old": 0.017000000000000001,
+          "r_new": 0.436
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "explicit_second",
+      "syntax": "f =~ NA*x1+1*x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "single",
+      "syntax": "f =~ x1",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        }
+      ]
+    },
+    {
+      "name": "second_order",
+      "syntax": "f =~ x1+x2+x3\ng =~ f",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": null,
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [
+        {
+          "lv": "f",
+          "old": "x1",
+          "new": "x2",
+          "r_old": 0.017000000000000001,
+          "r_new": 0.436
+        }
+      ],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "g",
+          "op": "=~",
+          "rhs": "f",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p8."
+        },
+        {
+          "lhs": "g",
+          "op": "~~",
+          "rhs": "g",
+          "free": 7,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p9."
+        }
+      ]
+    }
+  ],
+  "build": [
+    {
+      "name": "one",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": {
+        "f": "x2"
+      },
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "two",
+      "syntax": "f =~ x1+x2+x3\ng =~ y1+y2+y3\ng ~ f",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": {
+        "f": "x2",
+        "g": "y3"
+      },
+      "cov": [
+        [
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3",
+          "y1",
+          "y2",
+          "y3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "g",
+          "op": "=~",
+          "rhs": "y1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "g",
+          "op": "=~",
+          "rhs": "y2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "g",
+          "op": "=~",
+          "rhs": "y3",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "g",
+          "op": "~",
+          "rhs": "f",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p8."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 7,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p9."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 8,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p10."
+        },
+        {
+          "lhs": "y1",
+          "op": "~~",
+          "rhs": "y1",
+          "free": 9,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p11."
+        },
+        {
+          "lhs": "y2",
+          "op": "~~",
+          "rhs": "y2",
+          "free": 10,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p12."
+        },
+        {
+          "lhs": "y3",
+          "op": "~~",
+          "rhs": "y3",
+          "free": 11,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p13."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 12,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p14."
+        },
+        {
+          "lhs": "g",
+          "op": "~~",
+          "rhs": "g",
+          "free": 13,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p15."
+        }
+      ]
+    },
+    {
+      "name": "equal_groups",
+      "syntax": "f =~ x1+x2+x3",
+      "n_groups": 2,
+      "group_equal": "loadings",
+      "marker": {
+        "f": "x2"
+      },
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ],
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": ".p1.",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": ".p3.",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 7,
+          "ustart": null,
+          "label": ".p1.",
+          "plabel": ".p8."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "",
+          "plabel": ".p9."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 8,
+          "ustart": null,
+          "label": ".p3.",
+          "plabel": ".p10."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 9,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p11."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 10,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p12."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 11,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p13."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 12,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p14."
+        },
+        {
+          "lhs": ".p1.",
+          "op": "==",
+          "rhs": ".p8.",
+          "free": 0,
+          "ustart": null,
+          "label": "",
+          "plabel": ""
+        },
+        {
+          "lhs": ".p3.",
+          "op": "==",
+          "rhs": ".p10.",
+          "free": 0,
+          "ustart": null,
+          "label": "",
+          "plabel": ""
+        }
+      ]
+    },
+    {
+      "name": "labels",
+      "syntax": "f =~ a*x1+b*x2+c*x3",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": {
+        "f": "x2"
+      },
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "a",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "b",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "c",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        }
+      ]
+    },
+    {
+      "name": "constraint",
+      "syntax": "f =~ a*x1+b*x2+c*x3\na == c",
+      "n_groups": 1,
+      "group_equal": null,
+      "marker": {
+        "f": "x2"
+      },
+      "cov": [
+        [
+          [
+            1,
+            0.02,
+            0.01
+          ],
+          [
+            0.02,
+            1,
+            0.59999999999999998
+          ],
+          [
+            0.01,
+            0.59999999999999998,
+            1
+          ]
+        ]
+      ],
+      "names": [
+        [
+          "x1",
+          "x2",
+          "x3"
+        ]
+      ],
+      "info": [],
+      "pt": [
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x1",
+          "free": 1,
+          "ustart": null,
+          "label": "a",
+          "plabel": ".p1."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x2",
+          "free": 0,
+          "ustart": 1,
+          "label": "b",
+          "plabel": ".p2."
+        },
+        {
+          "lhs": "f",
+          "op": "=~",
+          "rhs": "x3",
+          "free": 2,
+          "ustart": null,
+          "label": "c",
+          "plabel": ".p3."
+        },
+        {
+          "lhs": "x1",
+          "op": "~~",
+          "rhs": "x1",
+          "free": 3,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p4."
+        },
+        {
+          "lhs": "x2",
+          "op": "~~",
+          "rhs": "x2",
+          "free": 4,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p5."
+        },
+        {
+          "lhs": "x3",
+          "op": "~~",
+          "rhs": "x3",
+          "free": 5,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p6."
+        },
+        {
+          "lhs": "f",
+          "op": "~~",
+          "rhs": "f",
+          "free": 6,
+          "ustart": null,
+          "label": "",
+          "plabel": ".p7."
+        },
+        {
+          "lhs": "a",
+          "op": "==",
+          "rhs": "c",
+          "free": 0,
+          "ustart": null,
+          "label": "",
+          "plabel": ""
+        }
+      ]
+    }
+  ]
+}

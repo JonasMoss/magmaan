@@ -5,7 +5,7 @@
   if (!is.list(options) || (length(options) && (is.null(names(options)) ||
       anyNA(names(options)) || any(!nzchar(names(options))) || anyDuplicated(names(options)))))
     stop("options must be a uniquely named list")
-  allowed <- c("preset", "starts", "optimizer", "convergence")
+  allowed <- c("preset", "starts", "optimizer", "convergence", "marker")
   if (any(!names(options) %in% allowed)) stop("unknown fitting option: ",
       paste(setdiff(names(options), allowed), collapse = ", "))
   for (name in names(options)) {

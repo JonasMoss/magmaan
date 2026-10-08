@@ -12,6 +12,7 @@
 refit_from_null <- function(fit_H1, fit_H0) {
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("refit_from_null(): supply two fitted magmaan models")
+  .marker_refusal(fit_H1, fit_H0, caller = "refit_from_null()")
   if (!identical(fit_H1$estimator, fit_H0$estimator))
     stop("refit_from_null(): fits must use the same estimator")
   ordinal <- isTRUE(fit_H1$ordinal)

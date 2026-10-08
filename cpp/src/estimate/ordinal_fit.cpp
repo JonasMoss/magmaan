@@ -2471,6 +2471,11 @@ fit_ordinal_configured_impl(spec::LatentStructure pt,
   constexpr bool mixed = std::is_same_v<Stats, data::MixedOrdinalStats>;
   auto setup = resolve_fitting_options(options);
   if (!setup) return std::unexpected(setup.error());
+  if (options.marker && *options.marker == "lavaan-0.7.2")
+    return std::unexpected(FitError{FitError::Kind::NumericIssue,
+        "unsupported_model: marker = lavaan-0.7.2 is not yet supported for DWLS; use marker = default", 0, 0.0});
+  setup->marker = "default";
+  setup->modified_preset = options.preset.has_value();
   constexpr std::string_view version = "lavaan-0.7.2";
   const bool search = setup->optimizer == version;
   const bool acceptance = setup->convergence == version;

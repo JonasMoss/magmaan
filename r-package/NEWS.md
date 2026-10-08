@@ -13,6 +13,12 @@
   and express cached null directions at the deciding probe point. Lab fits
   remain available for unidentified models, with a failed verdict.
 
+- The `lavaan-0.7.2` preset now adapts weak markers for complete-data ML.
+  `marker = "default"` keeps the requested identification. Fits retain the
+  actual fitted specification and a switch/revert table; nested inference
+  explicitly refuses switched marker coordinates. FIML and DWLS adaptation
+  follows separately; their preset currently reports `marker = "default"`.
+
 - Continuous ULS, DWLS and WLS/ADF fits now warn when within-group observed
   variances differ by more than a factor of 1000, with advice to rescale.
   The C++ diagnostic also covers ML2S Stage-2 and continuous mixed-LS moments;

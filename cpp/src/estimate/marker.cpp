@@ -1,0 +1,79 @@
+#include "magmaan/estimate/marker.hpp"
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <unordered_set>
+
+namespace magmaan::estimate {
+fit_expected<MarkerAdaptation> lavaan_marker_adapt(
+    const compat::lavaan::LavaanParTable& pt,
+    const std::vector<Eigen::MatrixXd>& cov,
+    const std::vector<std::vector<std::string>>& names) {
+  using parse::Op;
+  auto fail = [](std::string detail) -> fit_expected<MarkerAdaptation> {
+    return std::unexpected(FitError{FitError::Kind::NumericIssue, std::move(detail), 0, 0.0});
+  };
+  if (std::find(pt.op.begin(), pt.op.end(), Op::Composite) != pt.op.end())
+    return fail("unsupported_model: lavaan-0.7.2 marker adaptation excludes composites; use options$marker = default");
+  if (names.size() != cov.size()) return fail("marker h1 covariance/name block mismatch");
+  for (std::size_t b = 0; b < cov.size(); ++b)
+    if (cov[b].rows() != static_cast<Eigen::Index>(names[b].size()) || cov[b].cols() != cov[b].rows())
+      return fail("marker h1 covariance dimensions do not match names");
+  std::unordered_set<std::string> latent, efa;
+  std::vector<std::string> factors;
+  auto efa_col = pt.extra_str.find("efa");
+  for (std::size_t i = 0; i < pt.size(); ++i) if (pt.op[i] == Op::Measurement) {
+    if (latent.insert(pt.lhs[i]).second) factors.push_back(pt.lhs[i]);
+    if (efa_col != pt.extra_str.end() && !efa_col->second[i].empty()) efa.insert(pt.lhs[i]);
+  }
+  MarkerAdaptation out;
+  for (const auto& lv : factors) {
+    if (efa.contains(lv)) continue;
+    std::vector<std::size_t> rows;
+    int first_block = -1;
+    for (std::size_t i = 0; i < pt.size(); ++i) if (pt.op[i] == Op::Measurement && pt.lhs[i] == lv) {
+      if (first_block < 0) first_block = pt.block[i];
+      if (pt.block[i] == first_block && !latent.contains(pt.rhs[i])) rows.push_back(i);
+    }
+    if (rows.size() < 2 || pt.free[rows[0]] != 0 || pt.ustart[rows[0]] != 1.0 ||
+        std::count_if(rows.begin(), rows.end(), [&](auto i) { return pt.free[i] == 0; }) != 1) continue;
+    std::vector<double> sum(rows.size(), 0.0);
+    std::vector<int> count(rows.size(), 0);
+    for (std::size_t b = 0; b < cov.size(); ++b) {
+      std::vector<Eigen::Index> index;
+      for (auto row : rows) {
+        auto it = std::find(names[b].begin(), names[b].end(), pt.rhs[row]);
+        if (it == names[b].end()) break;
+        index.push_back(it - names[b].begin());
+      }
+      if (index.size() != rows.size()) continue;
+      double total = 0.0;
+      std::vector<double> row_sum(rows.size(), 0.0);
+      for (std::size_t i = 0; i < rows.size(); ++i)
+        for (auto j : index) row_sum[i] += cov[b](index[i], j);
+      for (auto r : row_sum) total += r;
+      for (std::size_t i = 0; i < rows.size(); ++i) {
+        double d = cov[b](index[i], index[i]);
+        double cit = (row_sum[i] - d) / std::sqrt(d * (total - 2.0 * row_sum[i] + d));
+        if (std::isfinite(cit)) { sum[i] += cit; ++count[i]; }
+      }
+    }
+    std::vector<double> cit(rows.size(), std::numeric_limits<double>::quiet_NaN());
+    std::size_t best = 0;
+    double maximum = -1.0;
+    for (std::size_t i = 0; i < rows.size(); ++i) if (count[i]) {
+      cit[i] = sum[i] / count[i];
+      if (std::abs(cit[i]) > maximum) { maximum = std::abs(cit[i]); best = i; }
+    }
+    if (std::isfinite(cit[0]) && std::abs(cit[0]) < 0.1 && best != 0 && maximum >= 0.1) {
+      const auto& next = pt.rhs[rows[best]];
+      out.marker[lv] = next;
+      // R round uses ties-to-even under the default rounding mode.
+      out.info.push_back({lv, pt.rhs[rows[0]], next,
+          std::nearbyint(cit[0] * 1000.0) / 1000.0,
+          std::nearbyint(cit[best] * 1000.0) / 1000.0});
+    }
+  }
+  return out;
+}
+} // namespace magmaan::estimate

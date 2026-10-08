@@ -436,9 +436,17 @@ apply_modifiers_to_rows(const parse::FlatPartable& flat,
 // row (Free, StartValue, or FixedValue). A bare label does NOT count as
 // explicit; lavaan still auto-fixes a marker indicator that happens to
 // carry a label.
-void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows) {
+void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows,
+                          const std::unordered_map<std::string, std::string>& marker) {
   for (const auto& lv : v.lv.items) {
+    auto chosen = rows.end();
+    auto mapped = marker.find(lv);
+    if (mapped != marker.end())
+      chosen = std::find_if(rows.begin(), rows.end(), [&](const auto& row) {
+        return row.op == parse::Op::Measurement && row.lhs == lv && row.rhs == mapped->second;
+      });
     for (auto& row : rows) {
+      if (chosen != rows.end() && &row != &*chosen) continue;
       if (row.op != parse::Op::Measurement && row.op != parse::Op::Composite) {
         continue;
       }
@@ -946,7 +954,7 @@ build_group_template(const parse::FlatPartable& flat,
   } else if (opts.effect_coding) {
     // nothing: all loadings free, `lv ~~ lv` free (from auto.var).
   } else if (opts.auto_fix_first) {
-    apply_auto_fix_first(v, rows);
+    apply_auto_fix_first(v, rows, opts.marker);
   }
   // Resolve equal(...) references. A row carrying an `equal_ref` is tied to
   // the parameter it names (canonical `lhs op rhs`): magmaan expresses the
@@ -1319,8 +1327,11 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
       if (!family_matches(r1) || !will_be_free(r1) || in_group_partial(r1)) {
         continue;
       }
+      // Marker-map rebuilds expose lavaan's generated group label. Keep the
+      // existing names for callers using the default builder contract.
       const std::string shared =
-          r1.label.empty() ? (".eqg" + std::to_string(off) + ".") : r1.label;
+          r1.label.empty() ? (opts.marker.empty() ? ".eqg" + std::to_string(off) + "."
+                                                : ".p" + std::to_string(off + 1) + ".") : r1.label;
       for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
         // Explicit group templates may have different row counts and order.
         auto found = group_blocks ? std::find_if(rows.begin(), rows.end(),
