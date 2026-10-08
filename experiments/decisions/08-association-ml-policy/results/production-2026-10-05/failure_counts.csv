@@ -1,0 +1,214 @@
+"cell_id","arm","target","error_class","count"
+1,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",24
+1,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+2,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",12
+2,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+3,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+5,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",1
+5,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",1
+5,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",1
+5,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",93
+5,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",27
+6,"association_global_All","global","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",1
+6,"association_global_PEBA4","global","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",1
+6,"association_global_SB","global","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",1
+6,"association_ij","correlation","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_ij","loading","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_ij","threshold","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_mi_power","mi","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",80
+6,"association_mi_size","mi","magmaan fit error [NonPositiveDefiniteSample]",252
+6,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",32
+7,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+8,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+9,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+9,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+10,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",9
+10,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",3
+12,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+13,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",2
+13,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",2
+13,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",2
+13,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",57
+13,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",21
+14,"association_global_All","global","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",2
+14,"association_global_PEBA4","global","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",2
+14,"association_global_SB","global","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",2
+14,"association_ij","correlation","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_ij","loading","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_ij","threshold","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_mi_power","mi","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",41
+14,"association_mi_size","mi","magmaan fit error [NonPositiveDefiniteSample]",556
+14,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",14
+15,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+17,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",19
+17,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+18,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",23
+18,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",5
+20,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+21,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",1
+21,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",1
+21,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",1
+21,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",99
+21,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",32
+22,"association_global_All","global","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",1
+22,"association_global_PEBA4","global","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",1
+22,"association_global_SB","global","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",1
+22,"association_ij","correlation","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_ij","loading","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_ij","threshold","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_mi_power","mi","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",62
+22,"association_mi_size","mi","magmaan fit error [NonPositiveDefiniteSample]",269
+22,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",23
+25,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",16
+25,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",3
+26,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",12
+26,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+29,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",3
+29,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",3
+29,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",3
+29,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",51
+29,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",10
+30,"association_global_All","global","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_global_All","global","singular_information association_ml_global_test: singular association tangent",2
+30,"association_global_PEBA4","global","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_global_PEBA4","global","singular_information association_ml_global_test: singular association tangent",2
+30,"association_global_SB","global","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_global_SB","global","singular_information association_ml_global_test: singular association tangent",2
+30,"association_ij","correlation","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_ij","loading","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_ij","threshold","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_mi_power","mi","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",34
+30,"association_mi_size","mi","magmaan fit error [NonPositiveDefiniteSample]",547
+30,"association_mi_size","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",9
+32,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+37,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+38,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",1
+53,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+54,"association_mi_power","mi","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",5
+98,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",102
+98,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",102
+98,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",102
+101,"association_nested_All","nested","library_nonconvergence",6
+101,"association_nested_All","nested","magmaan fit error [LineSearchFailed]",2
+101,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",41
+101,"association_nested_All","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",3
+101,"association_nested_PEBA4","nested","library_nonconvergence",6
+101,"association_nested_PEBA4","nested","magmaan fit error [LineSearchFailed]",2
+101,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",41
+101,"association_nested_PEBA4","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",3
+101,"association_nested_SB","nested","library_nonconvergence",6
+101,"association_nested_SB","nested","magmaan fit error [LineSearchFailed]",2
+101,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",41
+101,"association_nested_SB","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",3
+101,"dwls_nested_All","nested","library_nonconvergence",1
+101,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",5
+101,"dwls_nested_PEBA4","nested","library_nonconvergence",1
+101,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",5
+101,"dwls_nested_SB","nested","library_nonconvergence",1
+101,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",5
+102,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+102,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+102,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+102,"dwls_nested_All","nested","library_nonconvergence",3
+102,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+102,"dwls_nested_PEBA4","nested","library_nonconvergence",3
+102,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+102,"dwls_nested_SB","nested","library_nonconvergence",3
+102,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+106,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",201
+106,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",201
+106,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",201
+109,"association_nested_All","nested","library_nonconvergence",2
+109,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",22
+109,"association_nested_All","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+109,"association_nested_PEBA4","nested","library_nonconvergence",2
+109,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",22
+109,"association_nested_PEBA4","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+109,"association_nested_SB","nested","library_nonconvergence",2
+109,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",22
+109,"association_nested_SB","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+109,"dwls_nested_All","nested","library_nonconvergence",2
+109,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",2
+109,"dwls_nested_PEBA4","nested","library_nonconvergence",2
+109,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",2
+109,"dwls_nested_SB","nested","library_nonconvergence",2
+109,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",2
+110,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",1990
+110,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",1990
+110,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",1990
+110,"dwls_nested_All","nested","library_nonconvergence",10
+110,"dwls_nested_PEBA4","nested","library_nonconvergence",10
+110,"dwls_nested_SB","nested","library_nonconvergence",10
+114,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",124
+114,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",124
+114,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",124
+117,"association_nested_All","nested","library_nonconvergence",3
+117,"association_nested_All","nested","magmaan fit error [LineSearchFailed]",1
+117,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",72
+117,"association_nested_All","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+117,"association_nested_PEBA4","nested","library_nonconvergence",3
+117,"association_nested_PEBA4","nested","magmaan fit error [LineSearchFailed]",1
+117,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",72
+117,"association_nested_PEBA4","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+117,"association_nested_SB","nested","library_nonconvergence",3
+117,"association_nested_SB","nested","magmaan fit error [LineSearchFailed]",1
+117,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",72
+117,"association_nested_SB","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",2
+117,"dwls_nested_All","nested","library_nonconvergence",1
+117,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",6
+117,"dwls_nested_PEBA4","nested","library_nonconvergence",1
+117,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",6
+117,"dwls_nested_SB","nested","library_nonconvergence",1
+117,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",6
+118,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+118,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+118,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",1980
+118,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+118,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+118,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+122,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",303
+122,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",303
+122,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",303
+125,"association_nested_All","nested","library_nonconvergence",1
+125,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",28
+125,"association_nested_All","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+125,"association_nested_PEBA4","nested","library_nonconvergence",1
+125,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",28
+125,"association_nested_PEBA4","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+125,"association_nested_SB","nested","library_nonconvergence",1
+125,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",28
+125,"association_nested_SB","nested","singular_information association_ml_ij: observed sensitivity is singular or not positive definite",4
+125,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+125,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+125,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+126,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",1995
+126,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",1995
+126,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",1995
+126,"dwls_nested_All","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+126,"dwls_nested_PEBA4","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+126,"dwls_nested_SB","nested","numeric_failure robust_weighted_moment_ij observed bread is not positive definite",1
+134,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",6
+134,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",6
+134,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",6
+142,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",37
+142,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",37
+142,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",37
+150,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",2
+150,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",2
+150,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",2
+158,"association_nested_All","nested","magmaan fit error [NonPositiveDefiniteSample]",43
+158,"association_nested_PEBA4","nested","magmaan fit error [NonPositiveDefiniteSample]",43
+158,"association_nested_SB","nested","magmaan fit error [NonPositiveDefiniteSample]",43

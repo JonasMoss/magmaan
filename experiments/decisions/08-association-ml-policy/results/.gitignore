@@ -6,3 +6,18 @@ smoke/*
 pilot/*
 !smoke/*.csv
 !pilot/*.csv
+# Production 2026-10-05 (192 cells x 2000 draws, simbox, source 5bcd0fd5):
+# summaries, provenance and compacted failure/timing evidence. Per-draw
+# failures.csv and timing.csv stay local (scripts/compact_production.R).
+!production-2026-10-05/
+production-2026-10-05/*
+!production-2026-10-05/summary.csv
+!production-2026-10-05/cells.csv
+!production-2026-10-05/metadata.csv
+!production-2026-10-05/cost.csv
+!production-2026-10-05/population_targets.csv
+!production-2026-10-05/population_stage1.csv
+!production-2026-10-05/population_timing.csv
+!production-2026-10-05/population_uncertainty.csv
+!production-2026-10-05/failure_counts.csv
+!production-2026-10-05/timing_summary.csv
