@@ -335,6 +335,13 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: lab ordinal and mixed augmentation builds threshold and scale
+rows column by column (5-14x faster, outputs identical including attributes on
+12 cases); `augment_model_spec()` adds them once from declared categories and
+`prepare_model()` composes it, and fresh fits of such specifications name a
+category-count mismatch. A default ordinal `magmaan()` fit is about 17% faster
+(TASK-130, rescuing the lab half of TASK-46).
+
 2026-10-08: complete-data ordinal preparation skips per-pair diagnostics
 (expected, residual and Pearson tables, diagnostic influence copies) when the
 caller does not request them; every `OrdinalStats` field and the diagnostic
