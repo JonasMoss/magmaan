@@ -4,6 +4,10 @@
 stopifnot(as.character(utils::packageVersion("lavaan")) == "0.7.2")
 model <- "Y =~ y1+y2+y3\nX =~ x1+x2+x3\nY ~ X"
 cases <- list()
+ns <- asNamespace("lavaan")
+em_result <- NULL
+trace("lav_em_squarem", where=ns, print=FALSE,
+      exit=quote(.GlobalEnv$em_result <- returnValue()))
 for (seed in c(12953003L, 12953002L, 12954001L)) {
   n <- if (seed == 12954001L) 40L else 20L
   set.seed(seed)
@@ -17,8 +21,10 @@ for (seed in c(12953003L, 12953002L, 12954001L)) {
   h <- lavaan::lavInspect(l,"h1")
   cases[[length(cases)+1L]] <- list(seed=seed,n=n,raw=unname(as.matrix(d)),
     mean=unname(h$mean),cov=unname(h$cov),
+    em_converged=em_result$converged,em_updates=em_result$fpeval,
     starts=unname(lavaan::parTable(l)$start),em_options=l@Options$em.h1.args)
 }
+untrace("lav_em_squarem", where=ns)
 jsonlite::write_json(list(source="regen_fiml_h1_preset.R; D5 MCAR 20% per variable",
   lavaan_version="0.7.2",model=model,cases=cases),
   "cpp/tests/fixtures/fitting/lavaan_fiml_h1_0_7_2.json",

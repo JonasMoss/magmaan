@@ -338,6 +338,11 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
       if (!e) stop_fit(e.error());
       auto out = fiml_fit_result(ctx, d.raw, *e, &starts);
       out["fiml_pack"] = fiml_pack_xptr(*d.pack);
+      if (out.containsElementNamed("fitting")) {
+        Rcpp::List fitting = out["fitting"];
+        fitting["h1"] = fiml_h1_diagnostics_to_r(*h1);
+        out["fitting"] = fitting;
+      }
       out["fiml_h1"] = fiml_h1_xptr(std::move(*h1));
       return out;
     }

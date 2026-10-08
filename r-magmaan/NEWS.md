@@ -4,6 +4,12 @@
   restrictions. Information deficits name affected parameters without suggesting
   an automatic fix; no identifying constraints are added.
 
+- The `lavaan-0.7.2` FIML preset now uses lavaan's scale-dependent H1
+  covariance ridge and retains stalled EM moments. `fit$fitting$h1` records
+  H1 convergence and update/repair counts. Converged H1 moments retain strict
+  oracle agreement; stalled H1 endpoints are outside the compatibility
+  contract. Native FIML H1 defaults are unchanged.
+
 - `magmaan_model()` now caches and prints structural identification.
   `magmaan()` refuses unidentified models before fitting with
   `magmaan_identification_error`, naming the free parameter directions.

@@ -1033,6 +1033,18 @@ TEST_CASE("lavaan FIML H1 matches small-N pinned EM moments") {
     raw.X.push_back(std::move(x)); raw.mask.push_back(std::move(mask));
     auto pack = estimate::fiml::fiml_pack(raw); REQUIRE_OR_RETURN(pack);
     auto h1 = estimate::lavaan_fiml_h1(raw, *pack); REQUIRE_OR_RETURN(h1);
+    const auto& diagnostics = h1->solver_blocks.front();
+    CHECK(h1->solver_options.lavaan_covariance_ridge);
+    CHECK(diagnostics.iterations > 0);
+    if (!c["em_converged"].get<bool>()) {
+      // Stalled oracle: covariance gap 1.1e-7; equivalent lavaan calls differ
+      // by 1.8e-4. Its endpoint is outside the moment compatibility contract.
+      CHECK(diagnostics.stop == estimate::fiml::H1StopReason::IterationLimit);
+      CHECK(diagnostics.covariance_repairs > 0);
+      CHECK(diagnostics.max_covariance_ridge > 0.0);
+      continue;
+    }
+    CHECK(diagnostics.stop == estimate::fiml::H1StopReason::ParameterTolerance);
     for (Eigen::Index i = 0; i < p; ++i) {
       const double mean = c["mean"][static_cast<std::size_t>(i)].get<double>();
       CHECK(std::abs(h1->mu[0](i) - mean) <= 1e-10 * std::max(1.0, std::abs(mean)));

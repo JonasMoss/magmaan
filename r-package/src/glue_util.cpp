@@ -1664,3 +1664,19 @@ global_score_metric_from_string(const std::string& metric) {
 }
 
 }  // namespace magmaanr::fitglue
+
+Rcpp::List magmaanr::fitglue::fiml_h1_diagnostics_to_r(
+    const magmaan::estimate::fiml::FIMLH1& h1) {
+  using Stop = magmaan::estimate::fiml::H1StopReason;
+  Rcpp::LogicalVector converged(h1.solver_blocks.size());
+  Rcpp::IntegerVector iterations(h1.solver_blocks.size()), repairs(h1.solver_blocks.size());
+  for (std::size_t b = 0; b < h1.solver_blocks.size(); ++b) {
+    const auto& d = h1.solver_blocks[b];
+    converged[b] = d.stop != Stop::IterationLimit;
+    iterations[b] = d.iterations;
+    repairs[b] = d.covariance_repairs;
+  }
+  return Rcpp::List::create(Rcpp::_["converged"] = converged,
+      Rcpp::_["iterations"] = iterations, Rcpp::_["covariance_repairs"] = repairs,
+      Rcpp::_["lavaan_covariance_ridge"] = h1.solver_options.lavaan_covariance_ridge);
+}

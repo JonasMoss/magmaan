@@ -276,6 +276,11 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   }
   if (!e_or) stop_fit(e_or.error());
   Rcpp::List out = fiml_fit_result(ctx, raw, *e_or, &starts);
+  if (out.containsElementNamed("fitting")) {
+    Rcpp::List fitting = out["fitting"];
+    fitting["h1"] = fiml_h1_diagnostics_to_r(*h1_or);
+    out["fitting"] = fitting;
+  }
   out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
   out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
   return out;

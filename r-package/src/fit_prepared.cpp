@@ -106,11 +106,10 @@ Rcpp::List prepared_fiml_h1_impl(SEXP model, SEXP data) {
     Rcpp::stop("magmaan: preset H1 requires matching prepared FIML model/data");
   auto h1 = magmaan::estimate::lavaan_fiml_h1(d.raw, *d.pack);
   if (!h1) stop_fit(h1.error());
-  Rcpp::IntegerVector iterations(h1->solver_blocks.size());
-  for (std::size_t b = 0; b < h1->solver_blocks.size(); ++b)
-    iterations[b] = h1->solver_blocks[b].iterations;
-  return Rcpp::List::create(Rcpp::_["mean"] = h1->mu,
-      Rcpp::_["cov"] = h1->sigma, Rcpp::_["iterations"] = iterations);
+  Rcpp::List out = fiml_h1_diagnostics_to_r(*h1);
+  out["mean"] = h1->mu;
+  out["cov"] = h1->sigma;
+  return out;
 }
 
 // [[Rcpp::export]]

@@ -8,6 +8,12 @@
   declared category counts with missing threshold starts. Ordinal and mixed
   augmentation now builds rows column by column; prepared models use this helper.
 
+- The `lavaan-0.7.2` FIML preset now uses lavaan's scale-dependent H1
+  covariance ridge and retains stalled EM moments. `fit$fitting$h1` records
+  H1 convergence and update/repair counts. Converged H1 moments retain strict
+  oracle agreement; stalled H1 endpoints are outside the compatibility
+  contract. Native FIML H1 defaults are unchanged.
+
 - `structural_identification()` checks a specification or reuses a prepared
   model's data-free report. Prepared fits reuse construction-time identification
   and express cached null directions at the deciding probe point. Lab fits

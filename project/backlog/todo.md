@@ -332,6 +332,12 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   gating and admissibility. Literal edge cases and live lavaan 0.7.2 gates pass.
 - [ ] **0.2.1 — marker switch for FIML and ordinal/mixed DWLS (TASK-129.3)**,
   reading lavaan's saturated (h1) covariance of each route.
+- [x] **0.2.1 — FIML preset H1 moments (TASK-129.7).** Preset-only
+  scale-dependent covariance ridge and retained nonconverged H1 moments;
+  strict `1e-10` moment/first-start gates for converged lavaan H1. Stalled
+  H1 endpoints are outside the compatibility contract; non-convergence and
+  the repair rule are tested, with update/repair diagnostics recorded in
+  `fit$fitting$h1`. Native H1 is unchanged.
 - [ ] **0.2.1 — hard-case parity gate (TASK-129.4).** Opt-in comparison with
   live lavaan at small N (Heywood cases, non-convergence, retries, marker
   switches), structured means with equality constraints, random covariates,

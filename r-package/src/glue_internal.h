@@ -239,4 +239,6 @@ score_flip_sensitivity_from_string(const std::string& sensitivity);
 magmaan::inference::frontier::GlobalScoreFlipOptions::Metric
 global_score_metric_from_string(const std::string& metric);
 
+Rcpp::List fiml_h1_diagnostics_to_r(const magmaan::estimate::fiml::FIMLH1& h1);
+
 }  // namespace magmaanr::fitglue
