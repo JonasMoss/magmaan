@@ -335,6 +335,12 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: the decisions/08 population-approximation prerequisite for
+association-ML MIs passes (TASK-128.3): over 96 single-group cells the largest
+implied one-df MI size from draw-to-draw target error is 5.36% (limit 5.5%,
+a dated post-results amendment approved by the user). Ordinary association-ML
+exposure, MIs included, is TASK-128.2.
+
 2026-10-08: raw complete-data ordinal DWLS FitPlusInference workspaces keep
 full Gamma and the DWLS weight but skip the unused full-WLS inversion, and
 Gamma-cache flags reject empty inverse placeholders (TASK-123).
