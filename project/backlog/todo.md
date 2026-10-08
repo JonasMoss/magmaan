@@ -1581,7 +1581,11 @@ separate final decision for each explicitly covered scope.
   (`eqchain_b20`), including starts and covariance-link mappings. **Check:**
   lifted/ordinary objectives, links and equality residuals across units. Direct
   PSD remains the ordinary route; fallback remains explicit. Any route change
-  needs a fresh decision study. Evidence: optimizer defaults.
+  needs a fresh decision study. Evidence: optimizer defaults. Both cases now
+  have preparation-only checkpoints (decisions/01
+  `scripts/prepare_retained_psd_case.R`, TASK-126; current-runtime
+  reconstructions, not historical recovery). Next: a bounded public
+  lift round-trip probe on the `round_trip` checkpoint.
 
 - [ ] **L — extend shared normalization to FIML.** Transport raw data/patterns,
   fixed-x inputs, groups, models, starts, bounds, affine equalities and applicable
