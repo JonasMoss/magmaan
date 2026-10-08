@@ -335,6 +335,17 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-08: the `lavaan-0.7.2` fitting preset reproduces lavaan 0.7.2's
+automatic marker switch for complete-data ML as a fourth fitting-options
+component, `marker` (`"default"` keeps the requested markers). The C++ rule
+and builder marker map follow `lav_pt_marker_adapt` and `lav_pt_flat`. A
+switched fit that lavaan's rule rejects reverts to the requested markers, and
+fits report the identification actually fitted. Preset fits report lavaan's
+`post.check` beside `converged`. The FIML preset uses lavaan's
+scale-dependent h1 covariance ridge: converged h1 moments match lavaan to
+1e-10, and stalled h1 EM endpoints are outside the contract. FIML and DWLS
+marker switching follows (TASK-129.1, .2, .7; 0.2.1).
+
 2026-10-08: lab ordinal and mixed augmentation builds threshold and scale
 rows column by column (5-14x faster, outputs identical including attributes on
 12 cases); `augment_model_spec()` adds them once from declared categories and
