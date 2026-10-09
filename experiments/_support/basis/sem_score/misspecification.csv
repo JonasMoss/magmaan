@@ -1,13 +1,42 @@
-id,lhs,op,rhs,group,kind,rationale
-cfa_bifactor15,EMOTION,=~,X6,all,cross_loading,A threat indicator may also reflect the emotion-specific factor.
-cfa_corr24,PosEVL,=~,PosCON2,all,cross_loading,The second positive-control item may also measure positive evaluation.
-cfa_long18,PA_T1P2,~~,PA_T2P3,all,residual_covariance,Adjacent-wave parcels may share item content across parcels; all same-parcel wave covariances are already free.
-cfa_long30,BulPB1,~~,BulPC2,all,residual_covariance,Adjacent-wave bullying parcels may share item content across parcels; all same-parcel wave covariances are already free.
-cfa_mtmm9,SCHZOTYP,=~,PARC,all,cross_loading,The clinical paranoia indicator may also measure schizotypal traits.
-cfa_ptsd8,AVOID,=~,Y2,all,cross_loading,The second intrusion indicator may also reflect avoidance symptoms.
-cfa_second12,COGRES,=~,P2,all,cross_loading,The second problem-solving indicator may also measure cognitive restructuring.
-growth6,cesd2,~~,cesd3,all,residual_covariance,Adjacent CES-D waves may retain dependence beyond the linear growth factors.
-mg_path5,achieve,~~,delinq,Group 2,residual_covariance,Group 2 may share unmeasured causes of achievement and delinquency beyond the directed paths.
-mgcfa_mdd9,M2,~~,M3,1,residual_covariance,Two non-marker depression indicators may share symptom content in the second group.
-mimic7,S2,~,SEX,all,direct_effect,Sex may affect the second social-phobia indicator beyond its latent-factor effects.
-sem_worland11,Adjust,~,Achieve,all,direct_effect,Achievement may directly affect adjustment beyond cognitive ability and risk.
+"id","block","lhs","op","rhs","group","kind","sign","rationale"
+"cfa_bifactor15","cfa_bifactor15_omission","EMOTION","=~","X2","all","cross_loading",-1,"General-only non-marker items may also reflect the emotion-specific factor."
+"cfa_bifactor15","cfa_bifactor15_omission","EMOTION","=~","X3","all","cross_loading",-1,"General-only non-marker items may also reflect the emotion-specific factor."
+"cfa_bifactor15","cfa_bifactor15_omission","EMOTION","=~","X4","all","cross_loading",-1,"General-only non-marker items may also reflect the emotion-specific factor."
+"cfa_corr24","cfa_corr24_omission","NegCON","=~","PosCON2","all","cross_loading",-1,"A positive-control item may also reflect negative control."
+"cfa_long18","cfa_long18_omission","PA_T1P2","~~","PA_T1P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long18","cfa_long18_omission","PA_T2P2","~~","PA_T2P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long18","cfa_long18_omission","PA_T3P2","~~","PA_T3P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long18","cfa_long18_omission","NA_T1P2","~~","NA_T1P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long18","cfa_long18_omission","NA_T2P2","~~","NA_T2P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long18","cfa_long18_omission","NA_T3P2","~~","NA_T3P3","all","residual_covariance",-1,"Within-wave positive- and negative-affect parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","BulPB1","~~","BulPC1","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","BulPB2","~~","BulPC2","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","BulPB3","~~","BulPC3","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","BulPB4","~~","BulPC4","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","BulPB5","~~","BulPC5","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","HomPPB1","~~","HomPPC1","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","HomPPB2","~~","HomPPC2","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","HomPPB3","~~","HomPPC3","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","HomPPB4","~~","HomPPC4","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_long30","cfa_long30_omission","HomPPB5","~~","HomPPC5","all","residual_covariance",-1,"Within-wave bullying and homophobia parcels may share content beyond their factors."
+"cfa_mtmm9","cfa_mtmm9_omission","SCHZOTYP","=~","PARC","all","cross_loading",-1,"The clinical paranoia indicator may also measure schizotypal traits."
+"cfa_ptsd8","cfa_ptsd8_omission","AVOID","=~","Y2","all","cross_loading",-1,"Non-marker intrusion indicators may also reflect avoidance symptoms."
+"cfa_ptsd8","cfa_ptsd8_omission","AVOID","=~","Y3","all","cross_loading",-1,"Non-marker intrusion indicators may also reflect avoidance symptoms."
+"cfa_ptsd8","cfa_ptsd8_omission","AVOID","=~","Y4","all","cross_loading",-1,"Non-marker intrusion indicators may also reflect avoidance symptoms."
+"cfa_second12","cfa_second12_omission","COGRES","=~","P2","all","cross_loading",-1,"Non-marker problem-solving and expressive-emotion indicators may also measure their paired coping factors."
+"cfa_second12","cfa_second12_omission","COGRES","=~","P3","all","cross_loading",-1,"Non-marker problem-solving and expressive-emotion indicators may also measure their paired coping factors."
+"cfa_second12","cfa_second12_omission","SOCSPT","=~","E2","all","cross_loading",-1,"Non-marker problem-solving and expressive-emotion indicators may also measure their paired coping factors."
+"cfa_second12","cfa_second12_omission","SOCSPT","=~","E3","all","cross_loading",-1,"Non-marker problem-solving and expressive-emotion indicators may also measure their paired coping factors."
+"growth6","growth6_omission","cesd1","~~","cesd2","all","residual_covariance",1,"Adjacent CES-D waves may retain dependence beyond the linear growth factors."
+"growth6","growth6_omission","cesd2","~~","cesd3","all","residual_covariance",1,"Adjacent CES-D waves may retain dependence beyond the linear growth factors."
+"growth6","growth6_omission","cesd3","~~","cesd4","all","residual_covariance",1,"Adjacent CES-D waves may retain dependence beyond the linear growth factors."
+"mg_path5","mg_path5_omission","achieve","~~","effort","Group 2","residual_covariance",1,"In the second group unmeasured causes may link effort to residual achievement and delinquency."
+"mg_path5","mg_path5_omission","delinq","~~","effort","Group 2","residual_covariance",1,"In the second group unmeasured causes may link effort to residual achievement and delinquency."
+"mgcfa_mdd9","mgcfa_mdd9_omission","M2","~~","M3","1","residual_covariance",1,"Pairs of non-marker depression indicators may share symptom content in the second group."
+"mgcfa_mdd9","mgcfa_mdd9_omission","M4","~~","M5","1","residual_covariance",1,"Pairs of non-marker depression indicators may share symptom content in the second group."
+"mgcfa_mdd9","mgcfa_mdd9_omission","M6","~~","M7","1","residual_covariance",1,"Pairs of non-marker depression indicators may share symptom content in the second group."
+"mgcfa_mdd9","mgcfa_mdd9_omission","M8","~~","M9","1","residual_covariance",1,"Pairs of non-marker depression indicators may share symptom content in the second group."
+"mimic7","mimic7_omission","S2","~","SEX","all","direct_effect",-1,"Sex may affect the second social-phobia indicator beyond its latent-factor effects."
+"sem_worland11","sem_worland11_omission","read","~~","motive","all","residual_covariance",-1,"Achievement and adjustment indicators may share paired item dependence beyond their factors."
+"sem_worland11","sem_worland11_omission","math","~~","harmony","all","residual_covariance",-1,"Achievement and adjustment indicators may share paired item dependence beyond their factors."
+"sem_worland11","sem_worland11_omission","spell","~~","stable","all","residual_covariance",-1,"Achievement and adjustment indicators may share paired item dependence beyond their factors."
