@@ -88,6 +88,7 @@ worker<-function(id,estimator) {
   },error=save_error)
 }
 if("--worker" %in% argv) {worker(value("--worker"),value("--estimator"));quit(save="no")}
+if(!value("--start","current") %in% c("current","layered")) stop("--start must be current or layered")
 ids<-manifest$case_id
 if("--smoke" %in% argv) ids<-c("newsom_2015_ex5_4","newsom_2015_ex5_4c","little_2013_ch3_fig_3_11_longitudinal_cfa_phantom")
 if(length(value("--cases"))) ids<-strsplit(value("--cases"),",",fixed=TRUE)[[1]]

@@ -650,6 +650,7 @@ The `r nrow(retries)` omitted ordinary arms then received separate 120-second
 attempts; `r sum(retries$exit != 0)` remained incomplete. These caps include
 input preparation and reference fitting, so a timeout does not isolate optimizer
 cost or establish numerical failure.
+Historical exclusion counts include eight multigroup cases incorrectly excluded by named-versus-numeric group keys; the runner now normalizes lavaan labels in sample order before matching.
 There were `r nrow(exclusions)` preparation exclusions. Categorical, FIML-only,
 composite and multilevel models are outside this comparison; unsupported input
 conventions and singular sample covariances are recorded rather than silently

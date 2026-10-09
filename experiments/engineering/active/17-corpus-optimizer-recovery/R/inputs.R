@@ -49,12 +49,24 @@ read_case <- function(root, relative, estimator) {
   sample <- list(S=lapply(ss,`[[`,"cov"),nobs=n,
                  mean=if(isTRUE(mo$meanstructure)) lapply(ss,`[[`,"mean") else NULL)
   # Compare the estimable row pattern before attributing differences to solvers.
-  mp <- model$partable; lp <- lavaan::parTable(pre)
+  mp <- model$partable; lp <- numeric_group_partable(pre)
   formula <- mp$op %in% c("=~","~~","~","~1")
   idx <- match(row_key(mp[formula,]),row_key(lp))
   if(anyNA(idx) || any((mp$free[formula]>0)!=(lp$free[idx]>0)))
     stop("excluded: model parameter freedom differs from lavaan")
   list(model=model,sample=sample,args=args,fun=fun,pre=pre,meta=meta,directory=directory)
+}
+numeric_group_partable <- function(reference) {
+  p <- lavaan::parTable(reference)
+  # Named groups follow lavaan's sample order, not alphabetical label order.
+  if (is.character(p$group) || is.factor(p$group)) {
+    labels <- lavaan::lavInspect(reference,"group.label")
+    grouped <- !is.na(p$group) & nzchar(as.character(p$group))
+    ids <- match(as.character(p$group[grouped]),as.character(labels))
+    if (anyNA(ids)) stop("unknown lavaan parameter-table group label")
+    p$group <- replace(integer(nrow(p)),which(grouped),ids)
+  }
+  p
 }
 row_key <- function(p) {
   left<-p$lhs;right<-p$rhs; cov<-p$op=="~~"
@@ -62,7 +74,7 @@ row_key <- function(p) {
   paste(left,p$op,right,p$group,sep="|")
 }
 map_theta <- function(model, reference) {
-  p<-model$partable; q<-lavaan::parTable(reference)
+  p<-model$partable; q<-numeric_group_partable(reference)
   rows<-which(p$free>0); idx<-match(row_key(p[rows,]),row_key(q))
   if(anyNA(idx)) stop("reference parameter mapping failed")
   ans<-numeric(max(p$free));ans[p$free[rows]]<-q$est[idx];ans
