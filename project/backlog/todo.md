@@ -149,6 +149,13 @@ result under an unstated convention.
   rows and opt-in summary attachment/printing. Compatibility remains task-109;
   intervals await task-103.
 
+- [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML
+  casewise likelihood influence plus saturated-coordinate second-order variance,
+  with covariance-only nuisance means; RMSEA discrepancy/square-root variants
+  and incremental delta intervals. Translation/unit invariance repair is banked
+  separately. Component gates and bounded variance sanity evidence do not
+  establish coverage or adopt a default; TASK-103 remains the evaluation owner.
+
 - [x] **L — C++ policy fit-index point composer** (task-101): ML/FIML
   Takeuchi differences, ULS profile plus covariance moment bias, Exact
   ordinal/mixed DWLS corrections, corrected pooled residuals and lab adapter.

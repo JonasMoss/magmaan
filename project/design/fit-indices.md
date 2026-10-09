@@ -85,6 +85,25 @@ noncentral chi-square intervals ignore.
 
 ## What exists
 
+- **Continuous lab Wald candidate (TASK-142)**: complete-data ML and FIML,
+  including independent groups, expose `fit_index_intervals_misspec()` for
+  RMSEA, CFI and TLI. First-order variance uses joint casewise saturated/user/
+  independence likelihood contrasts. The second-order user variance is
+  $2\operatorname{tr}(M^2)/N^2$, with
+  $M=(J_s^{-1}-\Delta J_0^{-1}\Delta^\mathsf{T})K_s$ in saturated
+  covariance/mean coordinates; covariance-only ML includes profiled group means.
+  The point retains the Takeuchi difference, which need not equal
+  $\operatorname{tr}(M)$ under misspecification. `wald_f` and `wald_sqrt`
+  differ in RMSEA's finite mapped endpoints; incremental delta intervals
+  coincide. The square-root variant requires positive corrected user misfit.
+  CFI bounds are clipped to [0,1]; TLI Wald bounds remain unbounded.
+  Diagnostics expose discrepancy-scale V1/V2, both discrepancies and traces.
+  Ordinal, ML2S, clustered and penalized routes are typed unavailable.
+  This is a study comparator, with no adoption or coverage claim.
+  Continuous policy fit-measure scores now center covariance-only ML at its
+  profiled means, and saturated EM uses tighter post-fit precision for unit
+  invariance. Ordinary models always include means and avoided the centering bug.
+
 - **lavaan-style indices**: standard, scaled and robust RMSEA/CFI/TLI with
   intervals and close-fit p-values, SRMR, log-likelihood, AIC, BIC; gated
   against lavaan for ML, MLR, FIML (corrected robust family) and all-ordinal

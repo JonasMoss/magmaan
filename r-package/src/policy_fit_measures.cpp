@@ -1,5 +1,6 @@
 #include "glue_internal.h"
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/frontier/fit_index_intervals.hpp"
 #include "magmaan/api/conventions.hpp"
 // [[Rcpp::depends(RcppEigen)]]
 using namespace magmaanr;
@@ -118,5 +119,56 @@ Rcpp::DataFrame convention_fit_measures_impl(Rcpp::List fit, std::string convent
   auto result = Rcpp::DataFrame::create(Rcpp::_["index"] = index,
       Rcpp::_["estimate"] = estimate, Rcpp::_["reason"] = reason);
   result.attr("lavaan_compat") = out->convention;
+  return result;
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame fit_index_intervals_misspec_impl(Rcpp::List fit, double level,
+    Rcpp::LogicalVector state) {
+  using namespace magmaan::api;
+  using namespace magmaan::api::frontier;
+  PolicyFitState s;
+  s.converged = state.size() > 0 && state[0] == TRUE;
+  s.penalized = state.size() > 3 && state[3] == TRUE;
+  const std::string estimator = Rcpp::as<std::string>(fit["estimator"]);
+  const bool ordinal = fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]);
+  const bool mixed = fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]);
+  FitIndexIntervals out;
+  if (s.penalized || !s.converged)
+    out = fit_index_intervals_misspec_unavailable(s.penalized ? InferenceReason::Penalized : InferenceReason::NotConverged,
+        s.penalized ? std::string(penalized_detail) : "the fit did not pass its convergence verdict");
+  else if (ordinal || mixed || fit.containsElementNamed("association") || fit.containsElementNamed("nclusters") ||
+      (estimator != "ML" && estimator != "FIML") ||
+      !fit.containsElementNamed("raw_data") || Rf_isNull(fit["raw_data"]))
+    out = fit_index_intervals_misspec_unavailable(InferenceReason::UnsupportedModel,
+        "candidate intervals support only continuous ML/FIML with raw observations");
+  else {
+    auto ctx = ctx_from_fit(fit);
+    auto est = est_from_fit(fit);
+    auto raw = estimator == "FIML" ? fiml_raw_from_arg(ctx.rep,fit["raw_data"]) : complete_raw_from_arg(ctx.rep,fit["raw_data"]);
+    out = fit_index_intervals_misspec(ctx.pt,ctx.rep,raw,est,s,estimator == "FIML",level);
+  }
+  const auto n = out.indices.size();
+  Rcpp::CharacterVector index(n), variant(n), reason(n);
+  Rcpp::NumericVector estimate(n), lower(n), upper(n), v1(n), v2(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    const auto& row = out.indices[i];
+    index[i] = row.index; variant[i] = row.variant;
+    estimate[i] = std::isfinite(row.estimate) ? row.estimate : NA_REAL;
+    lower[i] = row.reason == InferenceReason::Available ? row.lower : NA_REAL;
+    upper[i] = row.reason == InferenceReason::Available ? row.upper : NA_REAL;
+    v1[i] = std::isfinite(row.v1) ? row.v1 : NA_REAL;
+    v2[i] = std::isfinite(row.v2) ? row.v2 : NA_REAL;
+    reason[i] = row.reason == InferenceReason::Available ? Rcpp::String(NA_STRING) :
+        Rcpp::String(std::string(reason_name(row.reason))+": "+row.detail);
+  }
+  auto result = Rcpp::DataFrame::create(Rcpp::_["index"]=index,Rcpp::_["variant"]=variant,
+      Rcpp::_["estimate"]=estimate,Rcpp::_["lower"]=lower,Rcpp::_["upper"]=upper,
+      Rcpp::_["V1"]=v1,Rcpp::_["V2"]=v2,Rcpp::_["reason"]=reason);
+  result.attr("details") = Rcpp::List::create(Rcpp::_["F_hat"]=out.casewise_discrepancy,
+      Rcpp::_["F_fit"]=out.points.user.discrepancy,Rcpp::_["F_tilde"]=out.points.user.corrected,
+      Rcpp::_["takeuchi_trace"]=out.points.user.trace,Rcpp::_["quadratic_trace"]=out.quadratic_trace,
+      Rcpp::_["quadratic_squared_trace"]=out.quadratic_squared_trace,
+      Rcpp::_["ntotal"]=static_cast<double>(out.points.ntotal),Rcpp::_["level"]=level);
   return result;
 }

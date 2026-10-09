@@ -1,10 +1,12 @@
 #include <doctest/doctest.h>
 #include "magmaan/api/sem.hpp"
 #include "magmaan/api/policy.hpp"
+#include "magmaan/api/frontier/fit_index_intervals.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include <Eigen/Cholesky>
 #include <cmath>
 #include <random>
+#include <iostream>
 
 namespace {
 using namespace magmaan;
@@ -182,16 +184,22 @@ TEST_CASE("policy fit measures: continuous affine invariance at transformed fitt
     auto f = fitted(raw, fiml, false, means);
     const auto& m = f.model();
     auto a = api::policy_fit_measures(m.structure(),m.matrix_rep(),raw,f.estimates(),{},fiml);
-    for (double scale : {1.0, 2.0}) {
+    for (const auto& scales : {Eigen::Vector4d::Ones().eval(),
+         Eigen::Vector4d::Constant(2.0).eval(), Eigen::Vector4d(0.5,2.0,3.0,1.5)}) {
       auto transformed = raw;
-      for (auto& x : transformed.X) x = (scale*x.array()+10.0).matrix();
+      for (auto& x : transformed.X) {
+        x *= scales.asDiagonal();
+        x.array() += 10.0;
+      }
       auto est = f.estimates();
       for (std::size_t r = 0; r < m.structure().free.size(); ++r) {
         if (m.structure().free[r] <= 0) continue;
         const auto& cell = m.matrix_rep().cell_for_row[r];
         auto& value = est.theta(m.structure().free[r]-1);
-        if (cell.mat == model::MatId::Theta || cell.mat == model::MatId::Psi) value *= scale*scale;
-        else if (cell.mat == model::MatId::Nu) value = scale*value+10.0;
+        if (cell.mat == model::MatId::Theta) value *= scales(cell.row)*scales(cell.col);
+        else if (cell.mat == model::MatId::Psi) value *= scales(0)*scales(0);
+        else if (cell.mat == model::MatId::Lambda) value *= scales(cell.row)/scales(0);
+        else if (cell.mat == model::MatId::Nu) value = scales(cell.row)*value+10.0;
       }
       auto b = api::policy_fit_measures(m.structure(),m.matrix_rep(),transformed,est,{},fiml);
       for (auto name : {"rmsea", "cfi", "tli"}) {
@@ -204,4 +212,70 @@ TEST_CASE("policy fit measures: continuous affine invariance at transformed fitt
       CHECK(a.baseline.corrected == doctest::Approx(b.baseline.corrected).epsilon(1e-8));
     }
   }
+}
+
+TEST_CASE("fit index Wald intervals: continuous likelihood and point gates") {
+  using namespace magmaan;
+  for (int groups : {1,2}) for (int route : {0,1,2}) {
+    auto raw = rows(500);
+    for (int r = 0; r < 500; ++r) {
+      const double residual = 1.5*std::sin(r*0.83);
+      raw.X[0](r,0) += residual; raw.X[0](r,1) += residual;
+    }
+    const bool fiml = route == 2, means = route != 0;
+    if (fiml) {
+      raw.mask.emplace_back(Eigen::Matrix<std::uint8_t,Eigen::Dynamic,Eigen::Dynamic>::Ones(500,4));
+      for (int r = 2; r < 500; r += 7) raw.mask[0](r,1) = 0;
+    }
+    if (groups == 2) {
+      raw.X.push_back(raw.X[0]);
+      if (fiml) raw.mask.push_back(raw.mask[0]);
+    }
+    auto f = fitted(raw,fiml,false,means);
+    auto out = api::frontier::fit_index_intervals_misspec(f.model().structure(),f.model().matrix_rep(),raw,f.estimates(),{},fiml);
+    REQUIRE(out.indices.size() == 6);
+    for (const auto& row : out.indices) {
+      REQUIRE_MESSAGE(row.reason == api::InferenceReason::Available,row.detail);
+      CHECK(row.lower <= row.estimate);
+      CHECK(row.upper >= row.estimate);
+      CHECK(row.v1 >= 0); CHECK(row.v2 >= 0);
+    }
+    auto point = api::policy_fit_measures(f.model().structure(),f.model().matrix_rep(),raw,f.estimates(),{},fiml);
+    CHECK(out.casewise_discrepancy == doctest::Approx(point.user.discrepancy).epsilon(1e-10));
+    CHECK(out.points.user.corrected == doctest::Approx(point.user.corrected).epsilon(1e-12));
+    CHECK(out.points.user.corrected == doctest::Approx(std::max(out.casewise_discrepancy-point.user.trace/(500*groups),0.0)).epsilon(1e-10));
+    const double width = 1.6448536269514722*std::sqrt(out.indices[0].v1+out.indices[0].v2);
+    CHECK(out.indices[0].lower == doctest::Approx(std::sqrt(groups*std::max(point.user.corrected-width,0.0)/point.user.df)).epsilon(1e-12));
+    CHECK(out.indices[0].upper == doctest::Approx(std::sqrt(groups*(point.user.corrected+width)/point.user.df)).epsilon(1e-12));
+    CHECK(out.indices[0].v2 == doctest::Approx(2*out.quadratic_squared_trace/std::pow(500.0*groups,2)).epsilon(1e-12));
+  }
+}
+
+TEST_CASE("fit index Wald intervals: exact covariance population and typed reasons") {
+  using namespace magmaan;
+  auto raw = rows(500);
+  auto stats = data::sample_stats_from_raw(raw); REQUIRE(stats);
+  Eigen::LLT<Eigen::MatrixXd> sample_llt(stats->S[0]);
+  Eigen::Matrix4d sigma = Eigen::Matrix4d::Constant(0.49);
+  sigma.diagonal().setConstant(1.0);
+  Eigen::LLT<Eigen::Matrix4d> target_llt(sigma);
+  raw.X[0].rowwise() -= stats->mean[0].transpose();
+  raw.X[0] = raw.X[0]*sample_llt.matrixU().solve(Eigen::Matrix4d::Identity())*target_llt.matrixU();
+  for (int route : {0,1,2}) {
+    auto f = fitted(raw,route==2,false,route!=0);
+    auto out = api::frontier::fit_index_intervals_misspec(f.model().structure(),f.model().matrix_rep(),raw,f.estimates(),{},route==2);
+    REQUIRE_MESSAGE(out.indices[0].reason == api::InferenceReason::Available,out.indices[0].detail);
+    CHECK(out.indices[0].v1 < 1e-15);
+    CHECK(out.indices[0].v2 > 0);
+    CHECK(out.indices[1].reason == api::InferenceReason::Inapplicable);
+    std::cout << "Wald exact population route " << route << ": tr(M)=" << out.quadratic_trace
+      << " Takeuchi=" << out.points.user.trace << " df=" << out.points.user.df << '\n';
+  }
+  auto uls_fit = fitted(raw,false,true);
+  auto unsupported = api::frontier::fit_index_intervals_misspec(uls_fit);
+  for (const auto& row : unsupported.indices) CHECK(row.reason == api::InferenceReason::UnsupportedModel);
+  auto f = fitted(raw);
+  api::PolicyFitState state; state.penalized = true;
+  auto penalized = api::frontier::fit_index_intervals_misspec(f.model().structure(),f.model().matrix_rep(),raw,f.estimates(),state);
+  for (const auto& row : penalized.indices) CHECK(row.reason == api::InferenceReason::Penalized);
 }

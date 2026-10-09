@@ -905,6 +905,10 @@ convention_fit_measures_impl <- function(fit, convention, state) {
     .Call(`_magmaanlab_convention_fit_measures_impl`, fit, convention, state)
 }
 
+fit_index_intervals_misspec_impl <- function(fit, level, state) {
+    .Call(`_magmaanlab_fit_index_intervals_misspec_impl`, fit, level, state)
+}
+
 infer_build_u_factor <- function(fit, bread, moments = "structured") {
     .Call(`_magmaanlab_infer_build_u_factor`, fit, bread, moments)
 }

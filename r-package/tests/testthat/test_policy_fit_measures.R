@@ -43,6 +43,10 @@ test_that('policy fit measures reduce to robust MLM at exact fit', {
   profile <- weight-weight%*%tangent%*%solve(t(tangent)%*%weight%*%tangent)%*%t(tangent)%*%weight
   plain_trace <- sum(diag(profile%*%(crossprod(moment_rows)/n)))
   expect_equal(details$user$trace,plain_trace,tolerance=1e-6)
+  intervals <- fit_index_intervals_misspec(fit)
+  gamma <- crossprod(moment_rows)/n
+  expected_v2 <- 2*sum(diag((profile%*%gamma)%*%(profile%*%gamma)))/n^2
+  expect_equal(intervals$V2[1],expected_v2,tolerance=1e-6)
 
   for (name in c('rmsea','cfi')) expect_equal(policy_value(got,name),unname(fm[paste0(name,'.robust')]),tolerance=1e-10)
   expect_equal(policy_value(got,'tli'),min(unname(fm['tli.robust']),1),tolerance=1e-10)
@@ -176,9 +180,9 @@ test_that('continuous policy corrections are invariant to location and units', {
       group_labels=if(groups==2) c('A','B') else NULL)
     fit <- fit_model(spec,d,estimator=if(route=='fiml') 'FIML' else 'ML')
     original <- policy_fit_measures(fit)
-    for (scale in c(1,2)) {
+    for (scales in list(rep(1,4),rep(2,4),c(.5,2,3,1.5))) {
       transformed <- d
-      transformed[1:4] <- lapply(d[1:4],function(x) scale*x+10)
+      transformed[1:4] <- Map(function(x,scale) scale*x+10,d[1:4],scales)
       # Evaluate the exactly transformed fitted point: a refit also tests the
       # optimizer's separate finite-accuracy stopping behavior.
       mapped <- fit_model(spec,transformed,estimator=if(route=='fiml') 'FIML' else 'ML')
@@ -186,9 +190,12 @@ test_that('continuous policy corrections are invariant to location and units', {
       pt <- fit$partable
       for (r in which(pt$free > 0)) {
         j <- pt$free[r]
-        if (pt$op[r] == '~~') mapped$theta[j] <- scale^2*fit$theta[j]
+        lhs_scale <- if(pt$lhs[r]=='f') scales[1] else scales[match(pt$lhs[r],names(d)[1:4])]
+        if (pt$op[r] == '~~') mapped$theta[j] <- lhs_scale^2*fit$theta[j]
+        if (pt$op[r] == '=~') mapped$theta[j] <-
+          scales[match(pt$rhs[r],names(d)[1:4])]/scales[1]*fit$theta[j]
         if (pt$op[r] == '~1' && pt$lhs[r] %in% names(d)[1:4])
-          mapped$theta[j] <- scale*fit$theta[j]+10
+          mapped$theta[j] <- lhs_scale*fit$theta[j]+10
       }
       got <- policy_fit_measures(mapped)
       expect_true(all(is.na(got$reason)))

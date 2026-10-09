@@ -171,3 +171,5 @@ export(policy_mi_refit)
 export(standardized_rows)
 export(structural_identification)
 export(augment_model_spec)
+
+export(fit_index_intervals_misspec)

@@ -627,6 +627,23 @@ ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
 Compatibility requests use the separate TASK-109 composer; policy intervals await TASK-103.
 
 
+## Continuous lab fit-index Wald candidate (TASK-142)
+
+`api::frontier::fit_index_intervals_misspec()` and the thin lab wrapper support
+continuous ML/FIML with raw rows, one or more independent groups, random x and
+affine equalities. They gate casewise likelihood discrepancy and the unchanged
+Takeuchi point correction. Variance combines sample casewise contrast variance
+and the saturated-coordinate observed-information quadratic contrast, including
+profiled nuisance means for covariance-only ML. RMSEA supports discrepancy and
+square-root coordinates; CFI/TLI use joint user/baseline delta inference.
+Square-root intervals at zero corrected misfit and unsupported routes return
+typed reasons. V1/V2 remain discrepancy-scale diagnostics. This candidate awaits
+TASK-103 coverage evaluation and does not change ordinary inference defaults.
+The prerequisite score-centering repair is gated for affine invariance in
+complete ML (with/without means) and FIML, with one/two groups; post-fit saturated
+EM precision is tightened to preserve that contract. Ordinary fits always
+include means and avoided the covariance-only centering defect.
+
 ## Compatibility fit-measures composer (TASK-109)
 
 `api::convention_fit_measures()`, the thin lab adapter and ordinary

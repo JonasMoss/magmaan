@@ -1,5 +1,10 @@
 # magmaanlab (development)
 
+- Added lab-only `fit_index_intervals_misspec()` for continuous ML/FIML RMSEA,
+  CFI and TLI: discrepancy and square-root Wald variants, joint baseline
+  influence, observed-coordinate second-order variance and typed refusals.
+  This is an uncalibrated study candidate; ordinary defaults are unchanged.
+
 - Fixed covariance-only complete-data ML policy fit measures in the lab: score
   rows now use profiled group means, so shifting observations does not change
   the Takeuchi correction. Ordinary magmaan fits always include mean structure
