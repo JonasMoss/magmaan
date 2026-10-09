@@ -1,0 +1,4 @@
+"candidate","eligible","failed_rules","success","best","choice","default_success","default_best"
+"layered_port",FALSE,22,86840,86583,"none (author decides)",88049,87773
+"default_lbfgs",FALSE,19,87808,87544,"none (author decides)",88049,87773
+"layered_lbfgs",FALSE,22,86419,86178,"none (author decides)",88049,87773
