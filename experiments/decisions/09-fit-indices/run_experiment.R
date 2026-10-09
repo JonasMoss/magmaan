@@ -42,7 +42,7 @@ if (is.null(run_id) || !grepl("^[A-Za-z0-9_-]+$", run_id) || !grepl("^[A-Za-z0-9
     !is.finite(reps) || reps < 1 || !workers %in% 1:2 || !is.finite(seed_base) || seed_base < 1)
   stop("Invalid run arguments")
 config <- option("config")
-cells <- validate_config(if (is.null(config)) study_config(mode) else read.csv(config, keep.default.na = FALSE, na.strings = "NA"))
+cells <- validate_config(if (is.null(config)) study_config(mode) else read.csv(config, na.strings = "NA", stringsAsFactors = FALSE, colClasses = c(cause = "character", missing_targets = "character")))
 all_cells <- cells
 filter <- option("cells")
 if (!is.null(filter)) {
