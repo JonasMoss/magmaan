@@ -1,8 +1,10 @@
 # Criteria: ordinary fit indices (lane fit_indices)
 
-**Status: proposed 2026-10-09 by the planner for the user's review. It becomes
-binding when the user approves it, before the production run; any later change
-is dated and marked as written before or after seeing results.**
+Status: approved
+
+Approved by the user on 2026-10-09, before any production run (proposed the
+same day by the planner). Any later change is dated and marked as written
+before or after seeing results.
 
 Design: [fit-index study](../../../../project/design/fit-index-evaluation-study.md)
 under the [simulation study principles](../../../../project/design/simulation-study-principles.md).
