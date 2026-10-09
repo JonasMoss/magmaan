@@ -1,3 +1,9 @@
+# magmaan (development)
+
+- Complete-data ML and GLS fits with standardized extent above 10 are no longer
+  reported converged when their supported std.lv endpoint Newton audit fails.
+  Diagnostics record the trigger and unsupported transports; estimates are unchanged.
+
 # magmaan 0.2.1
 
 - Supplied start tables and previous fits now appear as `requested$starts =

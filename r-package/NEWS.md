@@ -1,5 +1,9 @@
 # magmaanlab (development)
 
+- Complete-data ML and GLS fits with standardized extent above 10 are no longer
+  reported converged when their supported std.lv endpoint Newton audit fails.
+  Diagnostics record the trigger and unsupported transports; estimates are unchanged.
+
 - Added lab-only `fit_index_intervals_misspec()` for continuous ML/FIML RMSEA,
   CFI and TLI: discrepancy and square-root Wald variants, joint baseline
   influence, observed-coordinate second-order variance and typed refusals.

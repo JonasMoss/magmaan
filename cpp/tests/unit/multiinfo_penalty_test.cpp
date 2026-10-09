@@ -1185,3 +1185,64 @@ TEST_CASE("penalized ML: near-pole marker endpoint needs std.lv accuracy") {
   CHECK(d.std_lv_accuracy.reason.find("chart proximity") != std::string::npos);
   CHECK(magmaan::estimate::fit_verdict(fit->estimates).status != magmaan::estimate::FitCheck::Passed);
 }
+
+TEST_CASE("ordinary ML and GLS: runaway endpoint needs std.lv accuracy") {
+  // Retained decisions/01 r47_f1_p3_face GLS endpoint (N=25), displaced
+  // in a loading so this finite-chart point is deliberately nonstationary.
+  const auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  Eigen::MatrixXd S(3, 3);
+  S << .68812105753895481, -.13124628540541083, .6282340811832996,
+       -.13124628540541083, .75065673351837303, -.00087400681388781671,
+       .6282340811832996, -.00087400681388781671, .83611624804500595;
+  Eigen::VectorXd endpoint(6);
+  endpoint << -.0025031036277724718, .0071921299370407603,
+      -86.663764382765137, .75045955572118439, .83159790186059657, 87.351903812277314;
+  magmaan::estimate::OptimOptions opts;
+  opts.normalize_sample = false;
+  opts.nlopt.max_eval = 1;
+  for (bool gls : {false, true}) {
+    INFO("GLS " << gls);
+    auto fit = gls ? magmaan::estimate::fit_gls(pt, *rep, stats_from(S, 25), endpoint,
+        {}, magmaan::estimate::Backend::NloptLbfgs, opts)
+        : magmaan::estimate::fit_ml(pt, *rep, stats_from(S, 25), endpoint,
+        {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_OK(fit);
+    const auto& d = fit->diagnostics;
+    CHECK((fit->theta - endpoint).norm() == doctest::Approx(0));
+    CHECK(d.std_lv_accuracy.standardized_extent > 10);
+    CHECK(d.std_lv_accuracy.extent_trigger == 10);
+    CHECK(d.std_lv_accuracy.required);
+    CHECK(d.std_lv_accuracy.newton.checked);
+    CHECK_FALSE(d.std_lv_accuracy.newton.passed);
+    CHECK(std::abs(d.std_lv_accuracy.objective_difference) < 1e-10);
+    CHECK(d.std_lv_accuracy.reason.find("chart proximity") != std::string::npos);
+    CHECK(magmaan::estimate::fit_verdict(*fit).status != magmaan::estimate::FitCheck::Passed);
+  }
+}
+
+TEST_CASE("ordinary ML and GLS: interior endpoint remains certified") {
+  const auto pt = lavaanify(kTwoFactorCorr);
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  auto sample = stats_from(population_sigma(pt, *rep), 500);
+  auto start = magmaan::estimate::simple_start_values(pt, *rep, sample); REQUIRE_OK(start);
+  for (bool gls : {false, true}) {
+    auto fit = gls ? magmaan::estimate::fit_gls(pt, *rep, sample, *start)
+                   : magmaan::estimate::fit_ml(pt, *rep, sample, *start);
+    REQUIRE_OK(fit);
+    CHECK(magmaan::estimate::fit_verdict(*fit).status == magmaan::estimate::FitCheck::Passed);
+    CHECK_FALSE(fit->diagnostics.std_lv_accuracy.required);
+    CHECK(fit->diagnostics.std_lv_accuracy.standardized_extent <= 10);
+    CHECK(fit->diagnostics.std_lv_accuracy.extent_trigger == 10);
+    magmaan::estimate::OptimOptions opts;
+    opts.normalize_sample = false;
+    opts.nlopt.max_eval = 1;
+    auto replay = gls ? magmaan::estimate::fit_gls(pt, *rep, sample, fit->theta,
+        {}, magmaan::estimate::Backend::NloptLbfgs, opts)
+        : magmaan::estimate::fit_ml(pt, *rep, sample, fit->theta,
+        {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+    REQUIRE_OK(replay);
+    CHECK((replay->theta - fit->theta).norm() == doctest::Approx(0));
+    CHECK(magmaan::estimate::fit_verdict(*replay).status == magmaan::estimate::FitCheck::Passed);
+  }
+}

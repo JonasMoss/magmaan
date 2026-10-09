@@ -29,6 +29,20 @@ one. R fit lists expose these as `optimizer_status` and `grad_norm`; the
 of the optimizer stop. A returned estimate need not pass that verdict.
 
 
+Complete-data ordinary ML and GLS also audit supported marker endpoints in
+disturbance-unit std.lv coordinates when standardized extent exceeds 10 (the
+decisions/01 runaway threshold). Both charts must pass Newton accuracy for
+certification; a failed std.lv check reports accuracy unresolved with a
+chart-proximity reason. `std_lv_accuracy` records the extent, trigger, audit
+and objective preservation. Equalities, unsupported fixed cells and nonpositive
+disturbance scales retain the prior verdict with an explicit transport reason.
+The extra audit does not refit or change estimates. The conditional trigger
+follows a 50-fit interior timing check: unconditional auditing raised median
+total ML fit time from 0.593 ms to 0.668 ms (12.7%). Standardized extent is a
+screening rule, not a proof of nonstationarity; stationary high-extent fits can
+still pass, and low-extent chart poles are outside this supplementary check.
+
+
 - `Backend::NloptLbfgs` is the complete-data scalar default. FIML defaults to
   `Backend::NloptLbfgsSlsqpFallback`, which retries NLopt SLSQP from the same
   start if L-BFGS fails or returns a non-clean optimizer status. NLopt is a

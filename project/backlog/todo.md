@@ -1348,6 +1348,15 @@ ordinary-user default.
 
 ## 0.3.0: magmaan's own fitting, mixed data and barriers
 
+- [x] **TASK-143 — ordinary complete-data ML/GLS runaway verdict.** Supported
+  marker endpoints with standardized extent > 10 receive the same-objective
+  std.lv Newton audit; certification requires both charts. Diagnostics record
+  the trigger and unsupported transport reason. The conditional rule follows
+  the measured 12.7% unconditional interior timing cost; estimates and optimizer
+  defaults remain unchanged. Equalities and nonpositive disturbance scales
+  remain unsupported.
+
+
 - [x] Ordinary standardized estimates and R-squared (task-98): opt-in summary
   columns and endogenous-variable table, C++ row-level map and delta SEs with
   the selected covariance; fixed markers, groups, equality constraints and

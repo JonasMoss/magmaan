@@ -238,6 +238,10 @@ struct NewtonAccuracyDiagnostics {
 // Supplementary endpoint audit in a finite latent-scale chart.
 struct ChartAccuracyDiagnostics {
   bool required = false;
+  // Ordinary ML/GLS use the decisions/01 runaway trigger; barrier audits
+  // remain unconditional. NaN means the extent trigger does not apply.
+  double standardized_extent = std::numeric_limits<double>::quiet_NaN();
+  double extent_trigger = std::numeric_limits<double>::quiet_NaN();
   NewtonAccuracyDiagnostics newton;
   double gradient_max = std::numeric_limits<double>::quiet_NaN();
   double objective_difference = std::numeric_limits<double>::quiet_NaN();

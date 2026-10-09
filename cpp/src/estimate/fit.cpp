@@ -2499,6 +2499,12 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
   return est;
 }
 
+namespace {
+void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const SampleStats& sample,
+    frontier::MultiInfoPenaltyOptions options, bool ordinary = false, bool gls = false);
+}  // namespace
+
 fit_expected<Estimates>
 fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -2541,6 +2547,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
     if (auto W = gmm::normal_theory_weight(pre->ev, samp, x0); W.has_value()) {
       attach_newton_accuracy_ls(*est, pt, rep, *pre, samp, *W);
     }
+    attach_std_lv_accuracy(*est, pt, rep, samp, {}, true, true);
     return est;
   }
 
@@ -2553,6 +2560,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_gmm_geometric_stationarity(
       *est, pt, rep, *pre, samp, x0, *W, bounds);
+  attach_std_lv_accuracy(*est, pt, rep, samp, {}, true, true);
   return est;
 }
 
@@ -2646,6 +2654,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   attach_diagnostics(*est, pt, *pre, bounds);
   attach_geometric_stationarity(*est, pt, *pre, bounds, prob);
   attach_newton_accuracy(*est, pt, rep, samp);
+  attach_std_lv_accuracy(*est, pt, rep, samp, {}, true);
   return est;
 }
 
@@ -2740,7 +2749,7 @@ void attach_newton_accuracy_penalized(
 // in a finite chart. This transformation changes no fitted moments or objective.
 void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
     const model::MatrixRep& rep, const SampleStats& sample,
-    frontier::MultiInfoPenaltyOptions options) {
+    frontier::MultiInfoPenaltyOptions options, bool ordinary, bool gls) {
   auto& diagnostics = est.diagnostics;
   auto plan = prepare_std_lv_transport(pt, rep);
   if (!plan) {
@@ -2759,10 +2768,60 @@ void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
     diagnostics.std_lv_accuracy.reason = "chart proximity: endpoint assembly unavailable";
     return;
   }
+  if (ordinary) {
+    // Match decisions/01's unit-free extent: implied latent correlations,
+    // standardized loadings/paths and residual/disturbance variance ratios.
+    // Absolute variances also define it at improper endpoints.
+    auto sigma = ev->sigma(est.theta);
+    if (!sigma) {
+      diagnostics.std_lv_accuracy.reason = "chart proximity: endpoint covariance unavailable";
+      return;
+    }
+    double extent = 0.0;
+    auto include = [&](double value) {
+      extent = std::max(extent, std::isfinite(value)
+          ? std::abs(value) : std::numeric_limits<double>::infinity());
+    };
+    for (std::size_t b = 0; b < assembled->blocks.size(); ++b) {
+      const auto& m = assembled->blocks[b];
+      const auto& phi = m.Mid;
+      const Eigen::VectorXd v = phi.diagonal().cwiseAbs();
+      const Eigen::VectorXd s = sigma->sigma[b].diagonal().cwiseAbs();
+      for (Eigen::Index j = 0; j < v.size(); ++j) {
+        include(m.Psi(j, j) / v(j));
+        for (Eigen::Index i = 0; i < v.size(); ++i) {
+          if (i != j) include(phi(i, j) / std::sqrt(v(i) * v(j)));
+          if (m.Beta(i, j) != 0) include(m.Beta(i, j) * std::sqrt(v(j) / v(i)));
+        }
+        for (Eigen::Index i = 0; i < s.size(); ++i)
+          if (m.Lambda(i, j) != 0) include(m.Lambda(i, j) * std::sqrt(v(j) / s(i)));
+      }
+      for (Eigen::Index j = 0; j < s.size(); ++j)
+        for (Eigen::Index i = 0; i < s.size(); ++i)
+          include(m.Theta(i, j) / std::sqrt(s(i) * s(j)));
+    }
+    diagnostics.std_lv_accuracy.standardized_extent = extent;
+    diagnostics.std_lv_accuracy.extent_trigger = 10.0;
+    for (const auto& m : assembled->blocks) {
+      if (!m.Psi.diagonal().allFinite() || (m.Psi.diagonal().array() <= 0).any()) {
+        diagnostics.std_lv_accuracy.required = false;
+        diagnostics.std_lv_accuracy.reason = "std.lv transport unavailable: nonpositive disturbance scale";
+        return;
+      }
+    }
+    if (extent <= 10.0) {
+      diagnostics.std_lv_accuracy.required = false;
+      diagnostics.std_lv_accuracy.reason = "std.lv audit not triggered: standardized extent <= 10";
+      return;
+    }
+  }
   for (auto& m : assembled->blocks) {
     Eigen::VectorXd scale = m.Psi.diagonal().array().sqrt();
     if (!scale.allFinite() || (scale.array() <= 0).any()) {
-      diagnostics.std_lv_accuracy.reason = "chart proximity: nonpositive disturbance scale";
+      diagnostics.std_lv_accuracy.required = !ordinary;
+      diagnostics.std_lv_accuracy.reason = ordinary
+          ? "std.lv transport unavailable: nonpositive disturbance scale"
+          : "chart proximity: nonpositive disturbance scale";
       return;
     }
     m.Lambda = (m.Lambda * scale.asDiagonal()).eval();
@@ -2787,8 +2846,15 @@ void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
     }
     theta(plan->source.free[i] - 1) = value;
   }
-  auto audit = frontier::audit_newton_penalized_ml(
-      plan->source, plan->source_rep, sample, theta, options);
+  fit_expected<frontier::NewtonAudit> audit;
+  if (ordinary && gls) {
+    audit = frontier::audit_newton_gls(plan->source, plan->source_rep, sample, theta);
+  } else if (ordinary) {
+    audit = frontier::audit_newton_ml(plan->source, plan->source_rep, sample, theta);
+  } else {
+    audit = frontier::audit_newton_penalized_ml(
+        plan->source, plan->source_rep, sample, theta, options);
+  }
   if (!audit) {
     diagnostics.std_lv_accuracy.reason = "chart proximity: std.lv audit unavailable: " + audit.error().detail;
     return;
@@ -2800,7 +2866,7 @@ void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
   diagnostics.std_lv_accuracy.objective_difference = audit->derivatives.objective - marker_objective;
   if (!std::isfinite(diagnostics.std_lv_accuracy.objective_difference) ||
       std::abs(diagnostics.std_lv_accuracy.objective_difference) > 1e-8 * (1 + std::abs(marker_objective))) {
-    diagnostics.std_lv_accuracy.reason = "chart proximity: transported penalized objective mismatch";
+    diagnostics.std_lv_accuracy.reason = "chart proximity: transported objective mismatch";
     return;
   }
   diagnostics.std_lv_accuracy.newton = audit->diagnostics;

@@ -743,6 +743,8 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d,
       Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.newton_accuracy),
       Rcpp::_["std_lv_accuracy"] = Rcpp::List::create(
           Rcpp::_["required"] = d.std_lv_accuracy.required,
+          Rcpp::_["standardized_extent"] = std::isfinite(d.std_lv_accuracy.standardized_extent) ? d.std_lv_accuracy.standardized_extent : NA_REAL,
+          Rcpp::_["extent_trigger"] = std::isfinite(d.std_lv_accuracy.extent_trigger) ? d.std_lv_accuracy.extent_trigger : NA_REAL,
           Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.std_lv_accuracy.newton),
           Rcpp::_["gradient_max"] = std::isfinite(d.std_lv_accuracy.gradient_max) ? d.std_lv_accuracy.gradient_max : NA_REAL,
           Rcpp::_["objective_difference"] = std::isfinite(d.std_lv_accuracy.objective_difference) ? d.std_lv_accuracy.objective_difference : NA_REAL,
