@@ -1,0 +1,6 @@
+"model","delta","generator","N","estimator","target_rmsea","missing_rate","skewness","kurtosis","categories","cause","missing_targets","id"
+"cfa_ptsd8",0,"normal",200,"ML",,0,1,2,5,"","","cell_001"
+"growth6",0.1,"vm",200,"ML",,0,1,2,5,"","","cell_002"
+"cfa_ptsd8",-0.1,"normal",200,"FIML",,0.15,1,2,5,"","","cell_003"
+"cfa_mtmm9",-0.1,"independent",200,"ML",,0,1,2,5,"","","cell_004"
+"cfa_ptsd8",-0.1,"discretized",200,"ML",,0,1,2,5,"","","cell_005"

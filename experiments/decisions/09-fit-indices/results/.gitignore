@@ -5,5 +5,7 @@
 pricing/*
 !pricing/smoke-task145-final/
 !pricing/pilot-task145/
+!pricing/pilot-task145-refined/
+!pricing/smoke-task145-refined/
 pricing/*/*
 !pricing/*/*.csv

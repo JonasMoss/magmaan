@@ -10,18 +10,38 @@ index_targets <- function(f0, f0_b, df, df_b, groups, srmr) {
     tli = if (f0_b > 0) 1-(max(f0,0)/df)/(f0_b/df_b) else NA_real_, srmr = srmr)
 }
 
+target_control <- function() list(nlopt = list(ftol_rel = 1e-14, xtol_rel = 1e-12, max_eval = 10000L))
+
+fit_target <- function(model, data, estimator = "ML", kind) {
+  initial <- magmaanlab::fit_model(model, data, estimator = estimator)
+  control <- target_control()
+  control$start <- initial$partable
+  fit <- magmaanlab::fit_model(model, data, estimator = estimator, control = control)
+  diagnostic <- function(x, stage) data.frame(kind = kind, stage = stage,
+    converged = isTRUE(x$converged), optimizer_status = x$optimizer_status,
+    stationarity = x$diagnostics$verdict$stationarity,
+    newton_distance = x$diagnostics$newton_accuracy$distance,
+    budget = x$diagnostics$newton_accuracy$budget, iterations = x$iterations)
+  list(fit = fit, diagnostics = rbind(diagnostic(initial, "default"), diagnostic(fit, "refined")))
+}
+
 compute_targets <- function(population, calibration, cell, seed, target_n = 200000L) {
   ss <- population$stats
   ss$S <- lapply(calibration$groups, `[[`, "sigma")
   ss$mean <- lapply(calibration$groups, `[[`, "mu")
-  fit <- magmaanlab::fit_model(population$model, ss)
+  started <- proc.time()[[3]]
+  h1 <- fit_target(population$model, ss, kind = "complete_h1")
+  fit <- h1$fit
   baseline_model <- independence_spec(population)
-  baseline <- magmaanlab::fit_model(baseline_model, ss)
-  if (!isTRUE(fit$converged) || !isTRUE(baseline$converged)) stop("Complete population target fit failed")
+  b <- fit_target(baseline_model, ss, kind = "complete_baseline")
+  baseline <- b$fit
+  diagnostics <- rbind(h1$diagnostics, b$diagnostics)
+  complete_ok <- isTRUE(fit$converged) && isTRUE(baseline$converged)
   df <- with(magmaanlab::structural_identification(population$model), n_moments-n_parameters)
   df_b <- with(magmaanlab::structural_identification(baseline_model), n_moments-n_parameters)
   fm <- magmaanlab::fit_measures(fit)
   complete <- index_targets(fit$fmin, baseline$fmin, df, df_b, length(ss$S), fm$srmr)
+  if (!complete_ok) complete[] <- NA_real_
   own <- complete; method <- "exact_population_moments"; n <- 0L
   if (cell$estimator == "FIML" && cell$missing_rate > 0) {
     data <- apply_mar(draw_generator(calibration, target_n, seed), cell, seed+1000L)
@@ -29,9 +49,10 @@ compute_targets <- function(population, calibration, cell, seed, target_n = 2000
     # means for covariance-only basis models; structured means remain in h1 syntax.
     model <- population_spec(population$record, means = TRUE)
     baseline_model <- independence_spec(population, TRUE)
-    fit <- magmaanlab::fit_model(model, data, estimator = "FIML")
-    baseline <- magmaanlab::fit_model(baseline_model, data, estimator = "FIML")
-    if (!isTRUE(fit$converged) || !isTRUE(baseline$converged)) stop("MAR population target fit failed")
+    h1 <- fit_target(model, data, "FIML", "mar_h1")
+    b <- fit_target(baseline_model, data, "FIML", "mar_baseline")
+    fit <- h1$fit; baseline <- b$fit
+    diagnostics <- rbind(diagnostics, h1$diagnostics, b$diagnostics)
     fm <- magmaanlab::fit_measures(fit, robust = FALSE)
     df <- fm$df; df_b <- fm$baseline.df
     # FIML fmin is an objective, not the saturated LR discrepancy. Use the
@@ -41,7 +62,12 @@ compute_targets <- function(population, calibration, cell, seed, target_n = 2000
                          df, df_b, length(ss$S), fm$srmr)
     method <- "fixed_large_draw_FIML_LR_against_saturated_H1"; n <- target_n
   }
-  list(own = own, complete = complete, method = method, n = n, seed = seed,
+  ok <- all(diagnostics$converged[diagnostics$stage == "refined"])
+  if (!ok) own[] <- NA_real_
+  list(status = if (ok) "available" else "failed",
+       reason = if (ok) NA_character_ else "Refined target failed library convergence verdict",
+       diagnostics = diagnostics, controls = target_control(),
+       target_seconds = proc.time()[[3]]-started, own = own, complete = complete, method = method, n = n, seed = seed,
        mar = "logistic; standardized cause; slope=1; draw-calibrated intercept",
        cause = if (nzchar(cell$cause)) cell$cause else colnames(ss$S[[1]])[1],
        missing_targets = if (nzchar(cell$missing_targets)) cell$missing_targets else

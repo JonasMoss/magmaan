@@ -149,11 +149,12 @@ result under an unstated convention.
   rows and opt-in summary attachment/printing. Compatibility remains task-109;
   intervals await task-103.
 
-- [ ] **L — fit-index evaluation harness** (TASK-145): decisions/09 adds
+- [x] **L — fit-index evaluation harness** (TASK-145): decisions/09 adds
   configurable tier-1 population sizing, generator covariance checks, simple MAR,
   complete/MAR-FIML targets, point and lab interval arms, strict resumable outputs
-  and bounded pricing controls. Smoke passes; the full pricing pilot is blocked
-  by the mtmm9 MAR population target failing the default stationarity verdict.
+  and bounded pricing controls. Smoke and 48-cell/240-draw pricing pass; lab
+  population targets use tighter stopping controls from default estimates, with
+  the unchanged library verdict and retained diagnostics. Judged arms keep defaults.
   Criteria and production remain with TASK-103.
 
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML

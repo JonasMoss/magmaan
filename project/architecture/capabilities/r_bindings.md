@@ -634,8 +634,11 @@ lab compatibility/Wald composers for ML and MAR-FIML. Configurable populations,
 integer-score and continuous generators, estimator-specific cached targets and
 per-draw checkpoints support pricing and smoke work. Unavailable arms retain
 reasons and attempted denominators. This is a harness with criteria pending;
-its smoke establishes end-to-end plumbing only. The pricing pilot stops at the
-mtmm9 MAR target stationarity failure; no default changes or coverage claim.
+its smoke establishes end-to-end plumbing only. The 48-cell/240-draw pricing
+pilot passes after refining population targets from default estimates with
+tighter lab stopping controls and the unchanged library convergence verdict.
+Target diagnostics and separate preparation costs are retained; failed targets
+remain explicit. Judged arms keep defaults; no default changes or coverage claim.
 
 ## Continuous lab fit-index Wald candidate (TASK-142)
 

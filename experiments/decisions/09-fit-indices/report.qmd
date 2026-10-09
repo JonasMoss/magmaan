@@ -10,7 +10,7 @@ execute:
   message: false
 params:
   lane: pricing
-  run_id: smoke-task145-final
+  run_id: pilot-task145-refined
 ---
 
 ## Default register
@@ -22,12 +22,17 @@ params:
 | Evaluation design | Tier-1 basis, ML and MAR-FIML | Harness; criteria pending | Smoke and bounded pricing controls |
 
 Which fit-index corrections and intervals should ordinary users receive? This
-harness prepares the comparison. The full pricing pilot stopped before sampling because the mtmm9 MAR target failed
-the library stationarity verdict (Newton distance .01219143, budget .01). The
-five-cell smoke passes; its one-draw timings cannot establish bias, coverage
-or a preferred interval. Criteria and production authorization remain pending.
+harness prepares the comparison. The bounded pricing pilot uses five draws per
+cell and records target preparation separately from sampling. All 48 targets
+and all 240 draws passed the library convergence verdict. Mean sampling costs
+by generator, estimator and sample size were 0.060–0.172 seconds per draw.
+The retained mtmm9 MAR target passed after refinement (Newton distance
+0.000166, unchanged budget 0.01). Tighter numerical
+controls are used only for population inputs; judged arms use library defaults.
+Criteria and production authorization remain pending. This run cannot establish
+bias, coverage or a preferred interval.
 
-## Smoke timings
+## Pricing timings
 
 ```{r}
 path <- file.path("results", params$lane, params$run_id)
@@ -43,14 +48,35 @@ priced[[4]] <- round(priced[[4]], 3)
 knitr::kable(priced)
 ```
 
-These are smoke timings, with one draw per cell, rather than a completed pricing
-pilot. The intended pilot is blocked during population preparation. These costs
-average only timing over the smoke models and misfit controls. The
+These costs average timing over the three pilot models and two misfit controls.
+They price computation only; five replications do not estimate coverage reliably. The
 full per-cell costs, setup timings, attempted denominators, availability and
 failures are in this run's CSV files. Sampling costs include ordinary default
 fitting, all point arms and all lab interval arms. Target calibration is a
 separate one-time cost. Cached target timings repeat in cells sharing a target
 and must not be summed as if they were independent work.
+
+## Target preparation
+
+```{r}
+targets <- read.csv(file.path(path, "targets.csv"))
+prep <- merge(cost[,c("id","model","generator","estimator","N")], setup,
+              by.x="id",by.y="cell")
+prep <- prep[prep$N == 200, ]
+priced_prep <- aggregate(cbind(target_seconds, setup_seconds) ~ model + generator + estimator,
+                         prep, mean)
+priced_prep[,4:5] <- round(priced_prep[,4:5], 3)
+names(priced_prep) <- c("Model", "Generator", "Estimator", "Target seconds", "Total setup seconds")
+knitr::kable(priced_prep)
+knitr::kable(as.data.frame(table(targets$status)), col.names=c("Target status", "Cells"))
+```
+
+Setup includes population sizing and the million-row covariance check. Targets
+are reused across sample sizes, so this table selects one sample size to avoid
+counting cache reuse twice. `setup_timing.csv` retains each cell's target and total
+preparation time; `target_diagnostics.csv` retains both fitting stages. The prior
+blocked attempt remains frozen under `pilot-task145`, with its reproducer in
+`scripts/diagnose_target.R`.
 
 ## Targets and conventions
 
@@ -63,7 +89,13 @@ specify the signed size directly or root-find the continuous population RMSEA
 within absolute standardized size .4.
 
 The RMSEA target is $\sqrt{G F_0/\mathrm{df}}$. Complete-data targets fit h1 and the independence baseline to population moments
-with the library default fitter. RMSEA uses the number of groups; TLI uses nominal
+with the lab fitter, starting from the default fit's estimates and refining with
+`control = list(nlopt = list(ftol_rel = 1e-14, xtol_rel = 1e-12,
+max_eval = 10000))`. The library convergence verdict remains required. Default
+and refined diagnostics (Newton distance, budget, iterations and verdict) are
+retained. The installed library reports zero iterations for these fits; the
+record preserves that field rather than inferring evaluation counts. Failed targets remain listed with unavailable target-based summaries;
+sampling costs and arm availability remain measurable. RMSEA uses the number of groups; TLI uses nominal
 degrees of freedom. Each MAR-FIML target uses one fixed 200,000-row draw with the
 same generator and masking law as its cell. The saturated/user/baseline likelihood
 contrasts are library components. This finite integration approximation has Monte
@@ -99,7 +131,7 @@ availability and convergence are all retained per cell; no fit is discarded.
 
 ## Caveats
 
-The planned pilot uses three models, two misfit controls, two sample sizes and normal/VM
+The pilot uses three models, two misfit controls, two sample sizes and normal/VM
 data for ML and 15% MAR-FIML. Five draws per cell price the computation; they do
 not estimate performance reliably. Smoke additionally exercises independent and
 integer discretized generators. All tier-1 models are configurable. DWLS, richer
@@ -113,7 +145,7 @@ From the repository root, using the read-only lane library:
 R_LIBS=~/.cache/magmaan-rlib/lane-c Rscript experiments/decisions/09-fit-indices/run_experiment.R --help
 R_LIBS=~/.cache/magmaan-rlib/lane-c nice -n 10 Rscript experiments/decisions/09-fit-indices/run_experiment.R --smoke --workers 2 --run-id fresh-smoke
 experiments/decisions/09-fit-indices/scripts/run_pilot.sh fresh-pilot
-quarto render experiments/decisions/09-fit-indices/report.qmd -P run_id:smoke-task145-final
+quarto render experiments/decisions/09-fit-indices/report.qmd -P run_id:pilot-task145-refined
 ```
 
 Run within the repository's shared compute slice, with single-threaded BLAS/OpenMP.

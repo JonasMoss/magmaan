@@ -68,11 +68,11 @@ if (file.exists(manifest)) {
   if (!identical(readRDS(manifest),fingerprint)) stop("Resume refused: source/library/config/seed changed; use a fresh run-id")
 } else saveRDS(fingerprint,manifest)
 metadata <- data.frame(key=c("git_head","dirty","library_build","library_hash","source_hash","config_hash",
-  "seed_base","mode","command","R_version","magmaan_version","magmaanlab_version","target_n","check_n","criteria"),
+  "seed_base","mode","command","R_version","magmaan_version","magmaanlab_version","target_n","check_n","target_controls","criteria"),
   value=c(git_scalar(c("rev-parse","HEAD")),git_dirty(), packageDescription("magmaanlab")$Built,
     hash_object(tools::md5sum(library_files)),hash_object(tools::md5sum(source_files)),hash_object(all_cells),
     seed_base,mode,paste(commandArgs(),collapse=" "),R.version.string,
-    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"pending; engineering only"))
+    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"nlopt: ftol_rel=1e-14; xtol_rel=1e-12; max_eval=10000; start=default estimates","pending; engineering only"))
 if (!file.exists(file.path(out_dir,"metadata.csv"))) write_csv(metadata,file.path(out_dir,"metadata.csv"))
 write_csv(cells,file.path(out_dir,"cells.csv"))
 write_csv(do.call(rbind,lapply(unique(cells$estimator),function(e)
@@ -148,23 +148,27 @@ summary <- do.call(rbind,lapply(split(rows,interaction(rows$cell,rows$arm,rows$i
   i <- match(x$cell[1],cells$id); target <- prepared[[i]]$targets$own[[x$index[1]]]
   available <- is.na(x$reason) & is.finite(x$estimate)
   if (x$kind[1] == "interval") available <- available & is.finite(x$lower) & is.finite(x$upper)
+  target_available <- is.finite(target)
   error <- x$estimate[available]-target
   coverage <- x$lower <= target & x$upper >= target
-  data.frame(cell=x$cell[1],arm=x$arm[1],index=x$index[1],kind=x$kind[1],target=target,
+  data.frame(cell=x$cell[1],arm=x$arm[1],index=x$index[1],kind=x$kind[1],target=target,target_status=prepared[[i]]$targets$status,
     attempted=nrow(x),available=sum(available),availability=mean(available),convergence=mean(x$converged),
     bias=if(length(error)) mean(error) else NA_real_,rmse=if(length(error)) sqrt(mean(error^2)) else NA_real_,
-    coverage=if(x$kind[1]=="interval" && any(available)) mean(coverage[available]) else NA_real_,
-    coverage_attempted=if(x$kind[1]=="interval") mean(available & coverage,na.rm=TRUE) else NA_real_,
+    coverage=if(x$kind[1]=="interval" && any(available) && target_available) mean(coverage[available]) else NA_real_,
+    coverage_attempted=if(x$kind[1]=="interval" && target_available) mean(available & coverage,na.rm=TRUE) else NA_real_,
     width=if(x$kind[1]=="interval" && any(available)) mean(x$upper[available]-x$lower[available]) else NA_real_)
 }))
 write_csv(summary,file.path(out_dir,"summary.csv"))
 targets <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i) {
   z <- prepared[[i]]$targets
-  data.frame(cell=cells$id[i],delta=prepared[[i]]$population$delta,method=z$method,n=z$n,seed=z$seed,
+  data.frame(cell=cells$id[i],status=z$status,reason=z$reason,delta=prepared[[i]]$population$delta,method=z$method,n=z$n,seed=z$seed,
     cause=z$cause,missing_targets=z$missing_targets,mar=z$mar,
     as.list(z$own),setNames(as.list(z$complete),paste0("complete_",names(z$complete))))
 }))
 write_csv(targets,file.path(out_dir,"targets.csv"))
+write_csv(do.call(rbind,lapply(seq_len(nrow(cells)),function(i)
+  transform(prepared[[i]]$targets$diagnostics,cell=cells$id[i]))),
+  file.path(out_dir,"target_diagnostics.csv"))
 write_csv(do.call(rbind,lapply(seq_len(nrow(cells)),function(i)
   transform(prepared[[i]]$checks,cell=cells$id[i]))),file.path(out_dir,"generator_checks.csv"))
 timing <- unique(rows[,c("cell","replicate","seconds")])
@@ -173,6 +177,7 @@ cost <- merge(cells,aggregate(seconds~cell,timing,mean),by.x="id",by.y="cell")
 write_csv(cost,file.path(out_dir,"cost.csv"))
 failures <- rows[!is.na(rows$reason),c("cell","replicate","arm","index","reason")]
 write_csv(failures,file.path(out_dir,"failures.csv"))
-write_csv(data.frame(cell=cells$id,setup_seconds=vapply(prepared,`[[`,0.,"setup_seconds")),file.path(out_dir,"setup_timing.csv"))
+write_csv(data.frame(cell=cells$id,setup_seconds=vapply(prepared,`[[`,0.,"setup_seconds"),
+  target_seconds=vapply(prepared,function(x) x$targets$target_seconds,0.)),file.path(out_dir,"setup_timing.csv"))
 cat("Wrote",out_dir,"\n")
 if (mode == "smoke" && !any(rows$converged)) stop("Smoke had no converged fits")
