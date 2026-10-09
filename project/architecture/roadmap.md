@@ -335,6 +335,16 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: the layered start builds a second, FABIN3-seeded measurement
+candidate when an indicator loads on two or more latents (overlapping blocks,
+where the alternating cross-loading sweeps can reverse relative loading signs)
+and keeps the candidate with the lower ML discrepancy; models without overlap
+get bit-identical starts. The Geiser latent-AR model now converges from the
+layered start under ML and GLS. Full textbook corpus (678 case-estimator jobs,
+PORT and L-BFGS): 4 convergence gains, 0 losses, at most 3e-10 relative
+objective increase among doubly converged runs (TASK-136; diagnosis TASK-132,
+133, 134). The corpus runner gained a start selector.
+
 2026-10-09: equality-constrained models, which refuse the std.lv start
 transport, now build their automatic native fallback start in normalized
 sample units and map it back, so the simple constructor's latent-variance
