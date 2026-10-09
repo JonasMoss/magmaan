@@ -169,6 +169,12 @@ result under an unstated convention.
   retains its corrected point default and no interval; other indices are unchanged.
   FIML production remains with TASK-103 under the same criteria.
 
+- [x] **TASK-148 — share FIML fit-measure ingredients**: fit-owned native cache
+  reuses saturated moments/information/scores, user/baseline score breads,
+  the independence fit and policy points across lab compatibility, policy and
+  Wald calls. Full fit keys and process/pointer validation prevent stale reuse;
+  five retained-input pricing cells preserve every arm exactly.
+
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML
   casewise likelihood influence plus saturated-coordinate second-order variance,
   with covariance-only nuisance means; RMSEA discrepancy/square-root variants

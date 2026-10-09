@@ -1,3 +1,4 @@
+#include "magmaan/api/fit_measure_cache.hpp"
 #include "glue_internal.h"
 #include "magmaan/api/policy.hpp"
 #include "magmaan/api/frontier/fit_index_intervals.hpp"
@@ -5,6 +6,21 @@
 // [[Rcpp::depends(RcppEigen)]]
 using namespace magmaanr;
 using namespace magmaanr::fitglue;
+
+// The R fit-owned cache validates the complete portable fit before attaching
+// this transient handle. It never survives serialization or a process change.
+namespace {
+magmaan::api::FitMeasureCache* fit_measure_cache(Rcpp::List fit) {
+  SEXP native = fit.attr("fit_measure_native");
+  if (Rf_isNull(native)) return nullptr;
+  return Rcpp::XPtr<magmaan::api::FitMeasureCache>(native).get();
+}
+}
+
+// [[Rcpp::export]]
+SEXP fit_measure_cache_impl() {
+  return Rcpp::XPtr<magmaan::api::FitMeasureCache>(new magmaan::api::FitMeasureCache(), true);
+}
 
 // [[Rcpp::export]]
 Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector state) {
@@ -49,7 +65,7 @@ Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector sta
       out = policy_fit_measures_unavailable(InferenceReason::UnsupportedModel, "raw sampling rows are required", false, likelihood);
     else {
       auto raw = estimator == "FIML" ? fiml_raw_from_arg(ctx.rep, fit["raw_data"]) : complete_raw_from_arg(ctx.rep, fit["raw_data"]);
-      out = policy_fit_measures(ctx.pt, ctx.rep, raw, est, s, estimator == "FIML", uls);
+      out = policy_fit_measures(ctx.pt, ctx.rep, raw, est, s, estimator == "FIML", uls, fit_measure_cache(fit));
     }
   } else out = policy_fit_measures_unavailable(InferenceReason::UnsupportedModel,
       estimator == "GLS" || estimator == "WLS" ? "missing natural-discrepancy estimated-weight profile trace for this estimator" : "missing natural-discrepancy profile correction or sampling rows for this estimator", ordinal || mixed, likelihood);
@@ -104,7 +120,7 @@ Rcpp::DataFrame convention_fit_measures_impl(Rcpp::List fit, std::string convent
       !fit.containsElementNamed("nclusters") && fit.containsElementNamed("raw_data")) {
     auto raw = estimator == "FIML" ? fiml_raw_from_arg(ctx.rep, fit["raw_data"]) :
         complete_raw_from_arg(ctx.rep, fit["raw_data"]);
-    out = convention_fit_measures(ctx.pt, ctx.rep, raw, est, c, s, estimator == "FIML");
+    out = convention_fit_measures(ctx.pt, ctx.rep, raw, est, c, s, estimator == "FIML", fit_measure_cache(fit));
   }
   if (!out) Rcpp::stop("convention_fit_measures(): %s", out.error().detail);
   Rcpp::CharacterVector index(out->indices.size()), reason(out->indices.size());
@@ -146,7 +162,7 @@ Rcpp::DataFrame fit_index_intervals_misspec_impl(Rcpp::List fit, double level,
     auto ctx = ctx_from_fit(fit);
     auto est = est_from_fit(fit);
     auto raw = estimator == "FIML" ? fiml_raw_from_arg(ctx.rep,fit["raw_data"]) : complete_raw_from_arg(ctx.rep,fit["raw_data"]);
-    out = fit_index_intervals_misspec(ctx.pt,ctx.rep,raw,est,s,estimator == "FIML",level);
+    out = fit_index_intervals_misspec(ctx.pt,ctx.rep,raw,est,s,estimator == "FIML",level,fit_measure_cache(fit));
   }
   const auto n = out.indices.size();
   Rcpp::CharacterVector index(n), variant(n), reason(n);

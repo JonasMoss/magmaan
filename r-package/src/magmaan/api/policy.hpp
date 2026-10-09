@@ -94,12 +94,13 @@ struct PolicyFitMeasures {
 // Point estimates only. Natural pooled discrepancy, N divisor, Steiger's G
 // factor for RMSEA, nominal-df truncated TLI. Independence is unconstrained
 // across groups and uses the same data treatment and estimator.
+struct FitMeasureCache;
 PolicyFitMeasures policy_fit_measures(const Fit& fit);
 PolicyFitMeasures policy_fit_measures_unavailable(InferenceReason reason,
     std::string detail, bool ordinal = false, bool likelihood = true);
 PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
-    const estimate::Estimates& est, const PolicyFitState& state, bool fiml = false, bool uls = false);
+    const estimate::Estimates& est, const PolicyFitState& state, bool fiml = false, bool uls = false, FitMeasureCache* cache = nullptr);
 PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& stats,
     const estimate::Estimates& est, const PolicyFitState& state,

@@ -13,5 +13,5 @@
 convention_fit_measures <- function(fit, convention) {
   if (!inherits(fit, "magmaan_fit")) stop("convention_fit_measures(): supply a fitted model")
   convention <- match.arg(convention, c("ML", "MLM", "MLR", "DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS"))
-  convention_fit_measures_impl(fit, convention, .policy_state(fit))
+  convention_fit_measures_impl(.fit_measure_fit(fit), convention, .policy_state(fit))
 }

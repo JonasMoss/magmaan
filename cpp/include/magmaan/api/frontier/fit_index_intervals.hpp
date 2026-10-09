@@ -28,5 +28,5 @@ FitIndexIntervals fit_index_intervals_misspec(const Fit& fit, double level = 0.9
 FitIndexIntervals fit_index_intervals_misspec(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
     const estimate::Estimates& est, const PolicyFitState& state,
-    bool fiml = false, double level = 0.90);
+    bool fiml = false, double level = 0.90, FitMeasureCache* cache = nullptr);
 } // namespace magmaan::api::frontier

@@ -1,3 +1,4 @@
+#include "magmaan/api/fit_measure_cache.hpp"
 #include "magmaan/api/conventions.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include <cmath>
@@ -94,7 +95,7 @@ Result<Model> independence(Eigen::Index p, int groups, bool means,
 
 Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
-    const estimate::Estimates& est, LavaanConvention c, const PolicyFitState& state, bool missing) {
+    const estimate::Estimates& est, LavaanConvention c, const PolicyFitState& state, bool missing, FitMeasureCache* cache) {
   if (state.penalized || !state.converged) return refused(state);
   if (c != LavaanConvention::ML && c != LavaanConvention::MLM && c != LavaanConvention::MLR)
     return std::unexpected(failure("this convention requires a different fitted estimator"));
@@ -107,20 +108,20 @@ Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
   auto eval = evaluator->evaluate(est.theta, true, true);
   if (!eval) return std::unexpected(failure(eval.error().detail));
   const bool means = eval->J_mu.rows() > 0;
-  auto pack = estimate::fiml::fiml_pack(raw);
+  auto pack = fit_measure_ingredient(cache ? &cache->pack : nullptr, [&] { return estimate::fiml::fiml_pack(raw); });
   if (!pack) return std::unexpected(failure(pack.error().detail));
   // Robust traces and tail probabilities require converged H1 moments, even
   // when the saturated likelihood has already stopped changing visibly.
   estimate::fiml::FIMLH1Options h1_options;
   h1_options.parameter_tol = 1e-10;
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack, h1_options);
+  auto h1 = fit_measure_ingredient(cache ? &cache->h1 : nullptr, [&] { return estimate::fiml::fiml_h1_moments(raw, *pack, h1_options); });
   if (!h1) return std::unexpected(failure(h1.error().detail));
   auto model = independence(raw.X[0].cols(), static_cast<int>(raw.X.size()), means);
   if (!model) return std::unexpected(model.error());
   auto data = missing ? data_from_raw(*model, raw) : data_from_sample_stats(*model,
       {h1->sigma, means ? h1->mu : std::vector<Eigen::VectorXd>{}, pack->start_stats.n_obs});
   if (!data) return std::unexpected(data.error());
-  auto base = fit(*model, *data, missing ? fiml() : ml());
+  auto base = fit_measure_ingredient(cache ? &cache->baseline : nullptr, [&] { return fit(*model, *data, missing ? fiml() : ml()); });
   if (!base) return std::unexpected(base.error());
   const auto bs = policy_fit_state(base->estimates());
   if (!bs.converged) return std::unexpected(failure("independence baseline did not converge"));

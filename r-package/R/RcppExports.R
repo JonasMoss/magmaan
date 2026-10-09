@@ -897,6 +897,10 @@ infer_lr_test_satorra_bentler2010 <- function(fit_H1, fit_H0, X_per_group, T_H1,
     .Call(`_magmaanlab_infer_lr_test_satorra_bentler2010`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
 
+fit_measure_cache_impl <- function() {
+    .Call(`_magmaanlab_fit_measure_cache_impl`)
+}
+
 policy_fit_measures_impl <- function(fit, state) {
     .Call(`_magmaanlab_policy_fit_measures_impl`, fit, state)
 }

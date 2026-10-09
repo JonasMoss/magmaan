@@ -43,7 +43,7 @@ Result<ConventionFitMeasures> convention_fit_measures(const Fit& fit,
 Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
     const estimate::Estimates& estimates, LavaanConvention convention,
-    const PolicyFitState& state, bool fiml = false);
+    const PolicyFitState& state, bool fiml = false, FitMeasureCache* cache = nullptr);
 Result<ConventionFitMeasures> convention_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::OrdinalStats& stats,
     const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,

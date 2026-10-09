@@ -1,3 +1,4 @@
+#include "magmaan/api/fit_measure_cache.hpp"
 #include "magmaan/api/policy.hpp"
 #include "magmaan/api/frontier/fit_index_intervals.hpp"
 #include "magmaan/api/sem.hpp"
@@ -55,7 +56,8 @@ post_expected<ContinuousParts> continuous_parts(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
     const estimate::fiml::FIMLPack& pack, const estimate::Estimates& est,
     const model::ImpliedMoments& saturated, double saturated_trace, bool means,
-    bool fiml, bool uls, const Eigen::MatrixXd& saturated_rows) {
+    bool fiml, bool uls, const Eigen::MatrixXd& saturated_rows,
+    std::optional<estimate::fiml::FIMLScoreMeatBread>* saved_bread = nullptr) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev) return std::unexpected(invalid(ev.error().detail));
   auto eval = ev->evaluate(est.theta, true, true);
@@ -91,7 +93,7 @@ post_expected<ContinuousParts> continuous_parts(spec::LatentStructure pt,
     rows = saturated_rows * d * k * *v * k.transpose();
     model_trace = saturated_trace - profile->trace_signed - moment_bias;
   } else if (fiml) {
-    auto parts = estimate::fiml::fiml_score_meat_bread(pt, rep, raw, pack, est);
+    auto parts = fit_measure_ingredient(saved_bread, [&] { return estimate::fiml::fiml_score_meat_bread(pt, rep, raw, pack, est); });
     if (!parts) return std::unexpected(parts.error());
     Eigen::MatrixXd h = (static_cast<double>(pack.cache.n_total) / 2.0) * k.transpose() * parts->hessian * k;
     auto v = inverse(h);
@@ -222,13 +224,14 @@ PolicyFitMeasures policy_fit_measures_unavailable(InferenceReason reason,
 
 PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
-    const estimate::Estimates& est, const PolicyFitState& state, bool fiml, bool uls) {
+    const estimate::Estimates& est, const PolicyFitState& state, bool fiml, bool uls, FitMeasureCache* cache) {
   if (state.penalized) return policy_fit_measures_unavailable(InferenceReason::Penalized, std::string(penalized_detail));
   if (!state.converged) return policy_fit_measures_unavailable(InferenceReason::NotConverged, "the fit did not pass its convergence verdict");
   if (std::any_of(pt.exo.begin(), pt.exo.end(), [](auto x) { return x != 0; }) ||
       pt.has_inequality_constraints || !pt.nonlinear_eq_rows.empty())
     return policy_fit_measures_unavailable(InferenceReason::UnsupportedModel,
         "policy fit measures require random x and affine equality constraints", false, !uls);
+  if (cache && cache->points) return *cache->points;
   auto fail = [uls](const std::string& detail) { return policy_fit_measures_unavailable(InferenceReason::NumericFailure, detail, false, !uls); };
   auto evaluator = model::ModelEvaluator::build(pt, rep);
   if (!evaluator) return fail(evaluator.error().detail);
@@ -236,28 +239,28 @@ PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
   if (!eval) return fail(eval.error().detail);
   const bool means = eval->J_mu.rows() > 0;
   if (raw.X.empty()) return fail("fit measures require raw observations");
-  auto pack = estimate::fiml::fiml_pack(raw);
+  auto pack = fit_measure_ingredient(cache ? &cache->pack : nullptr, [&] { return estimate::fiml::fiml_pack(raw); });
   if (!pack) return fail(pack.error().detail);
   // Trace corrections need tighter H1 accuracy than fitting starts: an
   // absolute EM stop at 1e-5 otherwise changes them when units are rescaled.
   estimate::fiml::FIMLH1Options h1_options;
   h1_options.parameter_tol = 1e-10;
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack, h1_options);
+  auto h1 = fit_measure_ingredient(cache ? &cache->h1 : nullptr, [&] { return estimate::fiml::fiml_h1_moments(raw, *pack, h1_options); });
   if (!h1) return fail(h1.error().detail);
   model::ImpliedMoments sat{h1->sigma, h1->mu};
   // Include all unrestricted means in the saturated Takeuchi trace. The
   // covariance-only model has its profiled mean nuisance contribution below.
-  auto h_sat = estimate::fiml::fiml_saturated_observed_information(raw, *pack, sat, true);
-  auto s_sat = estimate::fiml::fiml_saturated_casewise_deviance_scores(raw, *pack, sat, true);
+  auto h_sat = fit_measure_ingredient(cache ? &cache->saturated_information : nullptr, [&] { return estimate::fiml::fiml_saturated_observed_information(raw, *pack, sat, true); });
+  auto s_sat = fit_measure_ingredient(cache ? &cache->saturated_scores : nullptr, [&] { return estimate::fiml::fiml_saturated_casewise_deviance_scores(raw, *pack, sat, true); });
   if (!h_sat) return fail(h_sat.error().detail);
   if (!s_sat) return fail(s_sat.error().detail);
-  auto v_sat = inverse(*h_sat);
+  auto v_sat = fit_measure_ingredient(cache ? &cache->saturated_covariance : nullptr, [&] { return inverse(*h_sat); });
   if (!v_sat) return fail(v_sat.error().detail);
   const Eigen::MatrixXd scores_sat = -0.5 * *s_sat;
   const double t_sat = (scores_sat.transpose() * scores_sat * *v_sat).trace();
   Eigen::MatrixXd saturated_rows = scores_sat * *v_sat;
   if (!means) saturated_rows = saturated_rows.leftCols(eval->J_sigma.rows()).eval();
-  auto user = continuous_parts(pt, rep, raw, *pack, est, sat, t_sat, means, fiml, uls, saturated_rows);
+  auto user = continuous_parts(pt, rep, raw, *pack, est, sat, t_sat, means, fiml, uls, saturated_rows, cache ? &cache->user_bread : nullptr);
   if (!user) return fail(user.error().detail);
   auto base_model = independence_model(raw.X[0].cols(), static_cast<int>(raw.X.size()), means);
   if (!base_model) return fail(base_model.error().detail);
@@ -266,11 +269,11 @@ PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
   auto base_data = fiml ? data_from_raw(*base_model, raw) :
       data_from_sample_stats(*base_model, std::move(baseline_sample));
   if (!base_data) return fail(base_data.error().detail);
-  auto base_fit = fit(*base_model, *base_data, uls ? api::uls() : fiml ? api::fiml() : ml());
+  auto base_fit = fit_measure_ingredient(cache ? &cache->baseline : nullptr, [&] { return fit(*base_model, *base_data, uls ? api::uls() : fiml ? api::fiml() : ml()); });
   if (!base_fit) return fail(base_fit.error().detail);
   if (!policy_fit_state(base_fit->estimates()).converged) return fail("independence baseline did not converge");
   auto baseline = continuous_parts(base_model->structure(), base_model->matrix_rep(), raw,
-      *pack, base_fit->estimates(), sat, t_sat, means, fiml, uls, saturated_rows);
+      *pack, base_fit->estimates(), sat, t_sat, means, fiml, uls, saturated_rows, cache ? &cache->baseline_bread : nullptr);
   if (!baseline) return fail(baseline.error().detail);
   PolicyFitMeasures out;
   out.ntotal = pack->cache.n_total;
@@ -305,6 +308,7 @@ PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
   }
   auto residual = continuous_residual(out, *user, sat, *pack, saturated_rows, means);
   if (!residual) unavailable(out, "srmr", InferenceReason::NumericFailure, residual.error().detail);
+  if (cache) cache->points = out;
   return out;
 }
 
@@ -470,7 +474,7 @@ FitIndexIntervals fit_index_intervals_misspec_unavailable(InferenceReason reason
 FitIndexIntervals fit_index_intervals_misspec(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,
     const estimate::Estimates& est, const PolicyFitState& state, bool fiml,
-    double level) {
+    double level, FitMeasureCache* cache) {
   auto fail = [](std::string detail) {
     return fit_index_intervals_misspec_unavailable(InferenceReason::NumericFailure, std::move(detail));
   };
@@ -484,15 +488,16 @@ FitIndexIntervals fit_index_intervals_misspec(spec::LatentStructure pt,
       (!fiml && !raw.mask.empty()))
     return fit_index_intervals_misspec_unavailable(InferenceReason::UnsupportedModel,
         "continuous ML/FIML intervals require raw sampling rows, random x and affine equality constraints");
-  auto points = policy_fit_measures(pt, rep, raw, est, state, fiml);
+  auto points = cache && cache->points ? *cache->points :
+      policy_fit_measures(pt, rep, raw, est, state, fiml, false, cache);
   for (const auto& i : points.indices)
     if (i.index != "srmr" && (i.reason == InferenceReason::NumericFailure || i.reason == InferenceReason::UnsupportedModel))
       return fit_index_intervals_misspec_unavailable(i.reason, i.detail);
-  auto pack = estimate::fiml::fiml_pack(raw);
+  auto pack = fit_measure_ingredient(cache ? &cache->pack : nullptr, [&] { return estimate::fiml::fiml_pack(raw); });
   if (!pack) return fail(pack.error().detail);
   estimate::fiml::FIMLH1Options h1_options;
   h1_options.parameter_tol = 1e-10;
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack, h1_options);
+  auto h1 = fit_measure_ingredient(cache ? &cache->h1 : nullptr, [&] { return estimate::fiml::fiml_h1_moments(raw, *pack, h1_options); });
   if (!h1) return fail(h1.error().detail);
   const model::ImpliedMoments sat{h1->sigma, h1->mu};
   auto evaluator = model::ModelEvaluator::build(pt, rep);
@@ -504,18 +509,18 @@ FitIndexIntervals fit_index_intervals_misspec(spec::LatentStructure pt,
   if (fiml && !means)
     return fit_index_intervals_misspec_unavailable(InferenceReason::UnsupportedModel,
         "FIML intervals require an explicit mean structure");
-  auto hs = estimate::fiml::fiml_saturated_observed_information(raw, *pack, sat, true);
-  auto ss = estimate::fiml::fiml_saturated_casewise_deviance_scores(raw, *pack, sat, true);
+  auto hs = fit_measure_ingredient(cache ? &cache->saturated_information : nullptr, [&] { return estimate::fiml::fiml_saturated_observed_information(raw, *pack, sat, true); });
+  auto ss = fit_measure_ingredient(cache ? &cache->saturated_scores : nullptr, [&] { return estimate::fiml::fiml_saturated_casewise_deviance_scores(raw, *pack, sat, true); });
   if (!hs) return fail(hs.error().detail);
   if (!ss) return fail(ss.error().detail);
-  auto vs = inverse(*hs);
+  auto vs = fit_measure_ingredient(cache ? &cache->saturated_covariance : nullptr, [&] { return inverse(*hs); });
   if (!vs) return fail(vs.error().detail);
   const Eigen::MatrixXd scores = -0.5 * *ss;
   const Eigen::MatrixXd meat = scores.transpose()*scores;
   const double t_sat = (meat * *vs).trace();
   Eigen::MatrixXd sat_rows = scores * *vs;
   if (!means) sat_rows = sat_rows.leftCols(eval->J_sigma.rows()).eval();
-  auto user = continuous_parts(pt, rep, raw, *pack, est, sat, t_sat, means, fiml, false, sat_rows);
+  auto user = continuous_parts(pt, rep, raw, *pack, est, sat, t_sat, means, fiml, false, sat_rows, cache ? &cache->user_bread : nullptr);
   if (!user) return fail(user.error().detail);
   Eigen::MatrixXd delta = Eigen::MatrixXd::Zero(hs->rows(),est.theta.size());
   const auto nc = eval->J_sigma.rows();
@@ -539,7 +544,7 @@ FitIndexIntervals fit_index_intervals_misspec(spec::LatentStructure pt,
   data::SampleStats sample{sat.sigma, means ? sat.mu : std::vector<Eigen::VectorXd>{},pack->start_stats.n_obs};
   auto bd = fiml ? data_from_raw(*baseline,raw) : data_from_sample_stats(*baseline,sample);
   if (!bd) return fail(bd.error().detail);
-  auto bf = fit(*baseline,*bd,fiml ? api::fiml() : ml());
+  auto bf = fit_measure_ingredient(cache ? &cache->baseline : nullptr, [&] { return fit(*baseline,*bd,fiml ? api::fiml() : ml()); });
   if (!bf) return fail(bf.error().detail);
   auto be = model::ModelEvaluator::build(baseline->structure(),baseline->matrix_rep());
   if (!be) return fail(be.error().detail);

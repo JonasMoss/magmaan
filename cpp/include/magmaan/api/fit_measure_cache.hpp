@@ -1,0 +1,27 @@
+#pragma once
+
+#include "magmaan/api/policy.hpp"
+#include "magmaan/api/sem.hpp"
+
+namespace magmaan::api {
+// Scratch ingredients for repeated continuous fit-measure composition at one
+// immutable fitted point. Owners must discard this cache when any input changes.
+// Only successful ingredients are retained; numerical failures remain values.
+struct FitMeasureCache {
+  std::optional<estimate::fiml::FIMLPack> pack;
+  std::optional<estimate::fiml::FIMLH1> h1;
+  std::optional<Eigen::MatrixXd> saturated_information, saturated_scores, saturated_covariance;
+  std::optional<estimate::fiml::FIMLScoreMeatBread> user_bread, baseline_bread;
+  std::optional<Fit> baseline;
+  std::optional<PolicyFitMeasures> points;
+};
+
+template <typename T, typename Build>
+auto fit_measure_ingredient(std::optional<T>* saved, Build build) {
+  using ResultType = decltype(build());
+  if (saved && saved->has_value()) return ResultType(**saved);
+  auto value = build();
+  if (saved && value) *saved = *value;
+  return value;
+}
+} // namespace magmaan::api

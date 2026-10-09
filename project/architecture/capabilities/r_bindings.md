@@ -659,6 +659,26 @@ long30 ML diagnostic preserves all result rows and lowers worker peak RSS from
 642 to 397 MiB; eight initial workers are recommended for the 10 GiB simbox ML
 run, with available-memory monitoring. FIML memory remains unmeasured.
 
+## FIML fit-measure ingredient reuse (TASK-148)
+
+The lab policy, compatibility and Wald fit-measure wrappers share a lazy native
+`FitMeasureCache` through the existing fit-owned `policy_cache` environment.
+It retains the missingness pack, tightly converged H1 moments, saturated
+observed information/inverse and casewise scores, model/baseline score breads,
+the independence fit and completed policy points. Wald intervals reuse these
+points while recomputing confidence-level-dependent bounds. The ordinary
+`fit_measures()` delegate shares the same lab cache.
+
+The full portable fit is the cache key: changing data, estimates, model,
+parameterization or other fitting inputs invalidates it even when R aliases
+share the environment. Process changes and serialized nil pointers rebuild it.
+Uncached fits still work; unsupported and numerical-failure results keep their
+existing behavior. Native callers supplying the optional cache must restrict it
+to one immutable fitted point and estimation route. Distinct inference H1
+accuracy settings remain separate. Focused R gates cover exact results in both
+call orders, different fits and serialization; paired pricing on long30,
+corr24, long18, bifactor15 and PTSD8 preserves every arm bit for bit.
+
 ## Continuous lab fit-index Wald candidate (TASK-142)
 
 `api::frontier::fit_index_intervals_misspec()` and the thin lab wrapper support

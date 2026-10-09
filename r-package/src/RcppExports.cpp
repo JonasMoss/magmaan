@@ -3354,6 +3354,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_measure_cache_impl
+SEXP fit_measure_cache_impl();
+RcppExport SEXP _magmaanlab_fit_measure_cache_impl() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(fit_measure_cache_impl());
+    return rcpp_result_gen;
+END_RCPP
+}
 // policy_fit_measures_impl
 Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector state);
 RcppExport SEXP _magmaanlab_policy_fit_measures_impl(SEXP fitSEXP, SEXP stateSEXP) {
@@ -4979,6 +4989,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_infer_ml2s_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaanlab_infer_ml2s_lr_test_satorra_bentler2010, 3},
     {"_magmaanlab_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaanlab_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaanlab_infer_lr_test_satorra_bentler2010, 8},
+    {"_magmaanlab_fit_measure_cache_impl", (DL_FUNC) &_magmaanlab_fit_measure_cache_impl, 0},
     {"_magmaanlab_policy_fit_measures_impl", (DL_FUNC) &_magmaanlab_policy_fit_measures_impl, 2},
     {"_magmaanlab_convention_fit_measures_impl", (DL_FUNC) &_magmaanlab_convention_fit_measures_impl, 3},
     {"_magmaanlab_fit_index_intervals_misspec_impl", (DL_FUNC) &_magmaanlab_fit_index_intervals_misspec_impl, 3},

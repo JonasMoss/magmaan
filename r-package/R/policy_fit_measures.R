@@ -1,3 +1,12 @@
+.fit_measure_fit <- function(fit) {
+  if (identical(toupper(fit$estimator), "FIML")) {
+    context <- .policy_context(fit, "fit_measures", function()
+      list(native = fit_measure_cache_impl()))
+    attr(fit, "fit_measure_native") <- context$native
+  }
+  fit
+}
+
 #' Policy fit indices with misspecification-robust point corrections
 #'
 #' Computes indices on request, including an independence baseline under the
@@ -17,7 +26,7 @@
 #' @export
 policy_fit_measures <- function(fit) {
   if (!inherits(fit, "magmaan_fit")) stop("policy_fit_measures(): supply a fitted magmaan model")
-  policy_fit_measures_impl(fit, .policy_state(fit))
+  policy_fit_measures_impl(.fit_measure_fit(fit), .policy_state(fit))
 }
 
 
@@ -49,5 +58,5 @@ fit_index_intervals_misspec <- function(fit, level = 0.90) {
   if (!is.numeric(level) || length(level) != 1L || is.na(level) ||
       !is.finite(level) || level <= 0 || level >= 1)
     stop("level must be strictly between zero and one")
-  fit_index_intervals_misspec_impl(fit, level, .policy_state(fit))
+  fit_index_intervals_misspec_impl(.fit_measure_fit(fit), level, .policy_state(fit))
 }

@@ -4,6 +4,10 @@
   reported converged when their supported std.lv endpoint Newton audit fails.
   Diagnostics record the trigger and unsupported transports; estimates are unchanged.
 
+- FIML fit-measure calls share fit-owned saturated ingredients and baseline
+  fits; policy points are reused by lab Wald intervals. Returned estimates
+  and intervals are unchanged, and modified or serialized fits rebuild the cache.
+
 - Added lab-only `fit_index_intervals_misspec()` for continuous ML/FIML RMSEA,
   CFI and TLI: discrepancy and square-root Wald variants, joint baseline
   influence, observed-coordinate second-order variance and typed refusals.
