@@ -335,6 +335,21 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: two merges after v0.2.1. (1) Ordinary association ML
+(TASK-128.2, user decision after decisions/08): `magmaan(estimator = "ML")`
+with all indicators ordered fits Gaussian ML on the polychoric correlations,
+with exact Stage-1 IJ covariance and observed sensitivity, All-reference global
+and parameter-space nested tests (SB and PEBA4 as references), and robust
+one-df MIs and equality releases (MIs adopted after the TASK-128.3
+population-approximation check). Complete rows only; the ordinal default stays
+DWLS; help carries the sparse-binary finite-sample caveat. (2) Opt-in
+objective-aware search coordinates (TASK-33.10.5.4): continuous fixed-weight LS
+and ML2S Stage-2 LS accept `objective` and `objective_downward` coordinate
+scaling built from the fitting residual Jacobian's Gauss-Newton diagonal; ML,
+direct FIML and residual backends refuse them as Unsupported, ordinal and
+mixed routes are TASK-33.10.5.6, and defaults are unchanged pending the
+TASK-33.10.5.5 decision study.
+
 2026-10-09: complete-data penalized (barrier) ML certifies a marker-chart
 endpoint only if the same-endpoint Newton audit also passes after transport to
 the std.lv chart; otherwise accuracy is unresolved with a chart-proximity
