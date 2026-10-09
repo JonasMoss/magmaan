@@ -1,0 +1,13 @@
+id,lhs,op,rhs,group,kind,rationale
+cfa_bifactor15,EMOTION,=~,X6,all,cross_loading,A threat indicator may also reflect the emotion-specific factor.
+cfa_corr24,PosEVL,=~,PosCON2,all,cross_loading,The second positive-control item may also measure positive evaluation.
+cfa_long18,PA_T1P2,~~,PA_T2P3,all,residual_covariance,Adjacent-wave parcels may share item content across parcels; all same-parcel wave covariances are already free.
+cfa_long30,BulPB1,~~,BulPC2,all,residual_covariance,Adjacent-wave bullying parcels may share item content across parcels; all same-parcel wave covariances are already free.
+cfa_mtmm9,SCHZOTYP,=~,PARC,all,cross_loading,The clinical paranoia indicator may also measure schizotypal traits.
+cfa_ptsd8,AVOID,=~,Y2,all,cross_loading,The second intrusion indicator may also reflect avoidance symptoms.
+cfa_second12,COGRES,=~,P2,all,cross_loading,The second problem-solving indicator may also measure cognitive restructuring.
+growth6,cesd2,~~,cesd3,all,residual_covariance,Adjacent CES-D waves may retain dependence beyond the linear growth factors.
+mg_path5,achieve,~~,delinq,Group 2,residual_covariance,Group 2 may share unmeasured causes of achievement and delinquency beyond the directed paths.
+mgcfa_mdd9,M2,~~,M3,1,residual_covariance,Two non-marker depression indicators may share symptom content in the second group.
+mimic7,S2,~,SEX,all,direct_effect,Sex may affect the second social-phobia indicator beyond its latent-factor effects.
+sem_worland11,Adjust,~,Achieve,all,direct_effect,Achievement may directly affect adjustment beyond cognitive ability and risk.
