@@ -335,6 +335,12 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: continuous DWLS diagonal weights keep O(q) storage through the R
+adapters, native preparation, post-fit dispatch and saved-fit replay instead of
+crossing as dense matrices; full weights keep exact output. Fit and covariance
+parity holds with and without groups and mean structure; at q = 210 a weight
+is 420 numbers instead of 44,100 (TASK-114).
+
 2026-10-09: two merges after v0.2.1. (1) Ordinary association ML
 (TASK-128.2, user decision after decisions/08): `magmaan(estimator = "ML")`
 with all indicators ordered fits Gaussian ML on the polychoric correlations,
