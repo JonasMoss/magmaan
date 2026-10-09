@@ -1521,8 +1521,13 @@ separate final decision for each explicitly covered scope.
 - [x] **M — opt-in objective-aware continuous LS coordinates (TASK-33.10.5.4).**
   Actual fixed-weight GN diagonal drives two-sided/downward maps; defaults
   and audit rules stay unchanged. See optimizer controls and LS capability.
-  Ordinal/mixed wiring remains TASK-33.10.5.6; adoption requires the
-  pre-registered TASK-33.10.5.5 decision study.
+  Ordinal/mixed explicit-mode guards are banked in TASK-33.10.5.6; adoption
+  requires the pre-registered TASK-33.10.5.5 decision study.
+
+- [x] **M — explicit ordinal/mixed LS coordinate guards (TASK-33.10.5.6).**
+  Objective modes return typed Unsupported before preparation in bounded,
+  profiled and constrained entry points. Existing sample-unit/information
+  behavior and defaults are preserved. No ordinal GN map is claimed.
 
 - [x] **M — warn about continuous LS measurement-unit spread (TASK-33.10.5.3).**
   Core diagnostics record the maximum within-block continuous variance ratio;

@@ -3,6 +3,7 @@
 #include <type_traits>
 #include "magmaan/estimate/configured_ml.hpp"
 #include "magmaan/estimate/backend_strings.hpp"
+#include "magmaan/estimate/coordinates.hpp"
 #include "magmaan/estimate/frontier/identification.hpp"
 
 namespace magmaan::estimate {
@@ -1940,6 +1941,11 @@ fit_ordinal_constrained(spec::LatentStructure pt,
                         Backend backend,
                         OptimOptions opts,
                         OrdinalParameterization parameterization) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   constexpr const char* who = "fit_ordinal_constrained";
   auto obj = ordinal_ls_objective(
       std::move(pt), rep, stats, start, weights, parameterization);
@@ -2242,6 +2248,11 @@ fit_mixed_ordinal_constrained(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   constexpr const char* who = "fit_mixed_ordinal_constrained";
   auto obj = mixed_ordinal_ls_objective(
       std::move(pt), rep, stats, start, weights, parameterization);
@@ -2775,6 +2786,11 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     OptimOptions opts,
                     OrdinalParameterization parameterization,
                     const std::vector<std::int8_t>* row_user) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -2896,6 +2912,11 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     const Eigen::VectorXd& x0,
                     Backend backend,
                     OptimOptions opts) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
@@ -3276,6 +3297,11 @@ fit_ordinal_snlls(spec::LatentStructure pt,
                   const Eigen::VectorXd& x0,
                   Backend backend,
                   OptimOptions opts) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
   if (parameterization == OrdinalParameterization::Theta) {
@@ -3453,6 +3479,11 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
                                   const Eigen::VectorXd& x0,
                                   Backend backend,
                                   OptimOptions opts) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
@@ -3596,6 +3627,11 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           OptimOptions opts,
                           OrdinalParameterization parameterization,
                           const std::vector<std::int8_t>* row_user) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -3710,6 +3746,11 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           const Eigen::VectorXd& x0,
                           Backend backend,
                           OptimOptions opts) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -3732,6 +3773,11 @@ fit_mixed_ordinal_snlls_full_thresholds(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   // Theta is supported through the same full-threshold moment stack: the
   // standardized covariance moments make the non-threshold covariance block
   // nonlinear, so ordinal_gp_block_kinds marks only thresholds as
@@ -3885,6 +3931,11 @@ fit_mixed_ordinal_snlls_full_thresholds(
     const Eigen::VectorXd& x0,
     Backend backend,
     OptimOptions opts) {
+  // Legacy ordinal routes do not apply sample-unit or information maps.
+  // Explicit objective modes must fail before any start/weight preparation.
+  if (objective_coordinate_scaling(opts.coordinate_scaling))
+    return std::unexpected(make_err(FitError::Kind::Unsupported,
+        "objective coordinates are unsupported for ordinal and mixed LS routes"));
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
   }

@@ -344,6 +344,26 @@ TEST_CASE("Mixed ordinal theta parameterization fits and supports post-fit repor
       "delta fit failed: " << (delta.has_value() ? "" : delta.error().detail));
   REQUIRE_MESSAGE(theta.has_value(),
       "theta fit failed: " << (theta.has_value() ? "" : theta.error().detail));
+  // Legacy coordinate modes are no-ops on this route; preserve the exact
+  // default endpoint and optimizer accounting under delta and theta.
+  for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+    const auto& baseline = parameterization == OrdinalParameterization::Delta ? *delta : *theta;
+    for (auto mode : {magmaan::optim::CoordinateScaling::None,
+                      magmaan::optim::CoordinateScaling::SampleUnits,
+                      magmaan::optim::CoordinateScaling::Information}) {
+      magmaan::optim::OptimOptions controls;
+      controls.coordinate_scaling = mode;
+      auto explicit_mode = magmaan::test::fit_mixed_ordinal_bounded(
+          *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptLbfgs, controls, parameterization);
+      REQUIRE(explicit_mode);
+      CHECK((explicit_mode->theta.array() == baseline.theta.array()).all());
+      CHECK(explicit_mode->fmin == baseline.fmin);
+      CHECK(explicit_mode->f_evals == baseline.f_evals);
+      CHECK(explicit_mode->g_evals == baseline.g_evals);
+    }
+  }
+
   CHECK(theta->theta.allFinite());
   CHECK(std::isfinite(theta->fmin));
   CHECK((theta->theta - delta->theta).cwiseAbs().maxCoeff() > 1e-3);
@@ -380,5 +400,45 @@ TEST_CASE("Mixed ordinal theta parameterization fits and supports post-fit repor
   if (std_all.has_value()) {
     CHECK(std_all->theta.size() == theta->theta.size());
     CHECK(std_all->se.allFinite());
+  }
+}
+
+TEST_CASE("Ordinal and mixed LS reject objective coordinates before preparation") {
+  using namespace magmaan;
+  using namespace magmaan::estimate;
+  // Empty metadata is intentional: explicit-mode rejection must precede
+  // validation, Gamma materialization, profiling and zero-free shortcuts.
+  const spec::LatentStructure pt;
+  const model::MatrixRep rep;
+  const data::OrdinalStats ordinal;
+  const data::MixedOrdinalStats mixed;
+  const data::OrdinalMoments moments;
+  const data::MixedOrdinalMoments mixed_moments;
+  const Eigen::VectorXd start;
+  auto rejected = [](const fit_expected<Estimates>& result) {
+    REQUIRE_FALSE(result);
+    CHECK(result.error().kind == FitError::Kind::Unsupported);
+    CHECK(result.error().detail ==
+          "objective coordinates are unsupported for ordinal and mixed LS routes");
+  };
+  for (auto kind : {optim::CoordinateScaling::Objective,
+                    optim::CoordinateScaling::ObjectiveDownward}) {
+    optim::OptimOptions opts;
+    opts.coordinate_scaling = kind;
+    for (auto backend : {Backend::NloptLbfgs, Backend::NloptSlsqp, Backend::PortNls}) {
+      for (auto weights : {OrdinalWeightKind::ULS, OrdinalWeightKind::DWLS,
+                           OrdinalWeightKind::WLS}) {
+        rejected(fit_ordinal_bounded(pt, rep, ordinal, {}, weights, start, backend, opts));
+        rejected(fit_mixed_ordinal_bounded(pt, rep, mixed, {}, weights, start, backend, opts));
+        rejected(fit_mixed_ordinal_snlls_full_thresholds(pt, rep, mixed, weights, start, backend, opts));
+        rejected(frontier::fit_ordinal_constrained(pt, rep, ordinal, {}, {}, {}, weights, backend, opts));
+        rejected(frontier::fit_mixed_ordinal_constrained(pt, rep, mixed, {}, {}, {}, weights, backend, opts));
+      }
+      rejected(fit_ordinal_bounded(pt, rep, moments, nullptr, {}, {}, start, backend, opts));
+      rejected(fit_ordinal_snlls(pt, rep, moments, nullptr, {}, start, backend, opts));
+      rejected(fit_ordinal_snlls_full_thresholds(pt, rep, moments, nullptr, {}, start, backend, opts));
+      rejected(fit_mixed_ordinal_bounded(pt, rep, mixed_moments, nullptr, {}, {}, start, backend, opts));
+      rejected(fit_mixed_ordinal_snlls_full_thresholds(pt, rep, mixed_moments, nullptr, {}, start, backend, opts));
+    }
   }
 }

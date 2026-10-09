@@ -5,8 +5,9 @@
   weighting. Continuous ULS/DWLS/WLS/ADF, scalar GLS and ML2S Stage-2 LS
   share the map and telemetry. Defaults and terminal audits are unchanged.
   ML/direct FIML and residual backends return typed `Unsupported` errors.
-  Ordinal and mixed routes currently ignore all coordinate scaling modes;
-  TASK-33.10.5.6 owns their wiring and rejection.
+  Ordinal and mixed LS entry points also reject explicit objective modes,
+  including bounded, profiled and constrained routes, before preparation.
+  Their legacy sample-unit/information modes retain their existing behavior.
 
 - ULS, GLS, and explicit-weight WLS discrepancies with scalar
   value/gradient and residual/Jacobian interfaces.

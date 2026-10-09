@@ -288,7 +288,8 @@ Continuous fixed-weight LS and ML2S Stage-2 LS now build that diagonal through
 the fitting residual Jacobian and expose `objective` / `objective_downward`
 via the shared coordinate map. Scalar GLS supplies its frozen NT weight.
 ML/direct FIML and residual backends reject these settings as `Unsupported`;
-ordinal and mixed routes ignore every mode pending TASK-33.10.5.6.
+ordinal and mixed LS entry points reject explicit objective modes before
+preparation (TASK-33.10.5.6). Their legacy modes retain existing behavior.
 It clamps two-sided multipliers to [1e-6, 1e6], or downward-only multipliers to
 [1e-3, 1], and retains sample units for invalid or degenerate diagonal entries.
 Malformed units/sizes and nonfinite or nonpositive outputs are typed failures.

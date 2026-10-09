@@ -251,9 +251,10 @@ a logical. The legacy `ml_sample_scaling = TRUE/FALSE` maps to
 The objective modes cover continuous ULS, DWLS, WLS/ADF, scalar GLS and
 ML2S fixed-weight Stage-2 fits. ML and direct FIML, and residual backends
 (Ceres and PORT-NLS), reject them with `FitError::Kind::Unsupported`. Routes
-without this coordinate layer retain their existing behavior: ordinal and
-mixed fits currently ignore `coordinate_scaling` for every mode. Their
-objective-coordinate wiring is tracked by TASK-33.10.5.6. NT ML2S uses ML
+without this coordinate layer reject explicit objective modes: ordinal and
+mixed LS return typed `Unsupported` before preparation, including bounded,
+profiled and constrained entry points (TASK-33.10.5.6). Their legacy
+`sample_units` and `information` settings remain no-ops. NT ML2S uses ML
 and therefore rejects the objective modes. Defaults and acceptance rules
 are unchanged; later adoption requires TASK-33.10.5.5 evidence.
 

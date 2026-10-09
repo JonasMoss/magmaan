@@ -267,6 +267,26 @@ TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta
   REQUIRE_MESSAGE(theta.has_value(),
       "theta fit failed: " << (theta.has_value() ? "" : theta.error().detail));
 
+  // Legacy coordinate modes are no-ops on this route; preserve the exact
+  // default endpoint and optimizer accounting under delta and theta.
+  for (auto parameterization : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+    const auto& baseline = parameterization == OrdinalParameterization::Delta ? *delta : *theta;
+    for (auto mode : {magmaan::optim::CoordinateScaling::None,
+                      magmaan::optim::CoordinateScaling::SampleUnits,
+                      magmaan::optim::CoordinateScaling::Information}) {
+      magmaan::optim::OptimOptions controls;
+      controls.coordinate_scaling = mode;
+      auto explicit_mode = magmaan::test::fit_ordinal_bounded(
+          *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptLbfgs, controls, parameterization);
+      REQUIRE(explicit_mode);
+      CHECK((explicit_mode->theta.array() == baseline.theta.array()).all());
+      CHECK(explicit_mode->fmin == baseline.fmin);
+      CHECK(explicit_mode->f_evals == baseline.f_evals);
+      CHECK(explicit_mode->g_evals == baseline.g_evals);
+    }
+  }
+
   CHECK(std::isfinite(theta->fmin));
   // NB: no iteration / f_eval assertion — `simple_start_values` on this
   // 4-indicator synthetic lands close enough to the optimum that NLopt's

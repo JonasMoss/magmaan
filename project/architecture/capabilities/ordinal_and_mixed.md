@@ -1,5 +1,10 @@
 ### Ordinal and mixed categorical LS
 
+- Explicit `objective` and `objective_downward` search coordinates return
+  typed `Unsupported` from ordinal/mixed LS bounded, profiled and constrained
+  entry points before preparation (TASK-33.10.5.6). Legacy sample-unit and
+  information modes remain no-ops; defaults and fitting weights are unchanged.
+
 Mixed LS diagnostics compute the sample-variance ratio using continuous columns
 only, within each block. Above 1000, the core supplies rescaling advice for
 ULS/DWLS/WLS, which both R fit finalizers surface as a warning. All-ordinal
