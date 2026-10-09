@@ -1,10 +1,10 @@
-# Fit-index evaluation study (DRAFT, not registered)
+# Fit-index evaluation study (design settled, registration pending)
 
-Draft 2026-10-08 for TASK-103 and the planned `experiments/decisions/09-fit-indices`.
-**Status: design draft only.** Registration waits for design principles the user
-and planner will set together, including the shared, tiered simulation setup
-the user wants for all studies (see [simulation backlog](../backlog/simulation.md)).
-Nothing here is a registered rule, and no run is authorized.
+Draft 2026-10-08 for TASK-103; design settled with the user 2026-10-09 under the
+shared [simulation study principles](simulation-study-principles.md). The study
+is `experiments/decisions/09-fit-indices`. Its criteria are committed before
+the decision run, after the harness and a pricing pilot exist; no run is
+authorized yet.
 
 **User direction (2026-10-08).** Use representative models as the basis, as
 in the sem-score study, with bespoke handling for further models. Keep MAR
@@ -86,16 +86,61 @@ where truncation near zero matters.
 - Default fitting options and `fit$converged`; failures stay in attempted
   denominators.
 
-## Open questions for the design-principles session
+## Decisions (user, 2026-10-09)
 
-1. The FIML target under MAR (complete-data versus mechanism-dependent) and the
-   MAR base tier.
-2. Misfit construction: one natural extra parameter per model, versus a common
-   recipe; misfit levels set by RMSEA or by $F_0$.
-3. Reuse of the sem-score basis as is, or a trimmed tier-1 subset to price.
-4. Interval candidates, confidence levels and truncation conventions.
-5. The margins that decide "smallest bias" and acceptable coverage.
-6. How this study instantiates the shared tiered simulation setup.
+1. **FIML target under MAR.** Bias is judged against the estimator's own
+   target, the missingness-dependent FIML population discrepancy; the
+   complete-data $F_0$ is reported beside it as what users mean by misfit. The
+   base MAR tier: missingness on half of the variables, driven by one fully
+   observed variable, at 0, 15% and 30%.
+2. **Misfit construction.** One natural omitted parameter per model, sized to
+   population RMSEA 0, .03, .05 and .08 (ML metric). Many-small-misfit
+   populations are a later tier.
+3. **Basis.** All tier-1 models for the point arms, priced by a pilot; if
+   intervals are expensive, a 4-5 model subset for the interval arms, chosen
+   before any results. Tier-2 additions as listed under Populations.
+4. **Intervals.** 90% for RMSEA, CFI and TLI. RMSEA intervals are clipped at
+   0, and a population RMSEA of 0 counts as covered when the lower bound is 0.
+   Candidates: lavaan's naive and scaled noncentral chi-square intervals; the
+   misspecification-robust Wald interval below; the existing ordinal
+   estimated-weight intervals for DWLS.
+5. **Margins.** "Smallest" means an RMSE more than 10% (relative) below every
+   competitor, otherwise a tie; 90% coverage is flagged outside 87.5-92.5%,
+   with width and availability reported.
+6. **Shared setup.** Tier 1 is the representative basis held as data in
+   `experiments/_support`; misfit sizing, targets, arms and the judge belong to
+   the study.
+
+## The misspecification-robust Wald interval (to build)
+
+For likelihood estimators the sample discrepancy is a likelihood-ratio
+contrast against the saturated model, so by the envelope theorem its first-order
+influence under fixed misspecification uses casewise log-likelihoods at the two
+fitted points only:
+
+$$
+\hat F=\frac{2}{N}\sum_i\bigl(\ell_i^{\mathrm{sat}}-\ell_i^{H_0}\bigr),\qquad
+\widehat{\mathrm{Var}}_1(\hat F)=\frac{4}{N}\,\widehat{\mathrm{Var}}_i\bigl(\ell_i^{\mathrm{sat}}-\ell_i^{H_0}\bigr).
+$$
+
+This term vanishes at correct specification, where the second-order term
+$2\operatorname{tr}\bigl((\hat Q\hat\Gamma)^2\bigr)/N^2$ of the robust trace
+machinery dominates, so the candidate uses their sum. The interval is formed
+for $\sqrt{F}$ around the bias-corrected point and mapped to RMSEA, CFI and
+TLI (CFI and TLI by the delta method with the baseline discrepancy's own
+influence and their covariance), clipping at the parameter boundary. It is a
+lab-only candidate until the study decides.
+
+## Next steps
+
+1. Tier-1 basis as data in `experiments/_support`, with a proposed natural
+   misspecification per model (lane).
+2. The continuous misspecification-robust Wald interval for ML and FIML as a
+   lab function (lane).
+3. The decisions/09 harness: population construction and misfit sizing,
+   generators, MAR, targets, arms, per-draw outputs and a smoke run (lane).
+4. Criteria committed (planner, user review), pricing pilot, then production
+   on simbox with the user's go.
 
 ## Cost
 
