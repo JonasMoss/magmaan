@@ -637,7 +637,13 @@ reasons and attempted denominators. This is a harness with criteria pending;
 its smoke establishes end-to-end plumbing only. The 48-cell/240-draw pricing
 pilot passes after refining population targets from default estimates with
 tighter lab stopping controls and the unchanged library convergence verdict.
-Target diagnostics and separate preparation costs are retained; failed targets
+TASK-147 adds committed production configurations (768 ML, 1,536 FIML cells),
+explicit configuration/run/seed requirements and an exact approved-criteria guard.
+Production defaults to the fit_indices lane, supports up to 18 single-threaded
+workers and starts larger models/sample sizes first, preparing targets per work
+chunk. Atomic replication files and completion markers retain restart progress;
+criteria content joins the strict resume fingerprint. Production evidence remains
+pending approval. Target diagnostics and separate preparation costs are retained; failed targets
 remain explicit. Judged arms keep defaults; no default changes or coverage claim.
 
 ## Continuous lab fit-index Wald candidate (TASK-142)

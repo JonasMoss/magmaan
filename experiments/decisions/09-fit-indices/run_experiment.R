@@ -1,18 +1,18 @@
 #!/usr/bin/env Rscript
 args <- commandArgs(trailingOnly = TRUE)
 if ("--help" %in% args) {
-  cat("Fit-index harness (criteria pending; smoke/pricing only).\n",
-      "Rscript run_experiment.R --smoke|--pilot [--config cells.csv] [--cells id,id]\n",
-      "  --reps N          default 1 smoke, 5 pilot\n",
+  cat("Fit-index harness (production requires approved criteria).\n",
+      "Rscript run_experiment.R --smoke|--pilot|--production [--config cells.csv] [--cells id,id]\n",
+      "  --reps N          default 1 smoke, 5 pilot, 1000 production\n",
       "  --seed-base N     defaults 1450901 smoke, 1451901 pilot; distinct from production\n",
-      "  --workers N       1 or 2; single-threaded math\n",
+      "  --workers N       1 or 2 pricing; 1-18 production; single-threaded math\n",
       "  --run-id NAME     required for new runs; existing runs resume only with matching provenance\n",
-      "  --lane NAME       default pricing\n",
+      "  --lane NAME       default pricing; fit_indices for production\n",
       "Output: results/<lane>/<run-id>/{raw,summary.csv,timing.csv,targets.csv,metadata.csv}.\n",
       "Targets use population moments, or one fixed N=200000 draw for FIML MAR.\n",
       "Generators checked on N=1000000 independent draws. Integer discretized scores\n",
       "have their own score moments and targets; target_rmsea sizes the parent continuous population.\n",
-      "No decision/production mode exists until criteria and compute authorization.\n", sep = "")
+      "Production requires --config, --run-id and --seed-base, and an exact\n Status: approved line in criteria/fit_indices.md.\n  --criteria PATH    alternate criteria file (for isolated validation)\nSimbox (after approval, from this study directory; rerun to resume):\n  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 nice -n 10 Rscript run_experiment.R --production --config production/cells_ml.csv --run-id production-ml --seed-base 2026101001 --workers 18\n", sep = "")
   quit(status = 0)
 }
 file_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
@@ -29,17 +29,25 @@ option <- function(name, default = NULL) {
   if (position == length(args) || startsWith(args[position+1], "--")) stop("Missing --", name)
   args[position+1]
 }
-flags <- c("--smoke", "--pilot")
-value_flags <- paste0("--", c("config", "cells", "reps", "seed-base", "workers", "run-id", "lane"))
+flags <- c("--smoke", "--pilot", "--production")
+value_flags <- paste0("--", c("config", "cells", "reps", "seed-base", "workers", "run-id", "lane", "criteria"))
 if (any(!args[startsWith(args,"--")] %in% c(flags,value_flags))) stop("Unknown option")
-if (sum(flags %in% args) != 1) stop("Select --smoke or --pilot; criteria/production pending")
-mode <- if ("--smoke" %in% args) "smoke" else "pilot"
-reps <- as.integer(option("reps", if (mode == "smoke") "1" else "5"))
+if (sum(flags %in% args) != 1) stop("Select --smoke, --pilot or --production")
+mode <- if ("--production" %in% args) "production" else if ("--smoke" %in% args) "smoke" else "pilot"
+criteria <- NULL
+if (mode == "production") {
+  for (name in c("config", "run-id", "seed-base"))
+    if (is.null(option(name))) stop("Production requires --", name)
+  criteria <- normalizePath(option("criteria", file.path(leaf, "criteria", "fit_indices.md")), mustWork = TRUE)
+  if (!"Status: approved" %in% readLines(criteria, warn = FALSE))
+    stop("Production refused: criteria must contain the exact line Status: approved")
+} else if (!is.null(option("criteria"))) stop("--criteria is only valid with --production")
+reps <- as.integer(option("reps", if (mode == "production") "1000" else if (mode == "smoke") "1" else "5"))
 seed_base <- as.integer(option("seed-base", if (mode == "smoke") "1450901" else "1451901"))
 workers <- as.integer(option("workers", "1"))
-run_id <- option("run-id"); lane <- option("lane", "pricing")
+run_id <- option("run-id"); lane <- option("lane", if (mode == "production") "fit_indices" else "pricing")
 if (is.null(run_id) || !grepl("^[A-Za-z0-9_-]+$", run_id) || !grepl("^[A-Za-z0-9_-]+$",lane) ||
-    !is.finite(reps) || reps < 1 || !workers %in% 1:2 || !is.finite(seed_base) || seed_base < 1)
+    !is.finite(reps) || reps < 1 || !workers %in% seq_len(if (mode == "production") 18L else 2L) || !is.finite(seed_base) || seed_base < 1)
   stop("Invalid run arguments")
 config <- option("config")
 cells <- validate_config(if (is.null(config)) study_config(mode) else read.csv(config, na.strings = "NA", stringsAsFactors = FALSE, colClasses = c(cause = "character", missing_targets = "character")))
@@ -51,6 +59,12 @@ if (!is.null(filter)) {
   cells <- cells[cells$id %in% ids, ]
 }
 if (!nrow(cells)) stop("No cells selected")
+if (mode == "production") {
+  # Observed dimension is a results-independent proxy for model cost.
+  sizes <- vapply(cells$model, function(id) max(vapply(basis_model(id)$groups,
+    function(g) length(g$ov), 0L)), 0L)
+  cells <- cells[order(-sizes, -cells$N, cells$id), ]
+}
 out_dir <- file.path(leaf, "results", lane, run_id)
 dir.create(file.path(out_dir, "raw"), recursive = TRUE, showWarnings = FALSE)
 hash_object <- function(x) {
@@ -62,7 +76,8 @@ source_files <- c(list.files(file.path(leaf,"R"), full.names=TRUE),
 library_files <- unlist(lapply(c("magmaanlab","magmaan"), function(p)
   list.files(find.package(p), recursive=TRUE, full.names=TRUE, pattern="\\.(so|rdb)$")))
 fingerprint <- hash_object(list(source=tools::md5sum(source_files), library=tools::md5sum(library_files),
-  config=all_cells, seed_base=seed_base, mode=mode))
+  config=all_cells, seed_base=seed_base, mode=mode,
+  criteria=if (is.null(criteria)) NULL else unname(tools::md5sum(criteria))))
 manifest <- file.path(out_dir,"raw","manifest.rds")
 if (file.exists(manifest)) {
   if (!identical(readRDS(manifest),fingerprint)) stop("Resume refused: source/library/config/seed changed; use a fresh run-id")
@@ -72,7 +87,7 @@ metadata <- data.frame(key=c("git_head","dirty","library_build","library_hash","
   value=c(git_scalar(c("rev-parse","HEAD")),git_dirty(), packageDescription("magmaanlab")$Built,
     hash_object(tools::md5sum(library_files)),hash_object(tools::md5sum(source_files)),hash_object(all_cells),
     seed_base,mode,paste(commandArgs(),collapse=" "),R.version.string,
-    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"nlopt: ftol_rel=1e-14; xtol_rel=1e-12; max_eval=10000; start=default estimates","pending; engineering only"))
+    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"nlopt: ftol_rel=1e-14; xtol_rel=1e-12; max_eval=10000; start=default estimates",if (is.null(criteria)) "pending; engineering only" else paste(criteria, unname(tools::md5sum(criteria)))))
 if (!file.exists(file.path(out_dir,"metadata.csv"))) write_csv(metadata,file.path(out_dir,"metadata.csv"))
 write_csv(cells,file.path(out_dir,"cells.csv"))
 write_csv(do.call(rbind,lapply(unique(cells$estimator),function(e)
@@ -102,15 +117,17 @@ prepare <- function(cell) {
   calibration_cache_write(key, result, cache_dir); result
 }
 # Prepare serially so workers do not race on the same expensive cached target.
+# Production prepares each work chunk just before sampling, starting costly cells early.
 prepared <- vector("list",nrow(cells))
-for (i in seq_len(nrow(cells))) {
+prepare_cell <- function(i) {
   cat("Preparing",cells$id[i],"(",i,"/",nrow(cells),")\n"); flush.console()
-  prepared[[i]] <- tryCatch(prepare(as.list(cells[i,])),error=function(e) e)
+  prepared[[i]] <<- tryCatch(prepare(as.list(cells[i,])),error=function(e) e)
   if (inherits(prepared[[i]],"error")) {
     writeLines(conditionMessage(prepared[[i]]),file.path(out_dir,"raw",paste0(cells$id[i],"_setup_failure.txt")))
     stop("Cell setup failed: ", cells$id[i], ": ",conditionMessage(prepared[[i]]))
   }
 }
+if (mode != "production") for (i in seq_len(nrow(cells))) prepare_cell(i)
 run_cell <- function(i) {
   cell <- as.list(cells[i,]); context <- prepared[[i]]
   dir <- file.path(out_dir,"raw",cell$id); dir.create(dir,showWarnings=FALSE)
@@ -131,10 +148,14 @@ run_cell <- function(i) {
     result$seconds <- proc.time()[[3]]-started
     tmp <- paste0(path,".tmp"); saveRDS(result,tmp); file.rename(tmp,path)
   }
-  writeLines(as.character(reps),file.path(dir,"COMPLETE")); i
+  marker <- file.path(dir,"COMPLETE")
+  writeLines(as.character(reps),paste0(marker,".tmp"))
+  if (!file.rename(paste0(marker,".tmp"),marker)) stop("Could not save completion marker")
+  i
 }
 started <- proc.time()[[3]]
 for (chunk in split(seq_len(nrow(cells)),ceiling(seq_len(nrow(cells))/workers))) {
+  if (mode == "production") for (i in chunk) prepare_cell(i)
   answer <- parallel::mclapply(chunk,run_cell,mc.cores=workers,mc.preschedule=TRUE)
   if (any(vapply(answer,inherits,FALSE,"try-error"))) stop("Worker failed; inspect raw checkpoints")
   cat("Completed",paste(cells$id[chunk],collapse=", "),"elapsed",round(proc.time()[[3]]-started,1),"seconds\n")

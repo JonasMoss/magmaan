@@ -155,7 +155,9 @@ result under an unstated convention.
   and bounded pricing controls. Smoke and 48-cell/240-draw pricing pass; lab
   population targets use tighter stopping controls from default estimates, with
   the unchanged library verdict and retained diagnostics. Judged arms keep defaults.
-  Criteria and production remain with TASK-103.
+  TASK-147 adds the results-independent 2,304-cell production grid, approved-criteria
+  guard, cost-ordered work and resumable per-cell checkpoints (up to 18 workers).
+  Criteria approval and production authorization remain with TASK-103.
 
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML
   casewise likelihood influence plus saturated-coordinate second-order variance,
