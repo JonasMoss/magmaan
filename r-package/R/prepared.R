@@ -125,6 +125,10 @@ prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwis
 #' For categorical data full=TRUE also retains Gamma for existing post-fit
 #' inference functions. full=FALSE prepares only the diagonal needed by DWLS.
 #' Fixed weights use source-specific NT/empirical Gamma, or W in model moment order.
+#' Continuous diagonal W blocks are owning numeric vectors of weight entries
+#' (not square roots); full blocks remain matrices. W accepts either form,
+#' or a list of blocks. Native prepared handles are process-local; serialize
+#' W and prepare a new handle after loading it.
 #' @rdname prepared
 prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"), W = NULL, full = TRUE,
                            dls_a = 0.5) {

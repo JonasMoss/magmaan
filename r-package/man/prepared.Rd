@@ -85,6 +85,11 @@ bounds. Their general sampling/inference contract is not yet validated.
 Ordinal ML fits associations with Stage-1 thresholds held fixed; it does not
 provide Gaussian likelihood or generic post-fit sampling inference.
 
+Continuous diagonal weight blocks use owning numeric vectors of entries of
+W, not square roots; full blocks remain matrices. Supplied W accepts either
+form, or a list of blocks. Prepared native handles are process-local: serialize
+W and prepare a new handle after loading it.
+
 FIML retains its missingness pack but does not compute saturated H1 during
 estimation unless versioned fitting options require it. Categorical inference
 needs full Gamma; obtain it separately with

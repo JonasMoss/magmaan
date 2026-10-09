@@ -848,40 +848,45 @@ magmaan::estimate::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds
   return out;
 }
 
-// Parse R's matrix / list-of-matrices weight argument into dense blocks.
-// `prepare_weight` needs this dense form (it validates it and hands it back to
-// R); everything else wants the structured Weight from wls_from_arg below.
-std::vector<Eigen::MatrixXd> wls_dense_from_arg(SEXP W, std::size_t n_blocks) {
-  std::vector<Eigen::MatrixXd> weights;
-  weights.reserve(n_blocks);
-  if (Rf_isMatrix(W)) {
-    if (n_blocks != 1)
-      Rcpp::stop("magmaan: WLS weights must be a list of %d matrices for a %d-group model",
-                 static_cast<int>(n_blocks), static_cast<int>(n_blocks));
-    weights.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(W)));
-  } else if (TYPEOF(W) == VECSXP) {
-    Rcpp::List Wl(W);
-    if (static_cast<std::size_t>(Wl.size()) != n_blocks)
-      Rcpp::stop("magmaan: WLS weights list has length %d but the model has %d group(s)",
-                 static_cast<int>(Wl.size()), static_cast<int>(n_blocks));
-    for (R_xlen_t b = 0; b < Wl.size(); ++b)
-      weights.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wl[b])));
-  } else {
-    Rcpp::stop("magmaan: WLS weights must be a matrix or a list of matrices");
-  }
-  return weights;
-}
-
-// R supplies a genuinely dense Gamma-hat inverse, so Dense is the right
-// BlockWeight kind here; see internal.h for why the conversion is shared.
+// Structured continuous weights; categorical legacy stats explicitly request dense.
 magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
-  auto weight = dense_weight_or_stop(wls_dense_from_arg(W, n_blocks),
-                                     "magmaan: WLS weights");
+  magmaan::estimate::gmm::Weight weight;
+  if (TYPEOF(W) == VECSXP && !Rf_isMatrix(W)) {
+    Rcpp::List blocks(W);
+    if (static_cast<std::size_t>(blocks.size()) != n_blocks)
+      Rcpp::stop("magmaan: WLS weights list has length %d but the model has %d group(s)",
+                 static_cast<int>(blocks.size()), static_cast<int>(n_blocks));
+    for (R_xlen_t b = 0; b < blocks.size(); ++b)
+      weight.push_back(weight_block_or_stop(blocks[b], "magmaan: WLS weights"));
+  } else {
+    if (n_blocks != 1) Rcpp::stop("magmaan: WLS weights must be a list for a multi-group model");
+    weight.push_back(weight_block_or_stop(W, "magmaan: WLS weights"));
+  }
   Rcpp::RObject source(W);
   if (source.hasAttribute("cancels_measurement_units") &&
       Rcpp::as<bool>(source.attr("cancels_measurement_units")))
     for (auto& block : weight) block.set_cancels_measurement_units();
   return weight;
+}
+
+std::vector<Eigen::MatrixXd> wls_dense_from_arg(SEXP W, std::size_t n_blocks) {
+  std::vector<Eigen::MatrixXd> out;
+  const auto dense_block = [](SEXP x) -> Eigen::MatrixXd {
+    // Legacy categorical stats retain supplied full matrices exactly.
+    if (Rf_isMatrix(x)) return Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(x));
+    return weight_block_or_stop(x, "magmaan: WLS weights").to_dense();
+  };
+  if (TYPEOF(W) == VECSXP && !Rf_isMatrix(W)) {
+    Rcpp::List blocks(W);
+    if (static_cast<std::size_t>(blocks.size()) != n_blocks)
+      Rcpp::stop("magmaan: WLS weights list has length %d but the model has %d group(s)",
+                 static_cast<int>(blocks.size()), static_cast<int>(n_blocks));
+    for (R_xlen_t b = 0; b < blocks.size(); ++b) out.push_back(dense_block(blocks[b]));
+  } else {
+    if (n_blocks != 1) Rcpp::stop("magmaan: WLS weights must be a list for a multi-group model");
+    out.push_back(dense_block(W));
+  }
+  return out;
 }
 
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
@@ -1506,8 +1511,21 @@ SEXP fitting_weight_arg(Rcpp::List fit, SEXP weight, std::size_t n_blocks,
                         const char* call) {
   if (!fit.containsElementNamed("W") || Rf_isNull(fit["W"])) return weight;
   if (Rf_isNull(weight)) return fit["W"];
-  const auto given = wls_dense_from_arg(weight, n_blocks);
-  const auto recorded = wls_dense_from_arg(fit["W"], n_blocks);
+  const auto given_weight = wls_from_arg(weight, n_blocks);
+  const auto recorded_weight = wls_from_arg(fit["W"], n_blocks);
+  // Compare diagonals in O(q); full-weight comparisons retain their old norm.
+  std::vector<Eigen::MatrixXd> given, recorded;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const bool diagonal = given_weight[b].kind() == magmaan::estimate::gmm::BlockWeight::Kind::Diagonal &&
+                          recorded_weight[b].kind() == magmaan::estimate::gmm::BlockWeight::Kind::Diagonal;
+    if (diagonal) {
+      given.emplace_back(given_weight[b].diagonal_values());
+      recorded.emplace_back(recorded_weight[b].diagonal_values());
+    } else {
+      given.push_back(given_weight[b].to_dense());
+      recorded.push_back(recorded_weight[b].to_dense());
+    }
+  }
   double cross = 0.0;
   double norm2 = 0.0;
   bool same_shape = true;

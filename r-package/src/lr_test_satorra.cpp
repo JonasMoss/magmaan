@@ -18,7 +18,7 @@
 #include <Rcpp.h>
 #include <RcppEigen.h>
 
-#include "internal.h"
+#include "glue_internal.h"
 #include "ntml_snapshot.h"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
@@ -245,33 +245,7 @@ magmaan::estimate::gmm::Weight continuous_ls_weight_from_arg(
     Rcpp::stop("magmaan: continuous WLS nested tests require the explicit "
                "fitting `weight`");
   }
-  // Collected dense first, then converted in one place (internal.h). The
-  // wording below is this entry point's own and deliberately not shared.
-  std::vector<Eigen::MatrixXd> out;
-  const std::size_t n_blocks = ctx.samp.S.size();
-  out.reserve(n_blocks);
-  if (Rf_isMatrix(weight)) {
-    if (n_blocks != 1) {
-      Rcpp::stop("magmaan: WLS weights must be a list of %d matrices for a "
-                 "multi-group model", static_cast<int>(n_blocks));
-    }
-    out.push_back(
-        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(weight)));
-  } else if (TYPEOF(weight) == VECSXP) {
-    Rcpp::List weights(weight);
-    if (static_cast<std::size_t>(weights.size()) != n_blocks) {
-      Rcpp::stop("magmaan: WLS weights list has length %d but the model has "
-                 "%d group(s)", static_cast<int>(weights.size()),
-                 static_cast<int>(n_blocks));
-    }
-    for (R_xlen_t b = 0; b < weights.size(); ++b) {
-      out.push_back(Rcpp::as<Eigen::MatrixXd>(
-          Rcpp::NumericMatrix(weights[b])));
-    }
-  } else {
-    Rcpp::stop("magmaan: WLS `weight` must be a matrix or list of matrices");
-  }
-  return magmaanr::dense_weight_or_stop(out, "magmaan: WLS `weight`");
+  return magmaanr::fitglue::wls_from_arg(weight, ctx.samp.S.size());
 }
 
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {

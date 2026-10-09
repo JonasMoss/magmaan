@@ -164,9 +164,7 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
                   SEXP model_ptr, double dls_a) {
   const auto& d = get<Data>(data_ptr, "magmaan_prepared_data");
   Weight w; w.method = method;
-  // Dense per-block W for the R-visible return. Stays empty on the ordinal /
-  // mixed paths, which is what `Rcpp::wrap` saw before too (an empty list).
-  std::vector<Eigen::MatrixXd> W_dense;
+  Rcpp::List W_blocks;
   if (method != "DWLS" && method != "WLS" && method != "ULS" && method != "GLS" && method != "DLS")
     Rcpp::stop("magmaan: weight method must be ULS, GLS, DWLS, WLS or DLS");
   if (d.kind == "ordinal" || d.kind == "mixed") {
@@ -223,7 +221,7 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
   } else if (d.kind == "moments") {
     if (!Rf_isNull(W)) {
       if (method != "WLS" && method != "DWLS") Rcpp::stop("magmaan: custom W requires WLS or DWLS");
-      W_dense = wls_dense_from_arg(W, d.sample.S.size());
+      w.continuous = wls_from_arg(W, d.sample.S.size());
     } else {
       if (d.raw.X.empty() && method != "ULS" && method != "GLS")
         Rcpp::stop("magmaan: empirical weights require raw data or explicit W");
@@ -237,22 +235,35 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
           {.a = dls_a});
       if (!metric) stop_fit(metric.error());
       w.continuous = std::move(*metric);
-      for (const auto& block : w.continuous) W_dense.push_back(block.to_dense());
     }
-    if (W_dense.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
-    for (std::size_t b = 0; b < W_dense.size(); ++b) {
+    if (w.continuous.size() != d.sample.S.size()) Rcpp::stop("magmaan: weight block count mismatch");
+    W_blocks = Rcpp::List(w.continuous.size());
+    for (std::size_t b = 0; b < w.continuous.size(); ++b) {
       const auto p = d.sample.S[b].rows();
       const auto q = p * (p + 1) / 2 + (d.meanstructure ? p : 0);
-      if (W_dense[b].rows() != q || W_dense[b].cols() != q || !W_dense[b].allFinite() ||
-          !W_dense[b].isApprox(W_dense[b].transpose()))
+      const auto& block = w.continuous[b];
+      if (!block.valid(q))
         Rcpp::stop("magmaan: W must be finite, symmetric and match the moment dimensions");
-      Eigen::LLT<Eigen::MatrixXd> llt(W_dense[b]);
-      if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: W must be positive definite");
+      if (block.kind() == estimate::gmm::BlockWeight::Kind::Diagonal) {
+        if ((block.diagonal_values().array() <= 0.0).any())
+          Rcpp::stop("magmaan: W must be positive definite");
+        W_blocks[b] = weight_block_to_r(block);
+      } else {
+        Eigen::MatrixXd dense;
+        if (!Rf_isNull(W)) {
+          SEXP supplied = TYPEOF(W) == VECSXP ? static_cast<SEXP>(Rcpp::List(W)[b]) : W;
+          dense = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(supplied));
+        } else dense = block.to_dense();
+        if (!dense.isApprox(dense.transpose()))
+          Rcpp::stop("magmaan: W must be finite, symmetric and match the moment dimensions");
+        Eigen::LLT<Eigen::MatrixXd> llt(dense);
+        if (llt.info() != Eigen::Success) Rcpp::stop("magmaan: W must be positive definite");
+        W_blocks[b] = Rcpp::wrap(dense);
+      }
     }
-    if (!Rf_isNull(W)) w.continuous = dense_weight_or_stop(W_dense, "magmaan: prepare_weight W");
   } else Rcpp::stop("magmaan: weights require moment data");
   // Keep the dataset alive and reject accidentally reusing its weight elsewhere.
-  Rcpp::List out = Rcpp::List::create(Rcpp::_["W"] = Rcpp::wrap(W_dense));
+  Rcpp::List out = Rcpp::List::create(Rcpp::_["W"] = W_blocks);
   if (d.kind == "ordinal") out["stats"] = ordinal_stats_to_r(w.ordinal);
   if (d.kind == "mixed") out["stats"] = mixed_ordinal_stats_to_r(w.mixed);
   Rcpp::RObject ptr(handle(std::move(w), "magmaan_prepared_weight"));

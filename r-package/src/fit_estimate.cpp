@@ -348,9 +348,9 @@ Rcpp::List fixed_moment_weight_impl(SEXP partable, Rcpp::List sample_stats,
       start_values_or_stop(ctx, starts, "simple"), ordinal_stage2_weight_from_string(method),
       raw ? &*raw : nullptr, {.a = dls_a});
   if (!weight) stop_fit(weight.error());
-  std::vector<Eigen::MatrixXd> blocks;
-  for (const auto& block : *weight) blocks.push_back(block.to_dense());
-  Rcpp::List weights = Rcpp::wrap(blocks);
+  Rcpp::List weights(weight->size());
+  for (std::size_t b = 0; b < weight->size(); ++b)
+    weights[b] = weight_block_to_r((*weight)[b]);
   weights.attr("cancels_measurement_units") =
       std::all_of(weight->begin(), weight->end(), [](const auto& block) {
         return block.cancels_measurement_units();

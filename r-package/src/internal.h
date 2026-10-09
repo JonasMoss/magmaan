@@ -1353,28 +1353,40 @@ profile_lrt_to_list(const magmaan::estimate::WeightedProfileLRTResult& r) {
 
 // --- moment-weight boundary ------------------------------------------------
 //
-// `gmm::Weight` is `std::vector<gmm::BlockWeight>`, a *structured* per-block
-// weight (Identity / Diagonal / Dense / NormalTheory) that stores only a factor
-// and never materializes the q x q form on a gradient path. R hands us bare
-// dense matrices and expects bare dense matrices back, so the two conversions
-// live here rather than being open-coded per call site — they were previously
-// duplicated in the fit_*.cpp glue and lr_test_satorra.cpp, which is why retyping
-// `gmm::Weight` broke both.
-//
-// Only the *type* knowledge is shared. Argument validation and its wording stay
-// at each call site, because the R-visible error messages differ by entry point
-// and are part of that surface.
-
-// Dense per-block matrices -> Weight. `gmm::dense_weight` rejects a block that
-// is not square / finite / symmetric PSD; that check used to happen later inside
-// `gmm::residuals`, so this only moves the same failure earlier with a clearer
-// message.
-inline magmaan::estimate::gmm::Weight dense_weight_or_stop(
-    const std::vector<Eigen::MatrixXd>& blocks, const char* what) {
-  auto w = magmaan::estimate::gmm::dense_weight(
-      blocks, magmaan::FitError::Kind::NumericIssue, what);
-  if (!w.has_value()) Rcpp::stop("%s", w.error().detail.c_str());
+// Numeric vectors carry diag(W), never a whitening factor. Matrices carry W.
+// Copies own their storage; no Eigen view survives the R boundary.
+inline magmaan::estimate::gmm::BlockWeight weight_block_or_stop(SEXP x,
+                                                               const char* what) {
+  using magmaan::estimate::gmm::BlockWeight;
+  if (!Rf_isMatrix(x) && (TYPEOF(x) == REALSXP || TYPEOF(x) == INTSXP)) {
+    const auto d = Rcpp::as<Eigen::VectorXd>(Rcpp::as<Rcpp::NumericVector>(x));
+    if (!d.allFinite() || (d.array() < 0.0).any())
+      Rcpp::stop("%s: diagonal weights must be finite and non-negative", what);
+    return BlockWeight::diagonal(d);
+  }
+  if (!Rf_isMatrix(x)) Rcpp::stop("%s: expected a matrix or numeric diagonal", what);
+  const auto m = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(x));
+  if (m.rows() == m.cols()) {
+    bool diagonal = true;
+    for (Eigen::Index j = 0; j < m.cols(); ++j)
+      for (Eigen::Index i = 0; i < m.rows(); ++i)
+        if (i != j && m(i, j) != 0.0) diagonal = false;
+    if (diagonal) {
+      const Eigen::VectorXd d = m.diagonal();
+      if (d.allFinite() && (d.array() >= 0.0).all()) return BlockWeight::diagonal(d);
+      // Preserve Dense's existing numeric policy for supplied matrices, including
+      // its roundoff-negative PSD fallback. Do not redefine it in this adapter.
+    }
+  }
+  auto w = BlockWeight::dense(m, magmaan::FitError::Kind::NumericIssue, what);
+  if (!w) Rcpp::stop("%s", w.error().detail.c_str());
   return std::move(*w);
+}
+
+inline SEXP weight_block_to_r(const magmaan::estimate::gmm::BlockWeight& w) {
+  if (w.kind() == magmaan::estimate::gmm::BlockWeight::Kind::Diagonal)
+    return Rcpp::wrap(w.diagonal_values());
+  return Rcpp::wrap(w.to_dense());
 }
 
 // Per-block dense matrices -> R, with the same one-block-unwraps convention.
@@ -1388,13 +1400,12 @@ inline SEXP dense_blocks_to_r(const std::vector<Eigen::MatrixXd>& blocks) {
   return out;
 }
 
-// Weight -> R. `to_dense()` is the documented non-hot-path accessor. A single
-// block unwraps to a bare matrix, matching the shape R callers already get.
+// Weight -> owning R vectors for Diagonal, matrices otherwise. One block unwraps.
 inline SEXP weight_to_r_dense(const magmaan::estimate::gmm::Weight& W) {
-  if (W.size() == 1) return Rcpp::wrap(W[0].to_dense());
+  if (W.size() == 1) return weight_block_to_r(W[0]);
   Rcpp::List out(static_cast<R_xlen_t>(W.size()));
   for (std::size_t b = 0; b < W.size(); ++b) {
-    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap(W[b].to_dense());
+    out[static_cast<R_xlen_t>(b)] = weight_block_to_r(W[b]);
   }
   return out;
 }

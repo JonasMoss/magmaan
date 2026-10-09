@@ -2883,6 +2883,10 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     } else if (!is.null(data$pi_hat) && !is.null(data$n_pair)) pairwise_stats <- data
     else stop("fit_model(): pairwise fitting needs raw data or pairwise moment provenance")
   } else if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
+  if (!is.null(W)) {
+    W <- .compact_moment_weight(W)
+    if ("W" %in% names(route_args)) route_args$W <- W
+  }
   computational <- if (estimator %in% c("DWLS", "DLS")) "WLS" else estimator
   if (estimator %in% c("DWLS", "WLS", "DLS") && is.null(W)) {
     W <- fixed_moment_weight_impl(partable_arg(spec), sample_stats_arg(data), estimator,

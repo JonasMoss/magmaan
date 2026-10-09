@@ -1191,8 +1191,12 @@ ordinary-user default.
 
 ### Continuous moment-quadratic weight follow-ups
 
-- [ ] **M — preserve DWLS diagonals through R.** Stop transporting them as
-  Dense. **Check:** unchanged fit/covariance with reduced storage. Consolidate
+- [x] **M — preserve DWLS diagonals through R (TASK-114).** Owning numeric
+  W diagonals survive Rcpp dispatch and continuous-fit serialization/replay;
+  exact diagonal matrices remain accepted, full weights keep off-diagonals.
+  Grouped/mean-structure fit and same-point fixed-weight covariance gates pass;
+  210-moment setup probes confirm O(q) storage (see R-binding capabilities).
+  Consolidate
   `WhitenFactor`/`BlockWeight` only after documenting weight-versus-factor and
   numeric-policy contracts. See the roadmap's continuous-weight implementation.
 

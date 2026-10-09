@@ -1,3 +1,10 @@
+# magmaanlab (development)
+
+- Continuous DWLS weight blocks now retain numeric diagonal entries through
+  native preparation, fitting and saved-fit replay. Supplied W accepts numeric
+  diagonals or matrices (and grouped lists); full weights keep their matrices.
+  Weight entries are W, not whitening factors; inference recipes are unchanged.
+
 # magmaanlab 0.2.1
 
 - Nested tests now refuse `boundary_nesting` only when a required tangent

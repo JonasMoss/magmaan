@@ -8,14 +8,31 @@
 .fixed_weight_options <- function(method, W = NULL, dls_a = 0.5) {
   if (!is.null(W) && !method %in% c("WLS", "DWLS")) stop("supplied W requires WLS or DWLS")
   if (method == "DWLS" && !is.null(W)) {
-    blocks <- if (is.matrix(W)) list(W) else W
+    blocks <- if (is.numeric(W)) list(W) else W
     if (!is.list(blocks) || any(vapply(blocks, function(x)
-      !is.matrix(x) || nrow(x) != ncol(x) || any(x[row(x) != col(x)] != 0), logical(1))))
+      if (is.matrix(x)) nrow(x) != ncol(x) || any(x[row(x) != col(x)] != 0) else !is.numeric(x), logical(1))))
       stop("DWLS requires diagonal W")
   }
   if (method == "DLS" && (!is.numeric(dls_a) || length(dls_a) != 1L ||
       !is.finite(dls_a) || dls_a < 0 || dls_a > 1)) stop("dls_a must be finite and in [0, 1]")
   invisible(NULL)
+}
+
+# Preserve exact diagonal weight entries in saved continuous fit metadata.
+.compact_moment_weight <- function(W) {
+  compact <- function(x) {
+    if (!is.matrix(x) || nrow(x) != ncol(x) ||
+        !all(is.finite(x)) || any(diag(x) < 0) ||
+        !all(x[row(x) != col(x)] == 0)) return(x)
+    out <- diag(x)
+    marker <- attr(x, "cancels_measurement_units", exact = TRUE)
+    if (!is.null(marker)) attr(out, "cancels_measurement_units") <- marker
+    out
+  }
+  if (!is.list(W)) return(compact(W))
+  out <- lapply(W, compact)
+  attributes(out) <- attributes(W)
+  out
 }
 
 .covariance_options <- function(covariance, psd = FALSE, psd_supplied = FALSE, barrier = NULL) {

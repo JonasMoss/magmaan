@@ -24,6 +24,22 @@
   reduces recompilation after a topic-only edit, while increasing cold-build
   work because each translation unit parses the shared headers.
 
+- **Continuous diagonal weight storage (TASK-114):** generated DWLS weights,
+  supplied numeric diagonals and exactly diagonal matrices cross the Rcpp
+  boundary as owning `BlockWeight::Diagonal` values. R weight blocks and
+  continuous-fit replay metadata retain numeric entries of W, not whitening
+  factors; full matrices keep their off-diagonals and Dense dispatch. Prepared
+  handles remain process-local: serialize the owning W blocks and rebuild a
+  handle after loading. Recipes and estimated-weight inference refusals are
+  unchanged. Grouped/mean-structure binding checks cover fit and same-point
+  fixed-weight covariance parity, input mutation and serialized-W replay.
+  A 210-moment workstation probe retained 420 native diagonal scalars versus
+  44,100 dense-factor scalars, with zero observed objective/gradient/covariance
+  differences. R inputs used 1,728 versus 353,016 bytes; 200 prepared-weight
+  constructions took 0.017 s from vectors versus 0.195 s from diagonal matrices.
+  Native construction alone (100 repetitions) took 0.11 versus 81.22 ms;
+  these bounded setup measurements are not end-to-end fitting benchmarks.
+
 - **Prepared R interface:** `prepare_model`, `prepare_data`, `prepare_weight`
   and `estimate` retain separate, immutable process-local native handles for
   continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS.
