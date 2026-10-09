@@ -112,3 +112,66 @@ The positive-definiteness gate catches exactly the genuinely-degenerate cases
 regardless of cause; it flags **5** Newsom models: `ex14_4a`, `ex14_4b`,
 `ex7_5a` (FIML pattern-mixture / dropout) plus `ex3_7g` and `ex5_3` (collinear
 listwise covariance).
+
+## 3. Second-edition ex6.1c: recoverable finite local minima
+
+TASK-140 re-evaluated the TASK-138 endpoints with the read-only lane-a
+`magmaanlab 0.2.0` build (source `8b4f180c`, lavaan 0.7.2, N = 5,335).
+The model is generically identified (45/45). Each estimator received one PORT
+continuation from its lowest-objective retained endpoint (5,000 iterations /
+20,000 evaluations), plus one canonical `frontier_fit_sphere()` PORT fit
+(2,000 iterations / 8,000 evaluations, default polishing). The bounded probes
+completed within the 15-minute allowance. No library or corpus inputs changed.
+
+| Estimator / endpoint | Objective | Reduced gradient infinity norm | Three smallest Hessian eigenvalues | Admissible | Largest absolute parameter |
+|---|---:|---:|---|---|---:|
+| ML / retained PORT | 0.09091966926 | 13.90 | 1.877e-7, 562.5, 603.1 | no | 341.06 |
+| ML / retained L-BFGS | 0.09092194976 | 0.003396 | 5.427e-4, 561.9, 602.6 | no | 6.837 |
+| ML / PORT continuation | 0.09091966926 | 13.90 | 1.918e-7, 562.5, 603.1 | no | 341.06 |
+| ML / sphere | 0.09002994972 | 0.02284 | 1.062, 2.114, 7.360 | yes | 3.759 |
+| GLS / retained PORT | 0.08513800244 | 1.829e7 | -1543, -585.5, -46.66 | yes | 2192.48 |
+| GLS / retained L-BFGS | 0.08472941947 | 1.220 | -0.003576, 0.06424, 0.4598 | no | 18.641 |
+| GLS / PORT continuation | 0.08428706355 | 2.646 | 5.056e-8, 458.0, 542.0 | no | 328.85 |
+| GLS / sphere | 0.08394354034 | 0.003651 | 1.052, 3.129, 7.521 | yes | 3.594 |
+
+Derivative columns are the analytic `retain_newton_artifacts` reduced gradient
+and Hessian at identical caller-coordinate points, in the library's retained
+audit scaling; they are not the optimizer's gradient tolerance or
+coordinate-invariant eigenvalues. Smallest-eigenvector loadings are mapped
+back with `derivative_basis`. For retained ML and its continuation, that
+vector is dominated by `cesdna2 ~~ cesdna2` (absolute coefficient about 1)
+and `etana ~~ etana` (0.0278); the continuation retains their values 341.06
+and -9.474. GLS continuation has the analogous `cesdna4` residual-variance /
+`etana` direction (1 and 0.0278), with values 328.85 and -9.130. Retained GLS
+PORT's most negative direction instead mixes `etapa =~ cesdpa3` (0.351)
+and the repeated `eta* =~ cesdso*` loading (0.262 per row); GLS L-BFGS mixes
+`etana =~ cesdna4` (0.751) and `etana =~ cesdna3` (0.610). At both sphere
+endpoints the softest direction mixes finite `etana` loadings, chiefly
+`cesdna4` and `cesdna5` (ML: 0.744 / 0.544; GLS: 0.783 / 0.483).
+
+**Classification:** recoverable search/coordinate failure with certified
+finite, interior local minima for both objectives. Sphere ML and GLS pass
+objective consistency, identification and ambient stationarity; Newton
+distances are 2.733e-5 and 1.905e-5 against budget 0.01. All variances are
+positive (ML range 0.002423–0.22736; GLS 0.002769–0.21860). The retained
+paths show severe ill-conditioning and variance cancellation: ML continuation
+makes no meaningful progress; GLS lowers its objective while moving to large
+oppositely signed variances. These paths do not establish nonattainment,
+since sphere finds lower-objective finite admissible endpoints with positive
+reduced curvature. Global optimality is unproved. Shared default lavaan
+nonconvergence is therefore not evidence of an evaluator defect or an
+unattainable optimum. Scratch measurements and raw fits are retained under
+`~/.cache/magmaan-logs/task-140/`.
+
+## 4. Second-edition ex8.5c: structural rotation gauge
+
+TASK-138 finds structural rank 18/19 (27 moments), with one rotation gauge
+between `lin` and `nonlin` and no deficit directions. Magmaan refuses to
+certify even the admissible ML PORT endpoint whose Newton distance is
+1.523e-5 against budget 0.01: identification fails despite passed
+stationarity. Fresh lavaan ML and GLS defaults report convergence but warn
+that the information matrix cannot be inverted and the model may be
+unidentified. This is a model identification problem; impose independent
+loading restrictions and recheck identification before treating it as an
+optimizer failure. TASK-138's raw identification and endpoint records are
+retained under `~/.cache/magmaan-logs/task-138/`.
