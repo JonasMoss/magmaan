@@ -164,3 +164,38 @@ test_that('ML2S-NT composes its profile while reporting the missing residual ada
   expect_true(all(is.finite(got$estimate[got$index %in% c('rmsea','cfi','tli')])))
   expect_match(got$reason[got$index=='srmr'],'ML2S Stage-2 residual influence')
 })
+
+
+test_that('continuous policy corrections are invariant to location and units', {
+  for (groups in 1:2) for (route in c('covariance','means','fiml')) {
+    d <- policy_data(500L)
+    if (route == 'fiml') d$x2[seq(3,500,by=7)] <- NA_real_
+    if (groups == 2) d <- rbind(transform(d,group='A'),transform(d,group='B'))
+    spec <- model_spec(policy_cfa,meanstructure=route!='covariance',
+      group=if(groups==2) 'group' else NULL,
+      group_labels=if(groups==2) c('A','B') else NULL)
+    fit <- fit_model(spec,d,estimator=if(route=='fiml') 'FIML' else 'ML')
+    original <- policy_fit_measures(fit)
+    for (scale in c(1,2)) {
+      transformed <- d
+      transformed[1:4] <- lapply(d[1:4],function(x) scale*x+10)
+      # Evaluate the exactly transformed fitted point: a refit also tests the
+      # optimizer's separate finite-accuracy stopping behavior.
+      mapped <- fit_model(spec,transformed,estimator=if(route=='fiml') 'FIML' else 'ML')
+      mapped$theta <- fit$theta
+      pt <- fit$partable
+      for (r in which(pt$free > 0)) {
+        j <- pt$free[r]
+        if (pt$op[r] == '~~') mapped$theta[j] <- scale^2*fit$theta[j]
+        if (pt$op[r] == '~1' && pt$lhs[r] %in% names(d)[1:4])
+          mapped$theta[j] <- scale*fit$theta[j]+10
+      }
+      got <- policy_fit_measures(mapped)
+      expect_true(all(is.na(got$reason)))
+      expect_equal(got$estimate[1:3],original$estimate[1:3],tolerance=1e-8)
+      for (model in c('user','baseline')) for (field in c('trace','corrected'))
+        expect_equal(attr(got,'details')[[model]][[field]],
+          attr(original,'details')[[model]][[field]],tolerance=1e-8)
+    }
+  }
+})

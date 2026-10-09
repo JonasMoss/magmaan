@@ -1,5 +1,11 @@
 # magmaanlab (development)
 
+- Fixed covariance-only complete-data ML policy fit measures in the lab: score
+  rows now use profiled group means, so shifting observations does not change
+  the Takeuchi correction. Ordinary magmaan fits always include mean structure
+  and were unaffected. Fit-measure saturated EM moments now use a tighter
+  tolerance to preserve unit invariance of the FIML trace correction.
+
 - Continuous DWLS weight blocks now retain numeric diagonal entries through
   native preparation, fitting and saved-fit replay. Supplied W accepts numeric
   diagonals or matrices (and grouped lists); full weights keep their matrices.

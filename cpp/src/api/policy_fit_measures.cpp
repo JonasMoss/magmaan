@@ -106,7 +106,12 @@ post_expected<ContinuousParts> continuous_parts(spec::LatentStructure pt,
     auto v = robust::frontier::ntml_observed_covariance(**fit);
     if (!h) return std::unexpected(h.error());
     if (!v) return std::unexpected(v.error());
-    auto scores = estimate::fiml::fiml_casewise_deviance_scores(pt, rep, raw, pack, est);
+    // Covariance-only ML profiles group means; its score residuals must use
+    // those same means rather than treating the raw observations as mean zero.
+    auto score_raw = raw;
+    if (!means) for (std::size_t b = 0; b < score_raw.X.size(); ++b)
+      score_raw.X[b].rowwise() -= saturated.mu[b].transpose();
+    auto scores = estimate::fiml::fiml_casewise_deviance_scores(pt, rep, score_raw, pack, est);
     if (!scores) return std::unexpected(scores.error());
     Eigen::MatrixXd likelihood_scores = -0.5 * *scores;
     model_trace = (likelihood_scores.transpose() * likelihood_scores * **v).trace();
@@ -228,7 +233,11 @@ PolicyFitMeasures policy_fit_measures(spec::LatentStructure pt,
   if (raw.X.empty()) return fail("fit measures require raw observations");
   auto pack = estimate::fiml::fiml_pack(raw);
   if (!pack) return fail(pack.error().detail);
-  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack);
+  // Trace corrections need tighter H1 accuracy than fitting starts: an
+  // absolute EM stop at 1e-5 otherwise changes them when units are rescaled.
+  estimate::fiml::FIMLH1Options h1_options;
+  h1_options.parameter_tol = 1e-10;
+  auto h1 = estimate::fiml::fiml_h1_moments(raw, *pack, h1_options);
   if (!h1) return fail(h1.error().detail);
   model::ImpliedMoments sat{h1->sigma, h1->mu};
   // Include all unrestricted means in the saturated Takeuchi trace. The

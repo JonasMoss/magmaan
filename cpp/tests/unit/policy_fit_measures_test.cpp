@@ -24,16 +24,18 @@ data::RawData rows(int n = 256) {
   }
   return raw;
 }
-api::Fit fitted(const data::RawData& raw, bool fiml = false, bool uls = false) {
+api::Fit fitted(const data::RawData& raw, bool fiml = false, bool uls = false, bool means = false) {
   api::ModelOptions opts;
-  opts.build.meanstructure = fiml;
+  opts.build.meanstructure = fiml || means;
   opts.build.fixed_x = false;
   opts.build.n_groups = static_cast<int>(raw.X.size());
   auto model = api::model_from_lavaan("f =~ x1 + x2 + x3 + x4", opts);
   REQUIRE(model);
-  auto sample = data::sample_stats_from_raw(raw);
+  auto complete = raw;
+  complete.mask.clear();
+  auto sample = data::sample_stats_from_raw(complete);
   REQUIRE(sample);
-  if (!fiml) sample->mean.clear();
+  if (!fiml && !means) sample->mean.clear();
   auto d = fiml ? api::data_from_raw(*model, raw) : api::data_from_sample_stats(*model, *sample);
   REQUIRE(d);
   auto fit = api::fit(*model, *d, uls ? api::uls() : fiml ? api::fiml() : api::ml());
@@ -140,4 +142,66 @@ TEST_CASE("policy fit measures: saturated ML has per-index reasons") {
   CHECK(index(out,"tli").reason == api::InferenceReason::Saturated);
   CHECK(index(out,"cfi").reason == api::InferenceReason::Available);
   CHECK(index(out,"cfi").estimate == doctest::Approx(1.0));
+}
+
+TEST_CASE("policy fit measures: covariance-only ML profiles shifted group means") {
+  using namespace magmaan;
+  for (int groups : {1, 2}) {
+    auto raw = rows();
+    if (groups == 2) raw.X.push_back(raw.X[0]);
+    auto fit = fitted(raw);
+    auto shifted = raw;
+    for (auto& x : shifted.X) x.array() += 10.0;
+    const auto& m = fit.model();
+    auto a = api::policy_fit_measures(m.structure(), m.matrix_rep(), raw, fit.estimates(), {});
+    auto b = api::policy_fit_measures(m.structure(), m.matrix_rep(), shifted, fit.estimates(), {});
+    for (auto name : {"rmsea", "cfi", "tli"}) {
+      REQUIRE(index(a,name).reason == api::InferenceReason::Available);
+      REQUIRE(index(b,name).reason == api::InferenceReason::Available);
+      CHECK(index(a,name).estimate == doctest::Approx(index(b,name).estimate).epsilon(1e-8));
+    }
+    CHECK(a.user.trace == doctest::Approx(b.user.trace).epsilon(1e-8));
+    CHECK(a.baseline.trace == doctest::Approx(b.baseline.trace).epsilon(1e-8));
+    CHECK(a.user.corrected == doctest::Approx(b.user.corrected).epsilon(1e-8));
+  }
+}
+
+TEST_CASE("policy fit measures: continuous affine invariance at transformed fitted points") {
+  using namespace magmaan;
+  for (int groups : {1, 2}) for (int route : {0, 1, 2}) {
+    auto raw = rows(500);
+    const bool fiml = route == 2, means = route != 0;
+    if (fiml) {
+      raw.mask.emplace_back(Eigen::Matrix<std::uint8_t,Eigen::Dynamic,Eigen::Dynamic>::Ones(500,4));
+      for (int r = 2; r < 500; r += 7) raw.mask[0](r,1) = 0;
+    }
+    if (groups == 2) {
+      raw.X.push_back(raw.X[0]);
+      if (fiml) raw.mask.push_back(raw.mask[0]);
+    }
+    auto f = fitted(raw, fiml, false, means);
+    const auto& m = f.model();
+    auto a = api::policy_fit_measures(m.structure(),m.matrix_rep(),raw,f.estimates(),{},fiml);
+    for (double scale : {1.0, 2.0}) {
+      auto transformed = raw;
+      for (auto& x : transformed.X) x = (scale*x.array()+10.0).matrix();
+      auto est = f.estimates();
+      for (std::size_t r = 0; r < m.structure().free.size(); ++r) {
+        if (m.structure().free[r] <= 0) continue;
+        const auto& cell = m.matrix_rep().cell_for_row[r];
+        auto& value = est.theta(m.structure().free[r]-1);
+        if (cell.mat == model::MatId::Theta || cell.mat == model::MatId::Psi) value *= scale*scale;
+        else if (cell.mat == model::MatId::Nu) value = scale*value+10.0;
+      }
+      auto b = api::policy_fit_measures(m.structure(),m.matrix_rep(),transformed,est,{},fiml);
+      for (auto name : {"rmsea", "cfi", "tli"}) {
+        REQUIRE_MESSAGE(index(b,name).reason == api::InferenceReason::Available,index(b,name).detail);
+        CHECK(index(a,name).estimate == doctest::Approx(index(b,name).estimate).epsilon(1e-8));
+      }
+      CHECK(a.user.trace == doctest::Approx(b.user.trace).epsilon(1e-8));
+      CHECK(a.baseline.trace == doctest::Approx(b.baseline.trace).epsilon(1e-8));
+      CHECK(a.user.corrected == doctest::Approx(b.user.corrected).epsilon(1e-8));
+      CHECK(a.baseline.corrected == doctest::Approx(b.baseline.corrected).epsilon(1e-8));
+    }
+  }
 }
