@@ -335,6 +335,13 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: equality-constrained models, which refuse the std.lv start
+transport, now build their automatic native fallback start in normalized
+sample units and map it back, so the simple constructor's latent-variance
+constants scale with the data (a normalizer refusal keeps the plain fallback).
+Three retained x0.01 barrier failures from decisions/02 now certify; native and
+x100 controls are unchanged (TASK-131). Near-pole barrier verdicts are TASK-137.
+
 2026-10-08: model-contract repair. `from_lavaan_partable()` now rebuilds the
 same variable inventory as the direct syntax build: synthesized intercept rows
 no longer promote indicators to `ov.y` (which, with any regression, added
