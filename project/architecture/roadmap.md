@@ -335,6 +335,18 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: (1) Fixed: the lab policy fit-measure composer evaluated
+covariance-only complete-data ML casewise scores at zero means instead of the
+profiled group means, so its misspecification-robust RMSEA, CFI and TLI were
+not translation-invariant (lab only; ordinary fits always carry a mean
+structure). Scores now centre at the profiled means, FIML's post-fit saturated
+EM runs to 1e-10, and affine-invariance gates cover shifts and unit changes
+for ML with and without means and FIML. (2) Lab candidate for the fit-index
+study: `fit_index_intervals_misspec()` gives continuous ML/FIML Wald intervals
+for RMSEA (discrepancy and square-root scales), CFI and TLI from the casewise
+likelihood-ratio influence plus the second-order term
+2 tr(M^2)/N^2; coverage and adoption remain TASK-103 (TASK-142).
+
 2026-10-09: ordinal and mixed LS routes refuse the objective and
 objective_downward coordinate modes with a typed Unsupported error before
 preparation; those routes apply no coordinate mode at all, so defaults and the
