@@ -1800,8 +1800,13 @@ release, including dependencies otherwise shared with the primary programme.
   adds a same-endpoint std.lv Newton audit to complete-data penalized ML:
   marker-chart certification also requires finite-chart accuracy when transport
   is supported, and unsupported transports (equality constraints) keep the
-  existing verdict with an explicit reason. **Remaining check:** a fresh paired
-  stress lane with losses retained, and transport under equality constraints.
+  existing verdict with an explicit reason. **Fresh paired lane done:** decisions/02 run `2026-10-09` retains every
+  loss and keeps FABIN3/PORT (88,049 successful test fits; no candidate eligible).
+  Constrained ×0.01 failures fell from 2,677 to 44; certified chart extent >1000
+  fell from 287 to 31 for default and 510 to 91 for layered PORT. Most remaining
+  pole cases are constrained, but two default Boomsma and three layered-PORT
+  engineering/15 cases remain. **Remaining check:** transport under equality
+  constraints and classification of those nonconstrained exceptions.
   Chart extent is not proof of nonattainment; do not change markers
   automatically. Evidence: barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).

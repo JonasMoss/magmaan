@@ -3,6 +3,7 @@ title: "Barrier defaults"
 format:
   html:
     toc: true
+    html-math-method: mathml
 execute:
   echo: false
   warning: false
@@ -10,7 +11,7 @@ execute:
 ---
 
 ```{r setup}
-run <- "2026-09-27"
+run <- "2026-10-09"
 rd <- function(name) {
   p <- file.path("results", "barrier-ml", run, paste0(name, ".csv"))
   if (!file.exists(p)) stop("Missing ", p, ": run Rscript run_experiment.R")
@@ -40,75 +41,41 @@ ls_fail <- function(d) sum(grepl("LineSearch", d$message))
 pole <- function(arm) sum(runaways$chart_beyond_1000[runaways$role == "test" & runaways$arm == arm])
 ```
 
-## Question
+## Default register
 
-Which start and optimizer should the complete-data ML barrier fitter
-(`frontier_fit_ml_multiinfo`, here with the latent-determinacy penalty
-$\lambda \log\det Q$) use by default? Its current defaults were set before the
-optimizer coordinates and the penalized Newton verdict existed, and no study
-compared its start with the layered start that complete-data ML now uses. The
-criteria were committed before the run, in
-[criteria/barrier-ml.md](criteria/barrier-ml.md) (commit `677e78bc`).
-
-## Answer
-
-**No candidate is eligible, so the default stays: transported FABIN3 with
-PORT.** Every candidate certifies more fits in total than the default
-(`r f0(choice$success[choice$candidate == "default_lbfgs"])` for FABIN3 with
-L-BFGS, against `r f0(choice$default_success[1])`). The whole gain comes from
-one family, the equality-constrained models, and there it comes from a units
-bug in the default. In the other test families the default wins or is within
-a few fits.
-
-- **The layered start is wrong for the barrier.** Layered with PORT loses
-  `r f0(nrow(lp))` test fits against the default, mostly at $N = 25$. In
-  `r f0(lp_worse)` of them it stops at a worse penalized objective, and
-  `r f0(lp_npc)` fail the Newton check for nonpositive curvature. The inspected
-  cases sit on the factor-disappearance set. There a latent variance is zero and
-  one loading has the wrong sign. The layered start begins next to that set
-  (for example a factor variance of 0.01 when two indicators are uncorrelated
-  in the sample). Ordinary ML walks away from it, but the barrier does not,
-  because $\log\det Q$ is largest (zero) where a factor disappears. The penalty
-  itself pulls toward the set, which is the non-disappearance condition of the
-  sem-barrier paper's attainment result showing up in practice.
-- **L-BFGS stalls, as _archive/barrier-optimizer found.** With the default start it loses
-  `r f0(nrow(dl))` test fits against PORT: `r f0(ls_fail(dl))` line-search
-  failures, and the rest uncertified stops. With the layered start both
-  problems add up (`r f0(nrow(ll))` losses).
-- **The default has a units bug in constrained models.** At $\times 0.01$ it
-  fails `r f0(x001("default"))` attainable equality-constrained fits,
-  against `r f0(x001("default_lbfgs"))` for FABIN3 with L-BFGS and
-  `r f0(x001("layered_port"))` for layered with PORT. In the inspected cases
-  the start transport falls back to a native FABIN3 start that is not in the
-  data's units. PORT then reports convergence after about a dozen evaluations
-  without moving, and the verdict correctly rejects the point. The default
-  wins the other units in this family.
-- **PORT certifies marker poles, L-BFGS never does.** Certified fits with a
-  chart extent above 1000 number `r f0(pole("default"))` for the default and
-  `r f0(pole("layered_port"))` for layered with PORT, and zero for both L-BFGS
-  arms. The pole rule scores them as failures, and the library verdict still
-  calls them converged. This is the barrier's version of the ML runaway
-  problem.
-
-Per the criteria, the author decides what follows. The report's reading: fix
-the $\times 0.01$ start fallback and look at a pole check in the verdict
-before any rerun. The layered start should not be retried for the barrier
-unless it is made to stay away from vanishing latent variances.
-
-## The register
-
-| Default | Current value | Status after this run | Evidence |
+| Default | Current value | Status | Evidence |
 |---|---|---|---|
-| barrier start | transported FABIN3 (pinned apart from the ML default) | settled: keep. The layered start fails rule 1 or 2 in five of six test families | lane barrier-ml, run 2026-09-27 |
-| barrier optimizer | PORT | settled for now: L-BFGS fails rules 1 and 2 in three test families (line-search stalls) | lane barrier-ml; _archive/barrier-optimizer |
-| barrier start at $\times 0.01$ in constrained models | transport falls back to native FABIN3, PORT stops at the start | open: a units bug, to fix before the next run | lane barrier-ml failures |
-| verdict at marker poles | the Newton check certifies PORT points far toward a marker pole | open: scoring has a pole rule (chart extent > 1000), the verdict does not | lane barrier-ml runaways |
+| barrier start | transported FABIN3 (pinned apart from the ML default) | settled: keep; neither layered arm is eligible | 2026-10-09, per-family rules in `decision.csv` |
+| barrier optimizer | PORT | settled: keep; no L-BFGS candidate is eligible | 2026-10-09, per-family rules in `decision.csv` |
+| barrier start at $\times 0.01$ in constrained models | native fallback built in normalized sample units | settled: units bug fixed by TASK-131; failures fell from 2,677 to `r f0(x001("default"))` | 2026-09-27 and 2026-10-09 |
+| verdict at marker poles | same-endpoint std.lv Newton audit when transport is supported | settled for supported transports by TASK-137; equality-constrained transport remains open | certified chart extent > 1000: default 287 → `r f0(pole("default"))`, layered PORT 510 → `r f0(pole("layered_port"))`; exceptions discussed below |
 | barrier weight $\lambda$ | 0.25 | not decided here; the sem-barrier paper owns it | none |
 | FIML barrier start and optimizer | transported FABIN3, PORT | not covered | none |
 
-## Evidence
+## Question
 
-Certified fits among attainable test problems, both weights pooled.
+Which start and optimizer should the complete-data ML barrier fitter
+(`frontier_fit_ml_multiinfo`, latent-determinacy target with penalty
+$\lambda \log\det Q$) use by default?
+The [criteria](criteria/barrier-ml.md) were registered at `677e78bc`; the
+fresh-seed rerun amendment was committed at `dd6325ad` before the run.
+
+## Short answer
+
+**Keep transported FABIN3 with PORT. No candidate is eligible.** After
+TASK-131 and TASK-137, the default scores `r f0(choice$default_success[1])`
+successful test fits, more than any candidate. Eligibility is judged separately
+in every family at both weights, not by that total. The constrained-model
+$\times 0.01$ start failure has been repaired. The supported marker-pole
+verdict has been strengthened, but equality-constrained std.lv transport remains
+unfinished, and a few certified high-extent cases remain outside that family.
+
+## Findings: 2026-10-09
+
+Successful fits among attainable problems, separately by family; the table
+sums the two weights for display only. Success requires library certification
+and both registered runaway bounds. Ernst is a development control and does
+not gate the decision.
 
 ```{r by-family}
 r <- rates[rates$arm %in% names(arms), ]
@@ -124,39 +91,84 @@ names(out)[-(1:2)] <- arms
 tab(out)
 ```
 
-- The default leads in Boomsma, engineering/active/15-sphere-reference-fits and Wolf, and ties Chen. In
-  research/47 FABIN3 with L-BFGS is five fits ahead, within its rule. In the
-  equality-constrained family the default's losses are the $\times 0.01$
-  fallback above. Outside that family
-  the default certifies `r f0(tot(rates, "default", fams = other))` against
-  `r f0(tot(rates, "layered_port", fams = other))` for layered with PORT and
-  `r f0(tot(rates, "default_lbfgs", fams = other))` for FABIN3 with L-BFGS.
-- The rules fail in every family where a candidate loses; `decision.csv` has
-  each rule per family and weight, `losses.csv` every lost fit with the arms
-  that solved it.
-- The two weights agree: every rule that fails at one weight fails at the
-  other, except Chen's best-known rule for the layered arms (four fits, at
-  $\lambda = 1$ only).
-- Runs are cheap. The median fit takes about 20 ms in every arm.
+
+Both layered arms fail the primary and best-known rules in Boomsma,
+equality-constrained, engineering/15, research/47 and Wolf at both weights;
+Chen ties. FABIN3 with L-BFGS fails these rules in equality-constrained,
+engineering/15 and Wolf at both weights, and Boomsma at $\lambda=1$.
+Its research/47 gains do not compensate for other families' losses.
+Invariance also fails for each candidate in at least one registered scope.
+The full per-weight rules remain in `decision.csv`.
+
+Every loss against baseline is retained in `losses.csv`. The following table
+lists all test-family loss counts and separates the observed diagnostic
+mechanisms. Nonpositive curvature rejects a nonminimum; the remaining rows
+have an available Newton calculation but can still be uncertified or excluded
+by the runaway rule. These diagnostics alone do not establish a basin mechanism.
+
+```{r loss-summary}
+z <- loss[loss$role == "test", ]
+z$Curvature <- as.integer(z$newton_status == "nonpositive_curvature")
+z$Runaway <- as.integer(z$runaway)
+z$Other <- 1L - z$Curvature - z$Runaway
+q <- aggregate(cbind(Curvature, Runaway, Other) ~ family + candidate, z, sum)
+q <- q[order(q$family, q$candidate), ]
+tab(data.frame(Family = fam[q$family], Candidate = arms[q$candidate],
+               `Nonpositive curvature` = q$Curvature, Runaway = q$Runaway,
+               `Other uncertified stops` = q$Other, check.names = FALSE))
+```
+
+The default's attainable constrained $\times 0.01$ failures fell from 2,677
+on 2026-09-27 to `r f0(x001("default"))` on fresh draws. This supports the
+TASK-131 units fix, not a claim that all constrained fitting failures are gone.
+
+Certified test fits with chart extent above 1000 fell from 287 to
+`r f0(pole("default"))` for the default and from 510 to
+`r f0(pole("layered_port"))` for layered PORT. The frozen `runaways.csv`
+locates 29 default and 88 layered-PORT cases in equality-constrained models,
+where std.lv transport is unsupported. It also records two default cases in
+Boomsma ($\lambda=1$) and three layered-PORT cases in engineering/15
+($\lambda=0.25$). Thus the remaining cases are **not exclusively
+ equality-constrained**. The summary tables do not give their transport status;
+raw rows are not present in this checkout. Both L-BFGS arms have zero certified
+test fits above 1000. The scoring continues to reject all such points.
+
+## Dated history: 2026-09-27
+
+The original run at seed base 2026092701 retained the default, although it
+scored only 85,679 test fits and candidates gained in the constrained family.
+The default failed 2,677 attainable constrained $\times 0.01$ fits; the
+native fallback was in the wrong units. Certified chart extent > 1000 occurred
+287 times for the default and 510 times for layered PORT. These findings
+motivated TASK-131 and TASK-137 before fresh confirmation. The original
+summaries and every loss remain in `results/barrier-ml/2026-09-27/`.
+The inspected layered-start failures suggested attraction toward factor
+disappearance; that interpretation is historical diagnostic evidence, not a
+mechanism independently established for every fresh loss.
 
 ## Caveats
 
-- These are complete-data ML fits of correctly specified or mildly
-  misspecified models. FIML, multi-group models and the joint penalty are not
-  covered.
-- The loss mechanisms were read from inspected cases and from the verdict and
-  optimizer statuses of all losses. The factor-disappearance reading covers
-  the layered start's typical loss, not every one.
-- The pole rule's bound (1000) was chosen before the run. The runaway table
-  (`runaways.csv`) reports 10 and 100 as well. The population-start witness
-  also reaches poles under PORT, so some weak-marker draws may have no
-  attainable finite optimum in the marker chart.
+The run covers complete-data ML, the determinacy penalty, two weights
+($0.25$ and $1$), and the registered populations and unit transforms. It does
+not cover FIML, multi-group models or the joint penalty. Population-start
+witnesses define attainability and the best-known objective, not a proof of a
+global minimum. The chart bound of 1000 is a registered scoring rule, not proof
+of nonattainment. Equality-constrained transport remains open.
+
+The 2026-10-09 summaries were frozen at `2fbec812`; metadata records the
+clean library source `dd6325ad` and seed base 2026100901. This is a fresh paired
+confirmation after fixes, rather than a draw-by-draw comparison to September.
 
 ## Reproduce
 
+The rerun used simbox with 14 single-threaded workers and took about six
+minutes. Rendering reads only the frozen CSVs.
+
 ```sh
 cd experiments/decisions/02-barrier-defaults
-Rscript run_experiment.R --smoke          # seed base + 1, one draw per family
-nice -n 10 Rscript run_experiment.R --run-id 2026-09-27   # about 6 minutes on 4 cores
-Rscript run_experiment.R --run-id 2026-09-27 --summarize  # rescore raw batches
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript run_experiment.R --run-id 2026-10-09 \
+  --seed-base 2026100901 --workers 14
+Rscript run_experiment.R --run-id 2026-10-09 --seed-base 2026100901 --summarize
+quarto render report.qmd --to html
 ```
