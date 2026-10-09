@@ -146,3 +146,17 @@ runaway rule in the scoring.
 - If one is eligible, it is chosen.
 - If neither is, the report names the failing families' losses and the author
   decides, as in the first run's outcome clause.
+
+## Rerun of 2026-10-09 (written before the run)
+
+The register keeps the ML and GLS optimizer provisional until the verdict flags
+runaways. TASK-143 adds that check where it can: complete-data ML and GLS
+endpoints with a standardized extent above 10 are certified only if the Newton
+audit also passes in the std.lv chart, when that transport exists. The library
+also gained the overlapping-block layered start (TASK-136) and the
+equality-constrained fallback units fix (TASK-131) since the third run. The
+rerun repeats the third run's command (candidates `layered_lbfgs,layered_port`,
+arms `default,default_port,layered_lbfgs,layered_port,witness`, runaway bound
+10, 100 replications) with run id `2026-10-09` and the fresh seed base
+`2026100902`, at the library commit recorded in its metadata. Rules and
+outcome clauses are unchanged.
