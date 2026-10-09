@@ -1531,14 +1531,17 @@ separate final decision for each explicitly covered scope.
   The original supplement's particular draw ($\chi^2=271$) has not been replayed;
   keep its completion check distinct from the repaired shared mechanism.
 
-- [ ] **M — diagnose the layered-start Geiser latent-AR loss.** The fixture
-  `latent_ar_cross_lagged_extended` stalls above the reference objective with
-  L-BFGS and PORT; FABIN3 and std.lv succeed. **Check:** explain the valley/start
-  failure, preserve a regression and verify corpus/held-out behavior before
-  changing defaults. Evidence: corpus recovery. TASK-132 traced the R route's
-  apparent success to phantom latents introduced by auto intercept rows during
-  table import; TASK-133 repairs that inventory mismatch. The layered-start
-  loss remains real on the direct inventory.
+- [x] **M — diagnose and repair the layered-start Geiser latent-AR loss.**
+  TASK-132 traced the R route's apparent success to phantom latents introduced
+  by auto intercept rows; TASK-133 repairs the direct-inventory contract.
+  TASK-134 isolated wrong relative loading signs in overlapping measurement
+  blocks. TASK-136 retains a bounded FABIN3-seeded layered alternative, selected
+  by caller-sample ML discrepancy after the same later stages. The retained
+  `latent_ar_cross_lagged_extended` ML/GLS fixture reaches the lavaan optimum
+  with L-BFGS and PORT; non-overlapping starts remain bit-identical. The full
+  layered PORT/L-BFGS corpus comparison has 1,356 paired arms, four convergence
+  gains and no losses under the amended convergence-aware gate; unconverged
+  endpoint changes are reported separately in the optimizer capability record.
 
 - [ ] **M — finish unit-equivariant starts and optimizer coordinates.** Remove
   unit-dependent FABIN/layered fallback steps; extend supported start selections

@@ -259,3 +259,40 @@ It clamps two-sided multipliers to [1e-6, 1e6], or downward-only multipliers to
 Malformed units/sizes and nonfinite or nonpositive outputs are typed failures.
 The helper does not compute NT information. TASK-33.10.5.4 owns subsequent fit
 integration and opt-in selection; this additive primitive changes no defaults.
+
+### Layered starts with overlapping measurement blocks
+
+TASK-136 retains a second layered candidate when an indicator loads on multiple
+latents in a block. It seeds measurement loading ratios with FABIN3, completes
+the same scale, structural, equality, hint and PD stages, and selects the lower
+caller-sample ML discrepancy with a provenance note. Non-overlapping models
+retain bit-identical starts. TASK-132/133 establish the direct variable inventory;
+TASK-134 identifies the relative-sign failure. The retained Geiser latent-AR
+fixture now reaches the lavaan optimum with L-BFGS and PORT under ML and GLS.
+
+The layered PORT/L-BFGS corpus comparison of main `d1dab5dc` and candidate
+`10db66a7` attempted 398 cases under both ML and GLS. The same 118 case/estimator
+jobs failed preparation; 678 returned both arms, giving 1,356 paired rows.
+There were 82 endpoint/convergence changes, four convergence gains and no
+convergence losses. Among 1,340 doubly converged rows, the maximum relative
+objective increase was 2.96e-10 and maximum absolute relative change 1.83e-9.
+The amended gate in board TASK-136 comment 10 blocks only lost convergence or
+an increase exceeding 1e-8 relative when both fits converge; it was specified
+after the initial partial comparison. Three baseline and four candidate GLS
+jobs hit the 180-second cap; separate missing-arm retries at 600 seconds all
+completed without changing optimizer controls. Raw comparisons and hashes stay
+in `~/.cache/magmaan-logs/task-136-corpus/`, as requested.
+
+Eight changed endpoints were unconverged in both runs and do not gate adoption.
+These values describe where the optimizers stopped, not comparable optima:
+
+| Newsom 2024 case | Estimator | Arm | Baseline objective | Candidate objective |
+|---|---|---|---:|---:|
+| ex6_1c | GLS | L-BFGS | 0.0847015271560526 | 0.0847082183201977 |
+| ex6_1c | GLS | PORT | 0.0851384089574275 | 0.0852369337412223 |
+| ex6_1c | ML | L-BFGS | 0.0909224900248713 | 0.0909232712360382 |
+| ex6_1c | ML | PORT | 0.0909196701776249 | 0.0909196715271197 |
+| ex8_5c | GLS | L-BFGS | 0.0104402876684403 | 0.0104402876684411 |
+| ex8_5c | GLS | PORT | 0.0104402876685199 | 0.0104402876684467 |
+| ex8_5c | ML | L-BFGS | 0.0230056841197252 | 0.0116990628930935 |
+| ex8_5c | ML | PORT | 0.0116990628931142 | 0.0116990628931121 |
