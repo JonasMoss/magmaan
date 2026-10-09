@@ -335,6 +335,15 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: complete-data penalized (barrier) ML certifies a marker-chart
+endpoint only if the same-endpoint Newton audit also passes after transport to
+the std.lv chart; otherwise accuracy is unresolved with a chart-proximity
+reason (`std_lv_accuracy` in the diagnostics). Seven of eight retained
+near-pole PORT certifications from decisions/02 were not stationary (TASK-135)
+and are now unresolved; twenty interior controls are unchanged. Unsupported
+transports (equality constraints) keep the previous verdict with an explicit
+reason (TASK-137).
+
 2026-10-09: the layered start builds a second, FABIN3-seeded measurement
 candidate when an indicator loads on two or more latents (overlapping blocks,
 where the alternating cross-loading sweeps can reverse relative loading signs)
