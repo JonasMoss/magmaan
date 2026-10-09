@@ -335,6 +335,11 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-09: ordinal and mixed LS routes refuse the objective and
+objective_downward coordinate modes with a typed Unsupported error before
+preparation; those routes apply no coordinate mode at all, so defaults and the
+legacy modes stay bit-identical (TASK-33.10.5.6).
+
 2026-10-09: continuous DWLS diagonal weights keep O(q) storage through the R
 adapters, native preparation, post-fit dispatch and saved-fit replay instead of
 crossing as dense matrices; full weights keep exact output. Fit and covariance
