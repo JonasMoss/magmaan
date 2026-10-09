@@ -114,3 +114,16 @@ test family and at each weight:
 
 Secondary outcomes, reported and not gating: median evaluations and seconds
 among successes, the runaway tables, and the start repairs.
+
+## Rerun of 2026-10-09 (written before the run)
+
+The 2026-09-27 report asked for two fixes before any rerun: the x0.01 start
+fallback in equality-constrained models (fixed by TASK-131: the automatic
+native fallback is built in normalized sample units) and a pole check in the
+verdict (TASK-137: complete-data penalized ML certifies a marker-chart endpoint
+only if the Newton audit also passes in the std.lv chart, where that transport
+exists). The rerun uses run id `2026-10-09`, the fresh seed base `2026100901`,
+the same populations, arms, weights, transforms, replications and rules as
+above, and the library at the commit recorded in its metadata. The scoring's
+pole rule (chart extent above 1000) stays as written; with the TASK-137 verdict
+most such fits should now fail the library judge directly. Nothing else changes.
