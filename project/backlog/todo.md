@@ -384,6 +384,17 @@ not emulated: comparisons run lavaan with `meanstructure = TRUE` and
   boundary gates pass; 500 draws each at N=100/200 yielded score 5.6%/6.0%
   and LR 6.4%/7.0% rejection including improper fits (SB/PEBA4).
 
+- [ ] **0.3.0 — remaining preset differences (TASK-144).** These are typed
+  errors or documented today:
+  - fits with a switched (or reverted) marker refuse nested contrasts, the
+    LR modification-index refit and case reruns, which lavaan computes;
+  - the marker rule is unsupported for composites, conditional.x ordinal
+    models and non-lavaan syntax;
+  - start provenance is reported only by ordinary `magmaan()`;
+  - explicit SB/PEBA4 references reject materially negative spectra, while
+    fit-time FMG clips them (needs decision);
+  - near-singular FIML H1 matches lavaan only to its 1e-5 EM tolerance.
+
 - [x] **M — fit linear equality constraints in lavaan's coordinates**
   (2026-10-02). Ordered name-free affine rows preserve lavaan 0.7.2's QR basis,
   including row-order-sensitive equivalent systems; native fitting keeps its
