@@ -646,6 +646,12 @@ criteria content joins the strict resume fingerprint. Production evidence remain
 pending approval. Target diagnostics and separate preparation costs are retained; failed targets
 remain explicit. Judged arms keep defaults; no default changes or coverage claim.
 
+TASK-149 compacts cached preparation contexts, collects discarded checks/fits
+before each fork and releases completed sampling contexts. A three-replicate
+long30 ML diagnostic preserves all result rows and lowers worker peak RSS from
+642 to 397 MiB; eight initial workers are recommended for the 10 GiB simbox ML
+run, with available-memory monitoring. FIML memory remains unmeasured.
+
 ## Continuous lab fit-index Wald candidate (TASK-142)
 
 `api::frontier::fit_index_intervals_misspec()` and the thin lab wrapper support

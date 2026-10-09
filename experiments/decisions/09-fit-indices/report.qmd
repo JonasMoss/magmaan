@@ -56,6 +56,32 @@ fitting, all point arms and all lab interval arms. Target calibration is a
 separate one-time cost. Cached target timings repeat in cells sharing a target
 and must not be summed as if they were independent work.
 
+## Runner memory diagnostic (TASK-149)
+
+Collecting discarded preparation objects before forking reduced the parent at
+fork from 653 to 119 MiB and the worker peak from 642 to 397 MiB for one
+normal long30 ML cell at N=4000. Parent setup peaks were essentially unchanged
+(794 versus 790 MiB): the million-row check still needs memory while running.
+The runner caches only generator parameters, population records/moments and
+check/target summaries, and releases completed cells' sampling contexts.
+
+The bounded comparison used three replicates with seed base 1490901. All 72
+raw result rows were exactly identical after excluding elapsed time. A separate
+two-worker pricing run checks the normal fork path. Measurements sampled Linux
+resident memory every 20 ms with fresh preparation caches; an isolated
+`mcparallel` worker forced a fork for the single-cell measurement (one-element
+`mclapply` otherwise runs serially). Summed RSS counts shared pages twice and
+therefore gives a conservative process total. The frozen diagnostic summary
+and provenance are in `results/task149/{memory,metadata}.csv`.
+
+Use **eight workers initially on the 10 GiB simbox for ML**. Budgeting 0.8 GiB
+for the parent and 0.4 GiB per worker gives about 4 GiB, leaving more than the
+required 2 GiB from the reported 9.4 GiB initially available. Check available
+memory during the first chunk; this local three-draw measurement does not bound
+long-run allocator growth, other generators or FIML. No production was run for
+this diagnostic. The source fingerprint changes, so prior production checkpoints
+require a fresh run ID under the existing strict resume policy.
+
 ## Target preparation
 
 ```{r}

@@ -112,6 +112,8 @@ prepare <- function(cell) {
   calibration <- calibrate_generator(population,cell)
   checks <- validate_generator(calibration,cell_seed(key_cell,channel=1L))
   targets <- compute_targets(population,calibration,cell,cell_seed(key_cell,channel=2L))
+  # Sampling needs the model record and calibrated generator, not preparation fits.
+  population <- population[c("record", "stats", "delta")]
   result <- list(population=population,calibration=calibration,checks=checks,targets=targets,
                  setup_seconds=proc.time()[[3]]-started)
   calibration_cache_write(key, result, cache_dir); result
@@ -156,8 +158,16 @@ run_cell <- function(i) {
 started <- proc.time()[[3]]
 for (chunk in split(seq_len(nrow(cells)),ceiling(seq_len(nrow(cells))/workers))) {
   if (mode == "production") for (i in chunk) prepare_cell(i)
+  # Preparation leaves million-row checks and target fits as unreachable garbage.
+  # Collect before fork so each worker inherits only the live sampling context.
+  gc(full = TRUE)
   answer <- parallel::mclapply(chunk,run_cell,mc.cores=workers,mc.preschedule=TRUE)
   if (any(vapply(answer,inherits,FALSE,"try-error"))) stop("Worker failed; inspect raw checkpoints")
+  # Finished cells only need target/check summaries for the final tables.
+  for (i in chunk) {
+    prepared[[i]]$calibration <- NULL
+    prepared[[i]]$population <- list(delta = prepared[[i]]$population$delta)
+  }
   cat("Completed",paste(cells$id[chunk],collapse=", "),"elapsed",round(proc.time()[[3]]-started,1),"seconds\n")
   flush.console()
 }

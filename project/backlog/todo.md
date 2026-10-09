@@ -157,6 +157,9 @@ result under an unstated convention.
   the unchanged library verdict and retained diagnostics. Judged arms keep defaults.
   TASK-147 adds the results-independent 2,304-cell production grid, approved-criteria
   guard, cost-ordered work and resumable per-cell checkpoints (up to 18 workers).
+  TASK-149 releases preparation garbage before forks, caches compact contexts,
+  and drops completed sampling state. Three long30 ML replicates match exactly;
+  the bounded memory check recommends eight initial simbox ML workers.
   Criteria approval and production authorization remain with TASK-103.
 
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML

@@ -9,3 +9,8 @@ pricing/*
 !pricing/smoke-task145-refined/
 pricing/*/*
 !pricing/*/*.csv
+# TASK-149 bounded runner-memory evidence; scratch probes and raw rows stay ignored.
+!task149/
+task149/*
+!task149/memory.csv
+!task149/metadata.csv
