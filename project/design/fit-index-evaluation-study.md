@@ -93,9 +93,13 @@ where truncation near zero matters.
    complete-data $F_0$ is reported beside it as what users mean by misfit. The
    base MAR tier: missingness on half of the variables, driven by one fully
    observed variable, at 0, 15% and 30%.
-2. **Misfit construction.** One natural omitted parameter per model, sized to
-   population RMSEA 0, .03, .05 and .08 (ML metric). Many-small-misfit
-   populations are a later tier.
+2. **Misfit construction.** One natural kind of misspecification per model,
+   sized to population RMSEA 0, .03, .05 and .08 (ML metric): a single omitted
+   parameter where it reaches the levels at a plausible size (standardized
+   value at most .4, both signs tried), otherwise a natural block of the same
+   kind sharing one standardized size (amended 2026-10-09 after TASK-141 showed
+   that one parameter cannot reach RMSEA .08 in large-df models, because RMSEA
+   averages misfit over all df). Many-small-misfit populations are a later tier.
 3. **Basis.** All tier-1 models for the point arms, priced by a pilot; if
    intervals are expensive, a 4-5 model subset for the interval arms, chosen
    before any results. Tier-2 additions as listed under Populations.

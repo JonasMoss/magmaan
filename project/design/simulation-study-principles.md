@@ -9,12 +9,15 @@ default here only with a stated reason.
 
 - **Tier 1: representative models.** The sem-score set of representative
   models, held as plain data in `experiments/_support` (syntax and population
-  values; no SEM logic there). Each model carries one natural misspecification:
-  a single parameter that the generating model has and the fitted model omits
-  (a cross-loading, residual covariance or cross-lag, whichever is natural for
-  that model). Misfit size is set by solving for that parameter's value so the
-  population index hits prespecified levels, for example RMSEA 0, .03, .05 and
-  .08 in the ML metric.
+  values; no SEM logic there). Each model carries one natural kind of
+  misspecification that the generating model has and the fitted model omits (a
+  cross-loading, residual covariance or cross-lag, whichever is natural for
+  that model): a single parameter where it reaches the target levels at a
+  plausible size (standardized value at most .4), otherwise a natural block of
+  the same kind sharing one standardized size, because RMSEA averages misfit
+  over all df and one parameter cannot move it far in large-df models. Misfit
+  size is set by solving for that size so the population index hits
+  prespecified levels, for example RMSEA 0, .03, .05 and .08 in the ML metric.
 - **Tier 2: study-specific additions**, each with a stated reason (for example
   frozen textbook populations for an ordinal estimator, multigroup cells for a
   pooling convention, small-df models where truncation dominates).
