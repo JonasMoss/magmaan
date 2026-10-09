@@ -98,7 +98,8 @@ PolicyFitState policy_fit_state(const estimate::Estimates& estimates) {
   const auto& diagnostics = estimates.diagnostics;
   const auto verdict = estimate::fit_verdict(estimates);
   PolicyFitState state;
-  state.converged = verdict.status != estimate::FitCheck::Failed;
+  state.converged = verdict.status != estimate::FitCheck::Failed &&
+      !(diagnostics.std_lv_accuracy.required && !diagnostics.std_lv_accuracy.newton.passed);
   state.psd_boundary = verdict.domain == estimate::StationarityDomain::Psd &&
                        diagnostics.newton_accuracy.checked &&
                        !diagnostics.newton_accuracy.covariance_interior;

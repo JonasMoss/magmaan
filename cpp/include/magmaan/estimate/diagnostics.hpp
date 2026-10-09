@@ -234,6 +234,15 @@ struct NewtonAccuracyDiagnostics {
   double min_multiplier = std::numeric_limits<double>::quiet_NaN();
 };
 
+// Supplementary endpoint audit in a finite latent-scale chart.
+struct ChartAccuracyDiagnostics {
+  bool required = false;
+  NewtonAccuracyDiagnostics newton;
+  double gradient_max = std::numeric_limits<double>::quiet_NaN();
+  double objective_difference = std::numeric_limits<double>::quiet_NaN();
+  std::string reason;
+};
+
 // Structural (generic) identification of the fitted moment model
 // (estimate/frontier/identification.hpp). The check is data-free: it takes
 // the rank of the route's moment Jacobian, in the reduced coordinates of the
@@ -399,6 +408,9 @@ struct FitDiagnostics {
 
   // Interior accuracy check for complete-data ML fits; unchecked elsewhere.
   NewtonAccuracyDiagnostics newton_accuracy;
+
+  // Additional finite-chart audit of a marker-identified penalized ML endpoint.
+  ChartAccuracyDiagnostics std_lv_accuracy;
 
   // Structural identification of the fitted moment model. Unchecked
   // (NotAttempted) on paths that do not run the check.

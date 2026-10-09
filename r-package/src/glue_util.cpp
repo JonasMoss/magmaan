@@ -741,6 +741,12 @@ Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d,
       Rcpp::_["geometric_stationarity"] =
           geometric_stationarity_to_r(d.geometric_stationarity),
       Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.newton_accuracy),
+      Rcpp::_["std_lv_accuracy"] = Rcpp::List::create(
+          Rcpp::_["required"] = d.std_lv_accuracy.required,
+          Rcpp::_["newton_accuracy"] = newton_accuracy_to_r(d.std_lv_accuracy.newton),
+          Rcpp::_["gradient_max"] = std::isfinite(d.std_lv_accuracy.gradient_max) ? d.std_lv_accuracy.gradient_max : NA_REAL,
+          Rcpp::_["objective_difference"] = std::isfinite(d.std_lv_accuracy.objective_difference) ? d.std_lv_accuracy.objective_difference : NA_REAL,
+          Rcpp::_["reason"] = d.std_lv_accuracy.reason),
       Rcpp::_["identification"] = identification_to_r(d.identification, labels),
       Rcpp::_["verdict"] = common_verdict_to_r(d),
       Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);

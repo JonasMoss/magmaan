@@ -26,6 +26,7 @@
 #include "magmaan/estimate/frontier/newton_accuracy.hpp"
 #include "magmaan/estimate/frontier/newton_adapters.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
+#include "magmaan/estimate/start_pipeline.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -2704,6 +2705,80 @@ void attach_newton_accuracy_penalized(
       pt, rep, std::move(d), StationarityDomain::Ambient).diagnostics;
 }
 
+// Audit the same endpoint in disturbance-unit coordinates. Marker-chart relative
+// corrections can look small merely because the fixed marker approaches zero
+// in a finite chart. This transformation changes no fitted moments or objective.
+void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
+    const model::MatrixRep& rep, const SampleStats& sample,
+    frontier::MultiInfoPenaltyOptions options) {
+  auto& diagnostics = est.diagnostics;
+  auto plan = prepare_std_lv_transport(pt, rep);
+  if (!plan) {
+    diagnostics.std_lv_accuracy.reason = std::string("std.lv transport unavailable: ") +
+        start_transport_reason(plan.error());
+    return;
+  }
+  diagnostics.std_lv_accuracy.required = true;
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) {
+    diagnostics.std_lv_accuracy.reason = "chart proximity: endpoint model unavailable";
+    return;
+  }
+  auto assembled = ev->assembled(est.theta);
+  if (!assembled) {
+    diagnostics.std_lv_accuracy.reason = "chart proximity: endpoint assembly unavailable";
+    return;
+  }
+  for (auto& m : assembled->blocks) {
+    Eigen::VectorXd scale = m.Psi.diagonal().array().sqrt();
+    if (!scale.allFinite() || (scale.array() <= 0).any()) {
+      diagnostics.std_lv_accuracy.reason = "chart proximity: nonpositive disturbance scale";
+      return;
+    }
+    m.Lambda = (m.Lambda * scale.asDiagonal()).eval();
+    m.Beta = (scale.cwiseInverse().asDiagonal() * m.Beta * scale.asDiagonal()).eval();
+    m.Psi = (scale.cwiseInverse().asDiagonal() * m.Psi * scale.cwiseInverse().asDiagonal()).eval();
+    if (m.Alpha.size()) m.Alpha = (scale.cwiseInverse().asDiagonal() * m.Alpha).eval();
+  }
+  Eigen::VectorXd theta = Eigen::VectorXd::Zero(plan->source.n_free());
+  for (std::size_t i = 0; i < plan->source.size(); ++i) {
+    if (plan->source.free[i] <= 0) continue;
+    const auto c = plan->source_rep.cell_for_row[i];
+    if (!c.used) continue;
+    const auto& m = assembled->blocks[static_cast<std::size_t>(c.block)];
+    double value = 0;
+    switch (c.mat) {
+      case model::MatId::Lambda: value = m.Lambda(c.row, c.col); break;
+      case model::MatId::Beta: value = m.Beta(c.row, c.col); break;
+      case model::MatId::Psi: value = m.Psi(c.row, c.col); break;
+      case model::MatId::Theta: value = m.Theta(c.row, c.col); break;
+      case model::MatId::Nu: value = m.Nu(c.row); break;
+      case model::MatId::Alpha: value = m.Alpha(c.row); break;
+    }
+    theta(plan->source.free[i] - 1) = value;
+  }
+  auto audit = frontier::audit_newton_penalized_ml(
+      plan->source, plan->source_rep, sample, theta, options);
+  if (!audit) {
+    diagnostics.std_lv_accuracy.reason = "chart proximity: std.lv audit unavailable: " + audit.error().detail;
+    return;
+  }
+  diagnostics.std_lv_accuracy.gradient_max = audit->derivatives.gradient.size()
+      ? audit->derivatives.gradient.cwiseAbs().maxCoeff() / audit->derivatives.native_to_total : 0.0;
+  const double marker_objective = diagnostics.objective.recomputed /
+      diagnostics.objective.multiplier;
+  diagnostics.std_lv_accuracy.objective_difference = audit->derivatives.objective - marker_objective;
+  if (!std::isfinite(diagnostics.std_lv_accuracy.objective_difference) ||
+      std::abs(diagnostics.std_lv_accuracy.objective_difference) > 1e-8 * (1 + std::abs(marker_objective))) {
+    diagnostics.std_lv_accuracy.reason = "chart proximity: transported penalized objective mismatch";
+    return;
+  }
+  diagnostics.std_lv_accuracy.newton = audit->diagnostics;
+  diagnostics.std_lv_accuracy.reason = audit->diagnostics.passed
+      ? "std.lv Newton accuracy passed"
+      : "chart proximity: std.lv Newton accuracy unresolved (nonstationary or unresolved curvature)";
+}
+
 // Swap the penalized optimum value for the unpenalized ½F so χ² and fit
 // measures read the ordinary criterion at θ̃, and attach the penalty report.
 fit_expected<frontier::PenalizedFit>
@@ -2796,6 +2871,7 @@ frontier::fit_ml_multiinfo(spec::LatentStructure pt,
       *est, pt, rep, prob, *layout, pre->ev, *weight, n_total,
       inference::information_observed_analytic(pt, rep, samp, *est),
       NewtonObjectiveKind::PenalizedMl);
+  if (*weight > 0.0) attach_std_lv_accuracy(*est, pt, rep, samp, options);
   return finish_multiinfo(std::move(*est), base, *layout, pre->ev, *weight,
                           n_total, start->repaired, who);
 }

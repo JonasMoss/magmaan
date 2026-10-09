@@ -48,6 +48,9 @@ FitVerdict compatibility_verdict(const FitDiagnostics& d) {
       // nonstationarity.
     }
   }
+  if (d.std_lv_accuracy.required && !d.std_lv_accuracy.newton.passed &&
+      out.stationarity == FitCheck::Passed)
+    out.stationarity = FitCheck::Unchecked;
   if (out.objective == FitCheck::Failed ||
       out.stationarity == FitCheck::Failed) {
     out.status = FitCheck::Failed;
@@ -144,6 +147,9 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
     }
   }
 
+  if (d.std_lv_accuracy.required && !d.std_lv_accuracy.newton.passed)
+    out.newton = {FitCheck::Unchecked, true, d.std_lv_accuracy.reason};
+
   out.identification = identification_check(d.identification);
 
   if (p.kind == ConvergencePolicyKind::Compatibility) {
@@ -159,7 +165,8 @@ ConvergenceAssessment assess_convergence(const FitDiagnostics& d, ConvergencePol
     out.newton.required = use_newton;
     auto& deciding = use_newton ? out.newton : out.first_order;
     deciding.status = out.compatibility_verdict.stationarity;
-    deciding.reason = "compatibility stationarity rule";
+    deciding.reason = d.std_lv_accuracy.required && !d.std_lv_accuracy.newton.passed
+        ? d.std_lv_accuracy.reason : "compatibility stationarity rule";
     return out;
   }
   if ((p.kind != ConvergencePolicyKind::Explicit) ||

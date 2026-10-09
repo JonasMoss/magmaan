@@ -379,6 +379,8 @@ TEST_CASE("penalized ML: marker and std.lv identification give the same Sigma") 
   auto fit_s = fit_ml_multiinfo(std_lv, *rep_s, samp, *x_s);
   REQUIRE_OK(fit_m);
   REQUIRE_OK(fit_s);
+  CHECK(fit_m->estimates.diagnostics.std_lv_accuracy.newton.passed);
+  CHECK(magmaan::estimate::fit_verdict(fit_m->estimates).status == magmaan::estimate::FitCheck::Passed);
   const Eigen::MatrixXd sig_m = implied_sigma(marker, *rep_m, fit_m->estimates.theta);
   const Eigen::MatrixXd sig_s = implied_sigma(std_lv, *rep_s, fit_s->estimates.theta);
   CHECK((sig_m - sig_s).cwiseAbs().maxCoeff() < 1e-6);
@@ -1148,4 +1150,38 @@ TEST_CASE("auxiliary NEW coordinates have zero barrier and moment curvature") {
   theta(auxiliary) += .7;
   auto shifted = multiinfo_penalty(*layout, *ev, theta, true); REQUIRE_OK(shifted);
   CHECK(shifted->value == penalty->value);
+}
+
+TEST_CASE("penalized ML: near-pole marker endpoint needs std.lv accuracy") {
+  // TASK-135 case 5, weak_marker N=100: retained moments and PORT endpoint.
+  const auto pt = lavaanify("X =~ x1 + x2 + x3\nY =~ y1 + y2 + y3\nY ~ X");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE_OK(rep);
+  Eigen::MatrixXd S(6, 6);
+  S << .934256113918677, .202712095825922, -.000933960071619732, -.0634048883557954, .0171503310313189, -.0336180276312589,
+       .202712095825922, 1.82622121859171, .390512797762688, -.121402441907384, .352478747309119, .234835731417319,
+       -.000933960071619732, .390512797762688, 1.24853257690477, -.108610774373408, .18298133813879, .257264456520293,
+       -.0634048883557954, -.121402441907384, -.108610774373408, 1.02857487346918, -.0264279058083107, .00127189640264787,
+       .0171503310313189, .352478747309119, .18298133813879, -.0264279058083107, 2.11227164874331, .537650546813259,
+       -.0336180276312589, .234835731417319, .257264456520293, .00127189640264787, .537650546813259, 1.2308329414853;
+  Eigen::VectorXd endpoint(13);
+  endpoint << 5.76278582509159, 3.55169454143284, 6415.0257825496, 5391.36013291157,
+      .000447845591511725, .914746156008799, 1.17857365976694, 1.00252881894379,
+      1.02858171945643, 1.47676736554568, .782012803336091, .019380355094165, 1.14506553910152e-8;
+  magmaan::estimate::OptimOptions opts;
+  opts.normalize_sample = false;
+  opts.nlopt.max_eval = 1; // Audit the retained endpoint without searching away.
+  auto fit = fit_ml_multiinfo(pt, *rep, stats_from(S, 100), endpoint,
+      determinacy_options(), {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_OK(fit);
+  const auto& d = fit->estimates.diagnostics;
+  CHECK((fit->estimates.theta - endpoint).norm() == doctest::Approx(0));
+  CHECK(d.newton_accuracy.passed);
+  CHECK(d.std_lv_accuracy.required);
+  CHECK(d.std_lv_accuracy.newton.checked);
+  CHECK_FALSE(d.std_lv_accuracy.newton.passed);
+  CHECK(d.std_lv_accuracy.gradient_max > .01);
+  CHECK(std::abs(d.std_lv_accuracy.objective_difference) < 1e-12);
+  CHECK(d.std_lv_accuracy.reason.find("chart proximity") != std::string::npos);
+  CHECK(magmaan::estimate::fit_verdict(fit->estimates).status != magmaan::estimate::FitCheck::Passed);
 }

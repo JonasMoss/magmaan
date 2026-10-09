@@ -1760,14 +1760,16 @@ release, including dependencies otherwise shared with the primary programme.
   [normalization contract](../reference/optimizer-controls.md#complete-data-ml-and-psd-sample-normalization-2026-09-27)
   and [barrier defaults](../../experiments/decisions/02-barrier-defaults/report.qmd).
 
-- [ ] **M — finish near-pole verdicts after the barrier fallback units fix.**
-  TASK-131 repairs the equality-constrained automatic `native-fabin-fallback`
-  by constructing in normalized sample units. Three retained ×0.01 chain
-  failures now certify; their native and ×100 controls retain the same minima.
-  Extreme accepted marker-chart endpoints still need chart-proximity diagnosis.
-  **Check:** a fresh paired lane with losses retained remains open. Chart extent
-  is not proof of nonattainment; do not change markers automatically. Evidence:
-  barrier defaults and
+- [ ] **M — finish near-pole barrier verdict follow-ups.** TASK-131 fixed the
+  ×0.01 equality-constrained native-fallback start units (three retained chain
+  failures now certify; native and ×100 controls keep the same minima). TASK-137
+  adds a same-endpoint std.lv Newton audit to complete-data penalized ML:
+  marker-chart certification also requires finite-chart accuracy when transport
+  is supported, and unsupported transports (equality constraints) keep the
+  existing verdict with an explicit reason. **Remaining check:** a fresh paired
+  stress lane with losses retained, and transport under equality constraints.
+  Chart extent is not proof of nonattainment; do not change markers
+  automatically. Evidence: barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
 
 The shared barrier fitting baseline is recorded in the

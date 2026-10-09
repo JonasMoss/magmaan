@@ -1646,6 +1646,17 @@ chi-square and Wald calibration at `N = 50`, and that the originally proposed
 `lambda = 1` over-shrinks high-R2 equations and correlations near one. SNLLS,
 LS/ordinal paths, and two-level models are out of scope.
 
+Complete-data penalized ML also audits the returned endpoint in disturbance-unit
+std.lv coordinates when the existing marker/start transport supports the model.
+The marker-chart Newton diagnostic remains in `newton_accuracy`; the additional
+check and transport reason live in `std_lv_accuracy`. Certification requires
+both checks. A failed finite-chart check leaves accuracy unresolved with a
+chart-proximity reason; no optimization or automatic identification change is
+performed. Unsupported transports (including equalities and unsupported fixed
+values) preserve the existing verdict and name the limitation. Zero penalty
+retains ordinary ML behavior. This supplementary audit does not extend the
+FIML, ordinal or least-squares barrier contracts.
+
 The same machinery carries a second target, `PenaltyTarget::Determinacy` (R
 `target = "determinacy"`): the latent-determinacy barrier `lambda * log det Q`,
 with `Q = Var(eta_L | y)` standardized by `Var(eta_L)` over the genuine latents
