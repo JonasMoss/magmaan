@@ -1,0 +1,178 @@
+#!/usr/bin/env Rscript
+args <- commandArgs(trailingOnly = TRUE)
+if ("--help" %in% args) {
+  cat("Fit-index harness (criteria pending; smoke/pricing only).\n",
+      "Rscript run_experiment.R --smoke|--pilot [--config cells.csv] [--cells id,id]\n",
+      "  --reps N          default 1 smoke, 5 pilot\n",
+      "  --seed-base N     defaults 1450901 smoke, 1451901 pilot; distinct from production\n",
+      "  --workers N       1 or 2; single-threaded math\n",
+      "  --run-id NAME     required for new runs; existing runs resume only with matching provenance\n",
+      "  --lane NAME       default pricing\n",
+      "Output: results/<lane>/<run-id>/{raw,summary.csv,timing.csv,targets.csv,metadata.csv}.\n",
+      "Targets use population moments, or one fixed N=200000 draw for FIML MAR.\n",
+      "Generators checked on N=1000000 independent draws. Integer discretized scores\n",
+      "have their own score moments and targets; target_rmsea sizes the parent continuous population.\n",
+      "No decision/production mode exists until criteria and compute authorization.\n", sep = "")
+  quit(status = 0)
+}
+file_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+leaf <- dirname(normalizePath(sub("^--file=", "", file_arg[1])))
+root <- normalizePath(file.path(leaf, "../../.."))
+source(file.path(root, "experiments/_support/R/helpers.R"))
+source(support_path("R", "basis.R")); source(support_path("R", "missingness.R"))
+for (file in c("config", "populations", "generators", "targets", "arms"))
+  source(file.path(leaf, "R", paste0(file, ".R")))
+set_single_threaded_math()
+option <- function(name, default = NULL) {
+  position <- match(paste0("--", name), args)
+  if (is.na(position)) return(default)
+  if (position == length(args) || startsWith(args[position+1], "--")) stop("Missing --", name)
+  args[position+1]
+}
+flags <- c("--smoke", "--pilot")
+value_flags <- paste0("--", c("config", "cells", "reps", "seed-base", "workers", "run-id", "lane"))
+if (any(!args[startsWith(args,"--")] %in% c(flags,value_flags))) stop("Unknown option")
+if (sum(flags %in% args) != 1) stop("Select --smoke or --pilot; criteria/production pending")
+mode <- if ("--smoke" %in% args) "smoke" else "pilot"
+reps <- as.integer(option("reps", if (mode == "smoke") "1" else "5"))
+seed_base <- as.integer(option("seed-base", if (mode == "smoke") "1450901" else "1451901"))
+workers <- as.integer(option("workers", "1"))
+run_id <- option("run-id"); lane <- option("lane", "pricing")
+if (is.null(run_id) || !grepl("^[A-Za-z0-9_-]+$", run_id) || !grepl("^[A-Za-z0-9_-]+$",lane) ||
+    !is.finite(reps) || reps < 1 || !workers %in% 1:2 || !is.finite(seed_base) || seed_base < 1)
+  stop("Invalid run arguments")
+config <- option("config")
+cells <- validate_config(if (is.null(config)) study_config(mode) else read.csv(config, keep.default.na = FALSE, na.strings = "NA"))
+all_cells <- cells
+filter <- option("cells")
+if (!is.null(filter)) {
+  ids <- parse_csv_arg(filter)
+  if (any(!ids %in% cells$id)) stop("Unknown cell id")
+  cells <- cells[cells$id %in% ids, ]
+}
+if (!nrow(cells)) stop("No cells selected")
+out_dir <- file.path(leaf, "results", lane, run_id)
+dir.create(file.path(out_dir, "raw"), recursive = TRUE, showWarnings = FALSE)
+hash_object <- function(x) {
+  tmp <- tempfile(); on.exit(unlink(tmp)); saveRDS(x,tmp); unname(tools::md5sum(tmp))
+}
+source_files <- c(list.files(file.path(leaf,"R"), full.names=TRUE),
+  file.path(leaf,"run_experiment.R"), support_path("R","missingness.R"), support_path("R","basis.R"),
+  list.files(support_path("basis","sem_score"),full.names=TRUE))
+library_files <- unlist(lapply(c("magmaanlab","magmaan"), function(p)
+  list.files(find.package(p), recursive=TRUE, full.names=TRUE, pattern="\\.(so|rdb)$")))
+fingerprint <- hash_object(list(source=tools::md5sum(source_files), library=tools::md5sum(library_files),
+  config=all_cells, seed_base=seed_base, mode=mode))
+manifest <- file.path(out_dir,"raw","manifest.rds")
+if (file.exists(manifest)) {
+  if (!identical(readRDS(manifest),fingerprint)) stop("Resume refused: source/library/config/seed changed; use a fresh run-id")
+} else saveRDS(fingerprint,manifest)
+metadata <- data.frame(key=c("git_head","dirty","library_build","library_hash","source_hash","config_hash",
+  "seed_base","mode","command","R_version","magmaan_version","magmaanlab_version","target_n","check_n","criteria"),
+  value=c(git_scalar(c("rev-parse","HEAD")),git_dirty(), packageDescription("magmaanlab")$Built,
+    hash_object(tools::md5sum(library_files)),hash_object(tools::md5sum(source_files)),hash_object(all_cells),
+    seed_base,mode,paste(commandArgs(),collapse=" "),R.version.string,
+    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"pending; engineering only"))
+if (!file.exists(file.path(out_dir,"metadata.csv"))) write_csv(metadata,file.path(out_dir,"metadata.csv"))
+write_csv(cells,file.path(out_dir,"cells.csv"))
+write_csv(do.call(rbind,lapply(unique(cells$estimator),function(e)
+  transform(arm_metadata(e),estimator=e))),file.path(out_dir,"arms.csv"))
+# A seed depends on the full cell record and replicate id, never filter/order/workers.
+cell_seed <- function(cell, replicate = 0L, channel = 0L) {
+  h <- hash_object(cell)
+  offset <- strtoi(substr(h,1,7),16L)
+  as.integer((as.double(seed_base)+offset+104729*replicate+1000003*channel) %% 2147483000 + 1)
+}
+cache_dir <- file.path(leaf,"results","cache",fingerprint)
+dir.create(cache_dir,recursive=TRUE,showWarnings=FALSE)
+prepare <- function(cell) {
+  # N/id are sampling labels: target and generator checks are reused across N.
+  key_cell <- cell; key_cell$id <- NULL; key_cell$N <- NULL
+  key <- calibration_cache_key(population = key_cell, generator = cell$generator,
+    options = list(skewness = cell$skewness, kurtosis = cell$kurtosis, categories = cell$categories),
+    extra = list(fingerprint = fingerprint))
+  if (calibration_cache_exists(key, cache_dir)) return(calibration_cache_read(key, cache_dir))
+  started <- proc.time()[[3]]
+  population <- build_population(cell)
+  calibration <- calibrate_generator(population,cell)
+  checks <- validate_generator(calibration,cell_seed(key_cell,channel=1L))
+  targets <- compute_targets(population,calibration,cell,cell_seed(key_cell,channel=2L))
+  result <- list(population=population,calibration=calibration,checks=checks,targets=targets,
+                 setup_seconds=proc.time()[[3]]-started)
+  calibration_cache_write(key, result, cache_dir); result
+}
+# Prepare serially so workers do not race on the same expensive cached target.
+prepared <- vector("list",nrow(cells))
+for (i in seq_len(nrow(cells))) {
+  cat("Preparing",cells$id[i],"(",i,"/",nrow(cells),")\n"); flush.console()
+  prepared[[i]] <- tryCatch(prepare(as.list(cells[i,])),error=function(e) e)
+  if (inherits(prepared[[i]],"error")) {
+    writeLines(conditionMessage(prepared[[i]]),file.path(out_dir,"raw",paste0(cells$id[i],"_setup_failure.txt")))
+    stop("Cell setup failed: ", cells$id[i], ": ",conditionMessage(prepared[[i]]))
+  }
+}
+run_cell <- function(i) {
+  cell <- as.list(cells[i,]); context <- prepared[[i]]
+  dir <- file.path(out_dir,"raw",cell$id); dir.create(dir,showWarnings=FALSE)
+  for (replicate in seq_len(reps)) {
+    path <- file.path(dir,sprintf("rep_%05d.rds",replicate))
+    if (file.exists(path)) next
+    seed <- cell_seed(cell,replicate)
+    started <- proc.time()[[3]]
+    result <- tryCatch({
+      data <- draw_generator(context$calibration,cell$N,seed)
+      if (cell$estimator == "FIML") data <- apply_mar(data,cell,cell_seed(cell,replicate,3L))
+      run_arms(data,context$population,cell)
+    }, error=function(e) {
+      x <- arm_grid(); x$estimate <- x$lower <- x$upper <- NA_real_
+      x$reason <- conditionMessage(e); x$converged <- FALSE; x
+    })
+    result$cell <- cell$id; result$replicate <- replicate; result$seed <- seed
+    result$seconds <- proc.time()[[3]]-started
+    tmp <- paste0(path,".tmp"); saveRDS(result,tmp); file.rename(tmp,path)
+  }
+  writeLines(as.character(reps),file.path(dir,"COMPLETE")); i
+}
+started <- proc.time()[[3]]
+for (chunk in split(seq_len(nrow(cells)),ceiling(seq_len(nrow(cells))/workers))) {
+  answer <- parallel::mclapply(chunk,run_cell,mc.cores=workers,mc.preschedule=TRUE)
+  if (any(vapply(answer,inherits,FALSE,"try-error"))) stop("Worker failed; inspect raw checkpoints")
+  cat("Completed",paste(cells$id[chunk],collapse=", "),"elapsed",round(proc.time()[[3]]-started,1),"seconds\n")
+  flush.console()
+}
+rows <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i) {
+  dir <- file.path(out_dir,"raw",cells$id[i])
+  do.call(rbind,lapply(seq_len(reps),function(r) readRDS(file.path(dir,sprintf("rep_%05d.rds",r)))))
+}))
+summary <- do.call(rbind,lapply(split(rows,interaction(rows$cell,rows$arm,rows$index,drop=TRUE)),function(x) {
+  i <- match(x$cell[1],cells$id); target <- prepared[[i]]$targets$own[[x$index[1]]]
+  available <- is.na(x$reason) & is.finite(x$estimate)
+  if (x$kind[1] == "interval") available <- available & is.finite(x$lower) & is.finite(x$upper)
+  error <- x$estimate[available]-target
+  coverage <- x$lower <= target & x$upper >= target
+  data.frame(cell=x$cell[1],arm=x$arm[1],index=x$index[1],kind=x$kind[1],target=target,
+    attempted=nrow(x),available=sum(available),availability=mean(available),convergence=mean(x$converged),
+    bias=if(length(error)) mean(error) else NA_real_,rmse=if(length(error)) sqrt(mean(error^2)) else NA_real_,
+    coverage=if(x$kind[1]=="interval" && any(available)) mean(coverage[available]) else NA_real_,
+    coverage_attempted=if(x$kind[1]=="interval") mean(available & coverage,na.rm=TRUE) else NA_real_,
+    width=if(x$kind[1]=="interval" && any(available)) mean(x$upper[available]-x$lower[available]) else NA_real_)
+}))
+write_csv(summary,file.path(out_dir,"summary.csv"))
+targets <- do.call(rbind,lapply(seq_len(nrow(cells)),function(i) {
+  z <- prepared[[i]]$targets
+  data.frame(cell=cells$id[i],delta=prepared[[i]]$population$delta,method=z$method,n=z$n,seed=z$seed,
+    cause=z$cause,missing_targets=z$missing_targets,mar=z$mar,
+    as.list(z$own),setNames(as.list(z$complete),paste0("complete_",names(z$complete))))
+}))
+write_csv(targets,file.path(out_dir,"targets.csv"))
+write_csv(do.call(rbind,lapply(seq_len(nrow(cells)),function(i)
+  transform(prepared[[i]]$checks,cell=cells$id[i]))),file.path(out_dir,"generator_checks.csv"))
+timing <- unique(rows[,c("cell","replicate","seconds")])
+write_csv(timing,file.path(out_dir,"timing.csv"))
+cost <- merge(cells,aggregate(seconds~cell,timing,mean),by.x="id",by.y="cell")
+write_csv(cost,file.path(out_dir,"cost.csv"))
+failures <- rows[!is.na(rows$reason),c("cell","replicate","arm","index","reason")]
+write_csv(failures,file.path(out_dir,"failures.csv"))
+write_csv(data.frame(cell=cells$id,setup_seconds=vapply(prepared,`[[`,0.,"setup_seconds")),file.path(out_dir,"setup_timing.csv"))
+cat("Wrote",out_dir,"\n")
+if (mode == "smoke" && !any(rows$converged)) stop("Smoke had no converged fits")

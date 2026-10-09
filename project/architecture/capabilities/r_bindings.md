@@ -627,6 +627,16 @@ ML/FIML/ULS/GLS/ML2S and grouped ordinal DWLS delegation are interface-gated.
 Compatibility requests use the separate TASK-109 composer; policy intervals await TASK-103.
 
 
+## Fit-index evaluation harness (TASK-145)
+
+`experiments/decisions/09-fit-indices` consumes the ordinary default fitter and
+lab compatibility/Wald composers for ML and MAR-FIML. Configurable populations,
+integer-score and continuous generators, estimator-specific cached targets and
+per-draw checkpoints support pricing and smoke work. Unavailable arms retain
+reasons and attempted denominators. This is a harness with criteria pending;
+its smoke establishes end-to-end plumbing only. The pricing pilot stops at the
+mtmm9 MAR target stationarity failure; no default changes or coverage claim.
+
 ## Continuous lab fit-index Wald candidate (TASK-142)
 
 `api::frontier::fit_index_intervals_misspec()` and the thin lab wrapper support

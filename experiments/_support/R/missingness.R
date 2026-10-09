@@ -352,3 +352,28 @@ sb2009_mar <- function(data, rate = 0.15, target_cols = NULL,
     )
   )
 }
+
+# Pure observation masking. The cause is fully observed and is never a target.
+# rate is the expected fraction missing in each target, conditional on this draw.
+single_cause_mar <- function(data, cause, targets, rate, seed) {
+  if (!is.data.frame(data) || !cause %in% names(data) ||
+      any(!targets %in% names(data)) || cause %in% targets ||
+      length(rate) != 1L || !is.finite(rate) || rate < 0 || rate >= 1)
+    stop("Invalid single-cause MAR specification", call. = FALSE)
+  x <- data[[cause]]
+  if (!is.numeric(x) || any(!is.finite(x)))
+    stop("MAR cause must be numeric and fully observed", call. = FALSE)
+  old <- if (exists(".Random.seed", .GlobalEnv)) get(".Random.seed", .GlobalEnv) else NULL
+  on.exit(if (is.null(old)) {
+    if (exists(".Random.seed", .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  } else assign(".Random.seed", old, .GlobalEnv))
+  set.seed(seed)
+  z <- if (sd(x) > 0) (x - mean(x))/sd(x) else rep(0, length(x))
+  intercept <- if (rate == 0) -Inf else
+    uniroot(function(a) mean(plogis(a + z)) - rate, c(-40, 40), tol = 1e-12)$root
+  probability <- plogis(intercept + z)
+  for (target in targets) data[[target]][runif(nrow(data)) < probability] <- NA_real_
+  attr(data, "missingness") <- list(cause = cause, targets = targets, rate = rate,
+                                    slope = 1, intercept = intercept, seed = seed)
+  data
+}

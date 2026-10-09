@@ -1,0 +1,9 @@
+*
+!.gitignore
+# Pricing and smoke summaries are retained as bounded engineering evidence.
+!pricing/
+pricing/*
+!pricing/smoke-task145-final/
+!pricing/pilot-task145/
+pricing/*/*
+!pricing/*/*.csv

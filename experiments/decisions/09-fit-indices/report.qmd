@@ -1,0 +1,124 @@
+---
+title: "Fit-index points and intervals: harness and pricing"
+format:
+  html:
+    toc: true
+    html-math-method: mathml
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  lane: pricing
+  run_id: smoke-task145-final
+---
+
+## Default register
+
+| Choice | Current value | Status | Evidence |
+|---|---|---|---|
+| Ordinary RMSEA, CFI, TLI, SRMR points | Misspecification-robust policy composer | Adopted; evaluation pending | Component gates; this pilot only prices evaluation |
+| Ordinary fit-index intervals | None | Open | Lab Wald candidates; registration pending |
+| Evaluation design | Tier-1 basis, ML and MAR-FIML | Harness; criteria pending | Smoke and bounded pricing controls |
+
+Which fit-index corrections and intervals should ordinary users receive? This
+harness prepares the comparison. The full pricing pilot stopped before sampling because the mtmm9 MAR target failed
+the library stationarity verdict (Newton distance .01219143, budget .01). The
+five-cell smoke passes; its one-draw timings cannot establish bias, coverage
+or a preferred interval. Criteria and production authorization remain pending.
+
+## Smoke timings
+
+```{r}
+path <- file.path("results", params$lane, params$run_id)
+if (!file.exists(file.path(path, "cost.csv")))
+  stop("Missing pricing results. Run scripts/run_pilot.sh, or select an existing run_id.")
+cost <- read.csv(file.path(path, "cost.csv"))
+checks <- read.csv(file.path(path, "generator_checks.csv"))
+timing <- read.csv(file.path(path, "timing.csv"))
+setup <- read.csv(file.path(path, "setup_timing.csv"))
+priced <- aggregate(seconds ~ generator + estimator + N, cost, mean)
+names(priced) <- c("Generator", "Estimator", "Sample size", "Mean seconds per draw")
+priced[[4]] <- round(priced[[4]], 3)
+knitr::kable(priced)
+```
+
+These are smoke timings, with one draw per cell, rather than a completed pricing
+pilot. The intended pilot is blocked during population preparation. These costs
+average only timing over the smoke models and misfit controls. The
+full per-cell costs, setup timings, attempted denominators, availability and
+failures are in this run's CSV files. Sampling costs include ordinary default
+fitting, all point arms and all lab interval arms. Target calibration is a
+separate one-time cost. Cached target timings repeat in cells sharing a target
+and must not be summed as if they were independent work.
+
+## Targets and conventions
+
+The generating h1 population gains the catalog's omitted block. Every coefficient
+in the block has the same standardized size: residual covariance divided by the
+disturbance standard deviations, or loading/regression multiplied by the ratio
+of predictor and outcome total standard deviations. The core supplies implied
+moments; inadmissible generating populations fail before sampling. A cell may
+specify the signed size directly or root-find the continuous population RMSEA
+within absolute standardized size .4.
+
+The RMSEA target is $\sqrt{G F_0/\mathrm{df}}$. Complete-data targets fit h1 and the independence baseline to population moments
+with the library default fitter. RMSEA uses the number of groups; TLI uses nominal
+degrees of freedom. Each MAR-FIML target uses one fixed 200,000-row draw with the
+same generator and masking law as its cell. The saturated/user/baseline likelihood
+contrasts are library components. This finite integration approximation has Monte
+Carlo error; it is recorded with its seed and method, and is not an exact MAR
+integral. Complete-data targets are retained beside estimator-specific targets.
+
+The MAR law masks half of the variables independently conditional on one fully
+observed cause. Its logistic slope is one after standardizing the cause, and the
+intercept calibrates the expected rate in each draw and group. The configuration
+can instead name the cause and targets. Fifteen percent means fifteen percent of
+each target column, rather than fifteen percent of all entries.
+
+Normal single-group data use the core model generator; grouped normal data use
+Cholesky draws. Vale–Maurelli data use centered cubic Fleishman transforms and
+inverted intermediate normal correlations. Independent-generator data apply a
+covariance factor to independent Fleishman variables. The latter's configured
+skewness and excess kurtosis describe the independent sources, not each observed
+variable. Integer discretized scores use equal-probability thresholds with
+Pearson-code correlation calibration. Their variances and means are the exact
+score moments, so their own population targets are recomputed; a requested RMSEA
+sizes the continuous parent, not the scored population. Every configured generator
+must reproduce its own population covariance within 1% relative Frobenius error
+in a separate million-row check. Infeasible calibrations fail without matrix repair.
+
+Naive and lavaan-robust points use the lab compatibility composer (MLM for complete
+ML, MLR for FIML). The ordinary `fit_measures()` supplies the adopted corrected
+points. The lab supplies naive/scaled noncentral RMSEA intervals and both 90% Wald
+variants. Noncentral CFI/TLI intervals and lavaan-robust SRMR are unavailable
+components, retained with reasons. The square-root Wald variant can be unavailable
+at zero corrected discrepancy. RMSEA lower bounds are clipped at zero and zero is
+covered when that bound is zero. Conditional coverage, attempted-draw coverage,
+availability and convergence are all retained per cell; no fit is discarded.
+
+## Caveats
+
+The planned pilot uses three models, two misfit controls, two sample sizes and normal/VM
+data for ML and 15% MAR-FIML. Five draws per cell price the computation; they do
+not estimate performance reliably. Smoke additionally exercises independent and
+integer discretized generators. All tier-1 models are configurable. DWLS, richer
+MAR, bootstrap comparators and a production grid await their own registration.
+
+## Reproduce
+
+From the repository root, using the read-only lane library:
+
+```sh
+R_LIBS=~/.cache/magmaan-rlib/lane-c Rscript experiments/decisions/09-fit-indices/run_experiment.R --help
+R_LIBS=~/.cache/magmaan-rlib/lane-c nice -n 10 Rscript experiments/decisions/09-fit-indices/run_experiment.R --smoke --workers 2 --run-id fresh-smoke
+experiments/decisions/09-fit-indices/scripts/run_pilot.sh fresh-pilot
+quarto render experiments/decisions/09-fit-indices/report.qmd -P run_id:smoke-task145-final
+```
+
+Run within the repository's shared compute slice, with single-threaded BLAS/OpenMP.
+Use fresh run IDs after changing source, configuration, libraries or seed base.
+Matching runs resume per-draw checkpoints; changing the filter or worker count
+preserves seeds. `R/config.R` is the pricing configuration; a CSV with those same
+columns may be supplied with `--config`. Reports read only the selected local
+result directory and never launch estimation.

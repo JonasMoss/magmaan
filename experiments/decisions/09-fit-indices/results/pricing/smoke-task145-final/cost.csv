@@ -1,0 +1,6 @@
+"id","model","delta","generator","N","estimator","target_rmsea","missing_rate","skewness","kurtosis","categories","cause","missing_targets","seconds"
+"cell_001","cfa_ptsd8",0,"normal",200,"ML",,0,1,2,5,"","",0.0579999999999998
+"cell_002","growth6",0.1,"vm",200,"ML",,0,1,2,5,"","",0.052999999999999
+"cell_003","cfa_ptsd8",-0.1,"normal",200,"FIML",,0.15,1,2,5,"","",0.0830000000000002
+"cell_004","cfa_mtmm9",-0.1,"independent",200,"ML",,0,1,2,5,"","",0.0650000000000013
+"cell_005","cfa_ptsd8",-0.1,"discretized",200,"ML",,0,1,2,5,"","",0.151
