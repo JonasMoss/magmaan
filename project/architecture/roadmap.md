@@ -335,6 +335,14 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-10: lab fits carry a read-only deletion record (policy, and per group
+the rows supplied, used and deleted with reason classes) across the data-frame
+helpers, prepared estimation and every fitting route; FIML and ML2S record zero
+listwise deletion (TASK-155). The decisions/09 Wald-interval over-coverage is
+finite-sample variance inflation: at delta .4 the variance ratio falls from 1.71
+(N = 200) to 1.06 (N = 4000); a future comparator uses V1 alone when the
+corrected discrepancy is clearly positive (TASK-154).
+
 2026-10-10: FIML fit-measure calls (policy points, compatibility measures and
 the lab Wald intervals) share fit-owned ingredients through a lazy native cache:
 the missingness pack, tight H1 moments, saturated observed information, its
