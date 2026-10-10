@@ -173,3 +173,7 @@ export(structural_identification)
 export(augment_model_spec)
 
 export(fit_index_intervals_misspec)
+
+S3method("$<-",magmaan_deletion)
+S3method("[[<-",magmaan_deletion)
+S3method("[<-",magmaan_deletion)

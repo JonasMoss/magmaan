@@ -115,9 +115,13 @@ prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwis
     stop("prepare_data(): data kind disagrees with model schema")
   summaries <- kind == "moments" && is.list(data) && !is.data.frame(data) && !is.null(data$S)
   X <- if (summaries) sample_stats_arg(data) else .prepared_blocks(model, data, kind, missing)
+  deletion <- if (summaries) data$deletion else .deletion_record(
+    if (is.matrix(data)) as.data.frame(data) else data, model$ov_names,
+    model$spec$group_var, model$spec$group_labels,
+    if (kind == "raw") "fiml" else missing)
   native <- prepared_data_impl(model$native, X, kind, model$masks)
   .prepared_object(native = native, model = model, kind = kind, X = if (summaries) NULL else X,
-                   missing = missing, class = "magmaan_prepared_data")
+                   missing = missing, deletion = deletion, class = "magmaan_prepared_data")
 }
 
 #' Prepare reusable estimation weights
@@ -239,6 +243,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
                                   nobs = vapply(data$X, nrow, integer(1))),
                              class = c("magmaan_complete_data", "list"))
   }
+  fit <- .retain_deletion(fit, data)
   fit <- finalize_magmaan_fit(fit, spec, estimator,
                       if (data$kind == "raw") "fiml" else data$missing, "none", "none")
   if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-

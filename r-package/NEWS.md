@@ -1,5 +1,10 @@
 # magmaanlab (development)
 
+- Lab fits and prepared datasets retain read-only deletion provenance: rows
+  supplied, used and deleted per group, exclusive reasons, and applied policy.
+  FIML/ML2S record no listwise deletion; summary-only historical counts are
+  marked unknown. Existing missing-data and group-label refusals are preserved.
+
 - Complete-data ML and GLS fits with standardized extent above 10 are no longer
   reported converged when their supported std.lv endpoint Newton audit fails.
   Diagnostics record the trigger and unsupported transports; estimates are unchanged.

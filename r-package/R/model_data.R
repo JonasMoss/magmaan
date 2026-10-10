@@ -460,6 +460,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
     dimnames(out$R[[b]]) <- list(nm, nm)
   }
   class(out) <- c("magmaan_ordinal_data", "list")
+  out$deletion <- .deletion_record(x, ov_by_group, group_var, labels, missing)
   out
 }
 
@@ -559,10 +560,13 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   }
 
   list(X = X, ordered_mask = ordered_mask, ov_names = ov_by_group,
-       ordered = ordered, group_var = group_var, group_labels = labels)
+       ordered = ordered, group_var = group_var, group_labels = labels,
+       deletion = .deletion_record(x, ov_by_group, group_var, labels,
+         if (keep_missing) "pairwise" else "listwise"))
 }
 
 .stamp_mixed_ordinal_stats <- function(out, ctx) {
+  out$deletion <- ctx$deletion
   out$X <- ctx$X
   out$ov_names <- ctx$ov_names
   out$ordered <- ctx$ordered
@@ -690,6 +694,7 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
     names(out$mean[[b]]) <- nm
   }
   class(out) <- c("magmaan_mixed_ordinal_data", "list")
+  out$deletion <- .deletion_record(x, ov_by_group, group_var, labels, missing)
   out
 }
 
@@ -1131,6 +1136,7 @@ df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
     scaling = scaling
   ))
   class(out) <- c("magmaan_data", "list")
+  out$deletion <- .deletion_record(x, ov_by_group, group_var, labels, missing)
   out
 }
 
@@ -1231,6 +1237,7 @@ df_to_fiml_data <- function(x, model, group = NULL) {
     nobs = vapply(X, nrow, integer(1))
   )
   class(out) <- c("magmaan_fiml_data", "list")
+  out$deletion <- .deletion_record(x, ov_by_group, group_var, labels, "fiml")
   out
 }
 
@@ -1305,6 +1312,7 @@ df_to_fcsem_data <- function(x, model, missing = c("listwise", "error"),
     scaling = scaling
   ))
   class(out) <- c("magmaan_fcsem_data", "magmaan_data", "list")
+  out$deletion <- .deletion_record(x, list(ov), "", character(), missing)
   out
 }
 
@@ -1424,8 +1432,8 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
   }
   if (inherits(data, "magmaan_ordinal_data")) {
     if (!bounds_is_none(bounds)) stop("fit_ml(): ordinal association ML does not accept bounds")
-    return(fit_ml_ordinal_impl(augment_ordinal_partable(model, data), data,
-                               optimizer = optimizer, control = control))
+    return(.retain_deletion(fit_ml_ordinal_impl(augment_ordinal_partable(model, data), data,
+                               optimizer = optimizer, control = control), data))
   }
   b <- bounds_arg(bounds, model, data, "fit_ml")
   fit <- fit_ml_impl(partable_arg(model), sample_stats_arg(data),
@@ -1454,10 +1462,10 @@ frontier_fit_ml_psd <- function(
   }
   if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
   if (inherits(data, "magmaan_ordinal_data")) {
-    fit <- fit_ml_ordinal_impl(
+    fit <- .retain_deletion(fit_ml_ordinal_impl(
       augment_ordinal_partable(model, data), data, psd = TRUE,
       optimizer = optimizer, control = control,
-      start_eigen_floor = start_eigen_floor, feasibility_tol = feasibility_tol)
+      start_eigen_floor = start_eigen_floor, feasibility_tol = feasibility_tol), data)
     return(.finish_frontier_fit(fit, model, "ML", "frontier_fit_ml_psd",
                                .route_args(environment(), sys.function()), missing))
   }
@@ -1654,6 +1662,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
   if (identical(fit$user_chart, FALSE)) {
     .stop_user_chart_singular(fit$gauge, spec, "frontier_fit_sphere")
   }
+  fit <- .retain_deletion(fit, data)
   if (!identical(estimator, "FIML")) fit <- attach_complete_raw_data(fit, data)
   fit <- finalize_magmaan_fit(fit, spec, estimator, missing, "none", "none")
   fit$options$chart <- "sphere"
@@ -1924,7 +1933,7 @@ sam <- function(model, data,
   fit$group_var <- spec$group_var %||% fit$group_var %||% ""
   fit$group_labels <- spec$group_labels %||% fit$group_labels %||% character()
   class(fit) <- c("magmaan_sam_fit", "magmaan_fit", "list")
-  fit
+  .retain_deletion(fit, data)
 }
 
 fit_fiml <- function(model, data,
@@ -1952,7 +1961,7 @@ fit_fiml <- function(model, data,
   if (!is.null(options)) fit$options$route <- list(fitter = "fit_fiml", args = list(
       options = control$fitting_options,
       control = if (!is.null(control$start)) list(start = control$start) else NULL))
-  fit
+  .retain_deletion(fit, data)
 }
 
 # Frontier two-stage patternwise normal-theory ML. The saturated FIML moments
@@ -1980,7 +1989,7 @@ frontier_fit_fiml_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  .finish_frontier_fit(fit, model, "FIML", "frontier_fit_fiml_psd", .route_args(environment(), sys.function()))
+  .finish_frontier_fit(.retain_deletion(fit, data), model, "FIML", "frontier_fit_fiml_psd", .route_args(environment(), sys.function()))
 }
 
 # Frontier casewise FIML plus the multi-information or latent-determinacy
@@ -2006,7 +2015,7 @@ frontier_fit_fiml_multiinfo <- function(
     optimizer = optimizer, control = control, bounds = b, target = target
   )
   .warn_nonrecursive_multiinfo(fit, "frontier_fit_fiml_multiinfo")
-  .finish_frontier_fit(fit, model, "FIML", "frontier_fit_fiml_multiinfo", .route_args(environment(), sys.function()))
+  .finish_frontier_fit(.retain_deletion(fit, data), model, "FIML", "frontier_fit_fiml_multiinfo", .route_args(environment(), sys.function()))
 }
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
@@ -2021,7 +2030,7 @@ fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                                     stage1_regularization = stage1_regularization,
                                     stage2_weight = stage2_weight, dls_a = dls_a)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
-  fit
+  .retain_deletion(fit, data)
 }
 
 # Frontier ML2S point estimation with PSD primitive LISREL covariance blocks.
@@ -2050,7 +2059,7 @@ frontier_fit_ml2s_psd <- function(
     covariance_policy = "psd", start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
-  .finish_frontier_fit(fit, model, "ML2S", "frontier_fit_ml2s_psd", .route_args(environment(), sys.function()))
+  .finish_frontier_fit(.retain_deletion(fit, data), model, "ML2S", "frontier_fit_ml2s_psd", .route_args(environment(), sys.function()))
 }
 
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
@@ -2128,6 +2137,7 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
                            optimizer = optimizer, control = control,
                            bounds = b$bounds,
                            bounds_preset = b$bounds_preset)
+  fit$deletion <- parts$deletion
   fit <- finalize_magmaan_fit(fit, spec, "ML", missing, "none", "none")
   fit$options$route <- list(fitter = "fit_twolevel",
                             args = .route_args(environment(), sys.function()))
@@ -2216,7 +2226,10 @@ fit_twolevel <- function(model, data, cluster, group = NULL,
     gid <- as.integer(match(gvals, labels) - 1L)
   }
 
-  list(X = X, cid = as.integer(cid), gid = gid)
+  deletion <- .deletion_record(data, rep(list(ov), max(1L, length(spec$group_labels))),
+    group %||% "", spec$group_labels, missing,
+    if (is.character(cluster) && length(cluster) == 1L) data[[cluster]] else cluster)
+  list(X = X, cid = as.integer(cid), gid = gid, deletion = deletion)
 }
 
 # evaluate_at() — no-optimizer companion. Runs the same terminal audit /
@@ -2276,7 +2289,7 @@ fit_ml_fcsem <- function(model, data, missing = c("listwise", "error"),
   if (is.data.frame(data)) data <- df_to_fcsem_data(data, spec, missing = missing)
   fit <- fit_ml_fcsem_impl(spec$syntax, sample_stats_arg(data, allow_fcsem = TRUE),
                            control = control)
-  finalize_fcsem_fit(fit, spec, missing)
+  finalize_fcsem_fit(.retain_deletion(fit, data), spec, missing)
 }
 
 magmaan_fcsem <- function(model, data, ..., missing = c("listwise", "error"),
@@ -2354,24 +2367,24 @@ fit_dwls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
     }
   }
   b <- bounds_arg(bounds, pt, caller = "fit_dwls_ordinal")
-  fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
-                        control = control, bounds = b)
+  .retain_deletion(fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
+                        control = control, bounds = b), data)
 }
 
 fit_wls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                             control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_wls_ordinal")
-  fit_wls_ordinal_impl(pt, data, optimizer = optimizer,
-                       control = control, bounds = b)
+  .retain_deletion(fit_wls_ordinal_impl(pt, data, optimizer = optimizer,
+                       control = control, bounds = b), data)
 }
 
 fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                             control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_uls_ordinal")
-  fit_uls_ordinal_impl(pt, data, optimizer = optimizer,
-                       control = control, bounds = b)
+  .retain_deletion(fit_uls_ordinal_impl(pt, data, optimizer = optimizer,
+                       control = control, bounds = b), data)
 }
 
 # Frontier all-ordinal ULS/DWLS/WLS over PSD primitive LISREL covariance
@@ -2391,7 +2404,7 @@ frontier_fit_ordinal_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_ordinal_psd", .route_args(environment(), sys.function()))
+  .finish_frontier_fit(.retain_deletion(fit, data), if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_ordinal_psd", .route_args(environment(), sys.function()))
 }
 
 ordinal_stage2_weight_blocks <- function(data,
@@ -2415,9 +2428,9 @@ fit_ordinal_stage2 <- function(model, data,
                              c("dwls", "wls", "uls", "nt", "gls", "dls", "adf"))
   pt <- augment_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_ordinal_stage2")
-  fit_ordinal_stage2_impl(pt, data, stage2_weight = stage2_weight,
+  .retain_deletion(fit_ordinal_stage2_impl(pt, data, stage2_weight = stage2_weight,
                           dls_a = dls_a, optimizer = optimizer,
-                          control = control, bounds = b)
+                          control = control, bounds = b), data)
 }
 
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
@@ -2440,16 +2453,16 @@ fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
   }
   pt <- augment_mixed_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_dwls_mixed_ordinal")
-  fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
-                              control = control, bounds = b)
+  .retain_deletion(fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
+                              control = control, bounds = b), data)
 }
 
 fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                   control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "fit_wls_mixed_ordinal")
-  fit_wls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
-                             control = control, bounds = b)
+  .retain_deletion(fit_wls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
+                             control = control, bounds = b), data)
 }
 
 # Frontier mixed continuous/ordinal ULS/DWLS/WLS over PSD primitive LISREL
@@ -2469,7 +2482,7 @@ frontier_fit_mixed_ordinal_psd <- function(
     start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
-  .finish_frontier_fit(fit, if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_mixed_ordinal_psd", .route_args(environment(), sys.function()))
+  .finish_frontier_fit(.retain_deletion(fit, data), if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_mixed_ordinal_psd", .route_args(environment(), sys.function()))
 }
 
 # Shared front half of fit_model() and frontier_fit_sphere(): resolve the
@@ -2692,9 +2705,16 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   # A start table now lives in the spec as keyed hints; a refit supplies its
   # own spec, so the route keeps the remaining controls only.
   if ("control" %in% names(route_args)) route_args["control"] <- list(control)
+  deletion_input <- data
   pairwise_stats <- pairwise_raw <- NULL
   supplied_weight <- !is.null(W)
   done <- function(fit) {
+    fit <- .retain_deletion(fit, data)
+    if (is.data.frame(deletion_input)) {
+      fit$deletion <- .deletion_record(deletion_input,
+        model_matrix_rep(spec$partable)$ov_names, spec$group_var, spec$group_labels,
+        if (estimator %in% c("FIML", "ML2S")) "fiml" else missing)
+    } else if (!is.null(deletion_input$deletion)) fit$deletion <- deletion_input$deletion
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
     if (!isTRUE(fit$ordinal) && estimator %in% c("DWLS", "WLS", "DLS") && !is.null(W)) fit$W <- W
     if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
@@ -3208,6 +3228,7 @@ complete_raw_data <- function(data) {
 }
 
 attach_complete_raw_data <- function(fit, data) {
+  fit <- .retain_deletion(fit, data)
   raw <- complete_raw_data(data)
   if (!is.null(raw)) fit$raw_data <- raw
   fit

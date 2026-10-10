@@ -106,3 +106,20 @@ Two-level, FC-SEM, SAM and frontier methods continue using their existing
 entry points, which remain supported without deprecation warnings. Categorical
 weight preparation currently recomputes stage-one moments in the existing core
 builder; fitting itself reuses the prepared objects.}
+
+\section{Deletion provenance}{
+Dataframe helpers, prepared data and fitted lab objects retain a read-only
+\code{deletion} record. Its \code{policy} identifies listwise, error, FIML or
+pairwise row handling; \code{known} indicates whether supplied-row counts are
+available. \code{per_group} contains \code{group}, \code{rows_supplied},
+\code{rows_used}, \code{rows_deleted}, and exclusive reason counts
+\code{missing_model_values}, \code{missing_group_label},
+\code{unknown_group_label}, and \code{missing_cluster_id}.
+Reasons take precedence in that order: group labels, cluster IDs, model values.
+Rows without an assignable group appear in a separate \code{NA} group row.
+Single-level routes still refuse missing or unknown group labels; two-level
+listwise preparation deletes missing group or cluster IDs. FIML and ML2S retain
+incomplete rows without listwise deletion; existing native refusals remain.
+Summary-only inputs without retained provenance report unknown supplied/deleted
+counts, rather than claiming that no earlier deletion occurred.
+}

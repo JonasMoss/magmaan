@@ -40,6 +40,16 @@
   Native construction alone (100 repetitions) took 0.11 versus 81.22 ms;
   these bounded setup measurements are not end-to-end fitting benchmarks.
 
+- **Lab deletion provenance (TASK-155):** dataframe preparation and lab fits
+  retain a read-only `deletion` record with `policy`, `known` and `per_group`.
+  Counts cover rows supplied, used and deleted, with exclusive model-value,
+  group-label and cluster-ID reasons. Missing group labels deleted by two-level
+  listwise preparation appear in an unassigned (`NA`) group row; single-level
+  missing/unknown group labels retain their existing refusals. FIML/ML2S retain
+  incomplete rows without listwise deletion; native all-missing-row refusals
+  remain unchanged. Summary inputs without retained provenance mark supplied
+  and deleted counts unknown. Prepared and convenience paths agree. The ordinary
+  summary already prints supplied/used/deleted counts and keeps that display.
 - **Prepared R interface:** `prepare_model`, `prepare_data`, `prepare_weight`
   and `estimate` retain separate, immutable process-local native handles for
   continuous ML/ULS/GLS/WLS/DWLS, FIML, ordinal ULS/DWLS/WLS and mixed DWLS/WLS.

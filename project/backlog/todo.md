@@ -1166,9 +1166,11 @@ ordinary-user default.
   Specialized ML2S, two-level, SAM and FC-SEM migration is deferred. See
   [preparation contract](../design/r-model-preparation.md).
 
-- [ ] **S — retain deletion provenance in lab fits.** Store listwise counts per
-  group/reason for all entry points. **Check:** staged/convenience agreement and
-  estimator-specific unsupported deletion paths. See the R interface vision.
+- [x] **S — retain deletion provenance in lab fits (TASK-155).** Read-only
+  `fit$deletion` retains supplied/used/deleted counts per group and exclusive
+  reasons through dataframe helpers, prepared handles and lab fitting. FIML/ML2S
+  record no listwise deletion; summary-only inputs mark historical counts unknown.
+  Staged/convenience agreement and existing missing-data/group refusals are gated.
 
 - [ ] **M — finish primary invariance adapters.** Review redundant manual scalar
   mean freeing in `continuous_invariance()`; mixed-model release follows in

@@ -1,5 +1,8 @@
 # magmaan (development)
 
+- The embedded lab fit now retains read-only deletion provenance by group
+  and reason. The summary continues to show rows supplied, used and deleted.
+
 - Complete-data ML and GLS fits with standardized extent above 10 are no longer
   reported converged when their supported std.lv endpoint Newton audit fails.
   Diagnostics record the trigger and unsupported transports; estimates are unchanged.
