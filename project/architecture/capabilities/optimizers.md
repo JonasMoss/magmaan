@@ -43,7 +43,10 @@ screening rule, not a proof of nonstationarity; stationary high-extent fits can
 still pass, and low-extent chart poles are outside this supplementary check.
 
 
-- `Backend::NloptLbfgs` is the complete-data scalar default. FIML defaults to
+- `Backend::NloptLbfgs` is the complete-data ML and other scalar LS default.
+  Complete-data GLS defaults to `Backend::Port`, retaining layered starts and
+  information-refined coordinates (author decision 2026-10-10; decisions/01
+  chose PORT in the third run and the 2026-10-09 rerun). FIML defaults to
   `Backend::NloptLbfgsSlsqpFallback`, which retries NLopt SLSQP from the same
   start if L-BFGS fails or returns a non-clean optimizer status. NLopt is a
   required dependency in the ordinary build, so both pieces of the fallback are
@@ -54,7 +57,7 @@ still pass, and low-extent chart poles are outside this supplementary check.
   after 12 evaluations regardless of the overall evaluation budget. The
   standalone variance probe in `cpp/tests/checks/nlopt_lbfgs_domain.c` isolates the
   issue; the domain-recovery task is tracked in `project/backlog/todo.md`.
-- `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)
+- `Backend::Port` is the GLS default and trust-region cross-check: vendored PORT (Bell Labs)
   `drmngb_` (TOMS 611 Dennis-Gay-Welsch model-Hessian trust region; the
   algorithm behind R's `nlminb`), supports bounds natively. Vendored at
   `cpp/third_party/port/` from AMPL/ASL + Fermi-LAT (both BSD-3, manifest in

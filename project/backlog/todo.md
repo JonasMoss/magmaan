@@ -1710,6 +1710,10 @@ separate final decision for each explicitly covered scope.
   accuracy and admissibility. Replay the paired normalization losses in
   [optimizer defaults](../../experiments/decisions/01-optimizer-defaults/report.qmd).
 
+- [x] **M — adopt PORT for complete-data GLS (TASK-153).** Author decision
+  2026-10-10 applies decisions/01 choice in two runs; ML retains L-BFGS.
+  Retain layered starts, information coordinates and all other controls.
+
 - [ ] **M — repair PSD finalization and retained route losses.** Diagnose std.lv
   equal-loading lift round-trip failures and constrained-chain objective losses
   (`eqchain_b20`), including starts and covariance-link mappings. **Check:**

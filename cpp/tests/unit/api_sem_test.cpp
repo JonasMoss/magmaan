@@ -315,6 +315,8 @@ TEST_CASE("api ML and GLS default to the layered start") {
   namespace api = magmaan::api;
   CHECK(api::ml().start_spec.kind == api::StartKind::Layered);
   CHECK(api::gls().start_spec.kind == api::StartKind::Layered);
+  CHECK(api::gls().optimizer_spec.kind == api::OptimizerKind::Port);
+  CHECK(api::ml().optimizer_spec.kind == api::OptimizerKind::NloptLbfgs);
   CHECK(api::scaled_fabin_starts().kind == api::StartKind::MlScaled);
 }
 

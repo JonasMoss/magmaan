@@ -546,7 +546,7 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
 fit_expected<Estimates>
 fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
-        Bounds bounds = {}, Backend backend = Backend::NloptLbfgs,
+        Bounds bounds = {}, Backend backend = Backend::Port,
         OptimOptions opts = {});
 
 // Golub–Pereyra profiled fit: eliminates the conditionally-linear parameters

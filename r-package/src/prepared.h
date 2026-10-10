@@ -363,7 +363,8 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     return fit_result(ctx, *e, &starts, "ML");
   }
   const auto backend = optimizer.isNull() && covariance == "psd" ? estimate::Backend::NloptSlsqp :
-      optimizer.isNull() && covariance == "barrier" ? estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
+      optimizer.isNull() && covariance == "barrier" ? estimate::Backend::Port :
+      optimizer.isNull() && d.kind == "moments" && method == "GLS" ? estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
   const auto opts = d.kind == "moments" && method == "ML" && covariance == "psd"
       ? optim_opts_from(control, estimate::frontier::ml_psd_optim_options())
       : d.kind == "moments" && (covariance == "barrier" || method == "ML")

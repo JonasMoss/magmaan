@@ -773,7 +773,7 @@ Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts, "layered", nullptr, nullptr, control);
-  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+  const magmaan::estimate::Backend backend = optimizer.isNull() ? magmaan::estimate::Backend::Port : backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0,
       bounds_from_nullable(bounds), backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());

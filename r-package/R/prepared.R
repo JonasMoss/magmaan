@@ -252,7 +252,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   if (estimator == "DLS") fit$stage2_dls_a <- weight$dls_a
   source <- switch(data$kind, ordinal = "polychoric", mixed = "mixed_polyserial", raw = "raw_observed", "complete_continuous")
   fit <- .finish_covariance_fit(fit, source, covariance, barrier,
-      optimizer %||% if (covariance == "psd") "nlopt-slsqp" else if (covariance == "barrier") "port" else "nlopt-lbfgs")
+      optimizer %||% if (covariance == "psd") "nlopt-slsqp" else if (covariance == "barrier") "port" else if (estimator == "GLS" && data$kind == "moments") "port" else "nlopt-lbfgs")
   fit$options$covariance <- covariance
   fit$options$barrier <- barrier
   fit$options$psd <- covariance == "psd"

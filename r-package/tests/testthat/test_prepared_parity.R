@@ -219,3 +219,21 @@ test_that("prepared ordinal fitting options preserve attempts and reporting", {
     }
   }
 })
+
+test_that("complete-data GLS defaults reproduce explicit PORT", {
+  skip_if_not_installed("lavaan")
+  spec <- model_spec("f =~ x1 + x2 + x3 + x4")
+  d <- lavaan::HolzingerSwineford1939
+  default <- fit_model(spec, d, estimator = "GLS")
+  port <- fit_model(spec, d, estimator = "GLS", optimizer = "port")
+  expect_identical(default$theta, port$theta)
+  expect_identical(default$fmin, port$fmin)
+  expect_identical(default$converged, port$converged)
+  model <- prepare_model(spec, prototype = d)
+  data <- prepare_data(model, d)
+  staged <- estimate(model, data, estimator = "GLS")
+  explicit <- estimate(model, data, estimator = "GLS", optimizer = "port")
+  expect_identical(staged$theta, explicit$theta)
+  expect_identical(staged$fmin, explicit$fmin)
+  expect_identical(staged$converged, explicit$converged)
+})

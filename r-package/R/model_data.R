@@ -2070,7 +2070,7 @@ fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
   attach_complete_raw_data(fit, data)
 }
 
-fit_gls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+fit_gls <- function(model, data, optimizer = "port", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_gls")
   fit <- fit_gls_impl(partable_arg(model), sample_stats_arg(data),
@@ -2723,7 +2723,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     fit$options$psd <- psd
     source <- if (identical(estimator, "ML2S")) "saturated_fiml" else if (identical(estimator, "FIML")) "raw_observed" else if (isTRUE(fit$ordinal)) "polychoric" else if (isTRUE(fit$mixed_ordinal)) "mixed_polyserial" else if (identical(missing, "pairwise")) "pairwise_mcar" else "complete_continuous"
     fit <- .finish_covariance_fit(fit, source, covariance, barrier,
-        optimizer %||% if (psd) "nlopt-slsqp" else if (!is.null(barrier)) "port" else "nlopt-lbfgs")
+        optimizer %||% if (psd) "nlopt-slsqp" else if (!is.null(barrier)) "port" else if (estimator == "GLS" && source == "complete_continuous") "port" else "nlopt-lbfgs")
     if (!is.null(pairwise_stats)) {
       fit$pairwise_stats <- pairwise_stats
       fit$pairwise_raw <- pairwise_raw

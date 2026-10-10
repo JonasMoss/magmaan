@@ -106,6 +106,8 @@ Result<estimate::Bounds> ordinal_bounds_for(const EstimatorSpec &spec) {
 
 estimate::Backend backend_from(const OptimizerSpec &optimizer) {
   switch (optimizer.kind) {
+  case OptimizerKind::Port:
+    return estimate::Backend::Port;
   case OptimizerKind::Ceres:
     return estimate::Backend::Ceres;
   case OptimizerKind::Ipopt:
@@ -671,6 +673,7 @@ EstimatorSpec uls() {
 EstimatorSpec gls() {
   EstimatorSpec out;
   out.kind = EstimatorKind::GLS;
+  out.optimizer_spec.kind = OptimizerKind::Port;
   out.start_spec = layered_starts();
   return out;
 }

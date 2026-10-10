@@ -25,6 +25,7 @@ units for invariant models), then writes the scored summaries.
                     scored as failures (default Inf: no runaway rule)
   --reproduces R:A  compare this run's `default` arm draw by draw with arm A of run R
                     (same seed base), writing reproduction.csv
+  --reproduces-ml R:A  optional ML reference when GLS and ML defaults differ
   --arms a,b        run only these arms (the witness runs unless omitted from a list
                     that is given)
   --smoke           one replication of the first population per family, at the
@@ -149,13 +150,23 @@ if (!is.null(opt("--reproduces"))) {
   rf <- list.files(file.path(here, "results", lane, ref[1], "raw"), "^batch_.*\\.csv$", full.names = TRUE)
   b <- do.call(rbind, lapply(rf, utils::read.csv, stringsAsFactors = FALSE))
   k <- c("pop", "model", "n", "rep", "transform", "estimator")
-  m <- merge(raw[raw$arm == "default", c(k, "certified", "fmin")], b[b$arm == ref[2], c(k, "certified", "fmin")],
-             by = k, suffixes = c("_default", "_reference"))
-  same_f <- (is.na(m$fmin_default) & is.na(m$fmin_reference)) | (m$fmin_default == m$fmin_reference)
-  written <- c(written, write_csv(data.frame(reference_run = ref[1], reference_arm = ref[2],
-    fits = sum(raw$arm == "default"), matched = nrow(m),
-    same_certified = sum(m$certified_default == m$certified_reference),
-    same_objective = sum(same_f %in% TRUE)), file.path(out, "reproduction.csv")))
+  reproduction <- lapply(unique(raw$estimator), function(est) {
+    est_ref <- if (est == "ML" && !is.null(opt("--reproduces-ml")))
+      strsplit(opt("--reproduces-ml"), ":", fixed = TRUE)[[1]] else ref
+    reference <- b
+    if (est_ref[1] != ref[1]) stop("ML reference must use the same run")
+    current <- raw[raw$arm == "default" & raw$estimator == est, c(k, "certified", "fmin")]
+    m <- merge(current, reference[reference$arm == est_ref[2] & reference$estimator == est,
+                                c(k, "certified", "fmin")],
+               by = k, suffixes = c("_default", "_reference"))
+    same_f <- (is.na(m$fmin_default) & is.na(m$fmin_reference)) |
+      (m$fmin_default == m$fmin_reference)
+    data.frame(estimator = est, reference_run = est_ref[1], reference_arm = est_ref[2],
+      fits = nrow(current), matched = nrow(m),
+      same_certified = sum(m$certified_default == m$certified_reference),
+      same_objective = sum(same_f %in% TRUE))
+  })
+  written <- c(written, write_csv(do.call(rbind, reproduction), file.path(out, "reproduction.csv")))
 }
 if (length(candidates) == 2L) written <- c(written,
   write_csv(choice_table(s, lane, candidates), file.path(out, "choice.csv")))
