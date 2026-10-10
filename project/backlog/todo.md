@@ -168,6 +168,11 @@ result under an unstated convention.
   retained draws; an independent lavaan population check passes. RMSEA still
   retains its corrected point default and no interval; other indices are unchanged.
   FIML production remains with TASK-103 under the same criteria.
+  TASK-154 diagnoses Wald over-coverage from all frozen ML draws: unclipped
+  variance ratios approach one with N at fixed positive misfit; near-zero
+  clipping limits interpretation. V1-only away from zero is a future-study
+  comparator, not an adopted repair; compact tables and the diagnostic runner
+  are retained in decisions/09.
 
 - [x] **TASK-148 — share FIML fit-measure ingredients**: fit-owned native cache
   reuses saturated moments/information/scores, user/baseline score breads,

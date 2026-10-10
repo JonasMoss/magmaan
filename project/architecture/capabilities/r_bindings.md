@@ -701,6 +701,12 @@ square-root coordinates; CFI/TLI use joint user/baseline delta inference.
 Square-root intervals at zero corrected misfit and unsupported routes return
 typed reasons. V1/V2 remain discrepancy-scale diagnostics. This candidate awaits
 TASK-103 coverage evaluation and does not change ordinary inference defaults.
+The frozen ML evaluation retains no interval. TASK-154 recovers total variance
+from unclipped endpoints without refitting: at delta .4, pooled median RMSEA
+ratios decline from 1.71 (N=200) to 1.06 (N=4000); CFI behaves similarly.
+Near-zero clipping prevents interpreting recovered ratios as untruncated
+discrepancy variance. Separate V1/V2 attribution needs a future comparator
+study; the existing component remains unchanged.
 The prerequisite score-centering repair is gated for affine invariance in
 complete ML (with/without means) and FIML, with one/two groups; post-fit saturated
 EM precision is tightened to preserve that contract. Ordinary fits always

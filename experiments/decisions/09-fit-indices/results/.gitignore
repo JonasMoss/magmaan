@@ -44,3 +44,8 @@ fit_indices/2026-10-09-ml-b/*
 # TASK-151 computational correction and independent population check.
 !fit_indices/2026-10-09-ml-b/target_check.csv
 !fit_indices/2026-10-09-ml-b/target_correction_metadata.csv
+
+# TASK-154 retained-draw variance diagnostic; no raw draws or fits.
+!fit_indices/2026-10-09-ml-b/wald_diagnosis/
+fit_indices/2026-10-09-ml-b/wald_diagnosis/*
+!fit_indices/2026-10-09-ml-b/wald_diagnosis/*.csv
