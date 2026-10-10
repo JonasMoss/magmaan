@@ -15,6 +15,8 @@ write_evidence <- function(x, name) {
 }
 for (name in c('metadata','cells','targets','cost','arms','generator_checks','setup_timing','target_diagnostics'))
   write_evidence(read_input(name),name)
+if (file.exists(file.path(input,'target_correction_metadata.csv')))
+  write_evidence(read_input('target_correction_metadata'),'target_correction_metadata')
 s <- read_input('summary')
 stopifnot(nrow(s)==768L*24L, all(s$attempted==1000), all(s$target_status=='available'))
 for (index in unique(s$index)) write_evidence(s[s$index==index,],paste0('summary_',index))
@@ -65,3 +67,26 @@ for (index in c('rmsea','cfi','tli')) write_evidence(
   j$interval[j$interval$index==index,c('cell','model','index','arm','N','generator','delta','target','attempted','available','availability','coverage','width','flag','below_floor')],
   paste0('interval_cells_',index))
 print(j$decisions)
+
+# A correction must preserve unaffected frozen judgments and CSV precision.
+if (file.exists(file.path(input,'target_correction_metadata.csv'))) {
+  for (name in c('decisions','family','candidates','intervals',
+      paste0('point_losses_',c('cfi','tli','srmr')),
+      paste0('interval_cells_',c('cfi','tli')))) {
+    original <- read_input(name)
+    path <- file.path(output,paste0(name,'.csv'))
+    corrected <- read.csv(path,stringsAsFactors=FALSE)
+    a <- original[original$index!='rmsea',]
+    keep <- corrected$index!='rmsea'
+    b <- corrected[keep,]
+    keys <- intersect(c('cell','model','index','arm'),names(a))
+    key <- function(x) do.call(paste,c(x[keys],sep=':'))
+    a <- a[match(key(b),key(a)),]
+    stopifnot(isTRUE(all.equal(a,b,tolerance=1e-12,check.attributes=FALSE)))
+    if (all(keep)) stopifnot(file.copy(file.path(input,paste0(name,'.csv')),path,overwrite=TRUE)) else {
+      corrected[keep,] <- a
+      write_evidence(corrected,name)
+    }
+  }
+  cat('Verified and preserved unchanged CFI, TLI, SRMR judgment rows\n')
+}

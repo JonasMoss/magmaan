@@ -34,7 +34,7 @@ show_table <- function(x, digits=4) {
 
 ```{r, results='asis'}
 register <- data.frame(index=toupper(j$decisions$index),estimator='ML',
-  point='Misspecification-robust',interval='None',status='Decided by approved rules',
+  point=gsub('_',' ',j$decisions$point),interval=j$decisions$interval,status='Decided by approved rules',
   evidence=paste0('768 cells × 1,000 attempts; ',params$run_id))
 register <- rbind(register,data.frame(index=toupper(indices),estimator='FIML (MAR 15%, 30%)',
   point='Misspecification-robust',interval='None',status='Pending production',evidence='Not evaluated here'))
@@ -43,11 +43,54 @@ show_table(register)
 
 The approved rules retain all four ML point defaults and select no interval.
 Neither candidate point correction is eligible for any index. Lavaan-robust
-CFI and RMSEA have no losses, but their 44 and 29 wins respectively fall short
+CFI and RMSEA have no losses, but their 44 and 25 wins respectively fall short
 of the required net improvement in at least 10% of 768 cells (at least 77).
 All available interval methods fail the coverage rule; the square-root Wald
 method additionally fails availability. These are decisions from the frozen
 ML run, with no retuning and no library default changes. FIML remains pending.
+
+## 2026-10-10, written after seeing results: computational target error, criteria unchanged
+
+The complete-data target calculation used the ML objective `fmin` as the
+population discrepancy $F_0$. The library stores $F_0/2$, so the RMSEA targets
+were too small by $\sqrt{2}$. The corrected calculation uses `2 * fmin` for
+both the user and independence models. CFI and TLI are ratios, so this factor
+cancels; SRMR does not use the discrepancy. The complete-data descriptive
+FIML targets shared this error; the MAR estimator's own target already used
+`chisq / N` and is unchanged. The optional RMSEA population-sizing helper is
+also corrected; production used explicit delta values, so its populations
+are unchanged.
+
+An independent lavaan population fit at N = 10,000,000 with normal likelihood
+checks one CFA, one growth and one SEM model at delta .4. Corrected RMSEA, CFI
+and TLI targets agree within a maximum relative difference of 0.00000646
+(required: below 0.001); the nine comparisons are retained in `target_check.csv`.
+
+All 768,000 retained draws were read again to recompute target-dependent bias,
+RMSE and coverage, including every RMSEA point and interval row. Width,
+availability and failed-attempt denominators are preserved. CFI, TLI and SRMR
+summaries and judgments are asserted unchanged. The corrected discrepancy
+columns in `targets.csv` are doubled, and its RMSEA columns are multiplied by
+$\sqrt{2}$; its other columns are unchanged. No new draws or fits enter the
+production evidence, and no criteria were revised.
+
+The final RMSEA choices are unchanged: retain the misspecification-robust
+point and report no interval. Lavaan-robust point wins fall from 29 to 25,
+with zero losses; naive wins remain two and losses fall from 72 to 59.
+Neither candidate qualifies. The coverage judgments change as follows:
+
+| RMSEA interval | Flagged cells, original → corrected | Below 80%, original → corrected |
+|---|---:|---:|
+| Naive noncentral | 652 → 258 | 492 → 53 |
+| Scaled noncentral | 655 → 260 | 441 → 53 |
+| Wald on discrepancy | 742 → 625 | 287 → 0 |
+| Wald on square-root scale | 604 → 599 | 384 → 25 |
+
+All four exceed the limit of 38 flagged cells. The discrepancy-scale Wald
+interval now has no cell below the coverage floor (minimum coverage 88.1%),
+but remains flagged in 625 cells because coverage exceeds 92.5%. The
+square-root Wald method still fails availability in 376 cells. Improved
+coverage therefore does not establish eligibility under the approved rules.
 
 ## Question and decision rules
 
@@ -244,19 +287,27 @@ remains unmeasured.
 From the repository root, with the lane library read-only:
 
 ```sh
-Rscript experiments/decisions/09-fit-indices/scripts/compact_production.R \
+R_LIBS=~/.cache/magmaan-rlib/lane-c Rscript experiments/decisions/09-fit-indices/scripts/check_targets.R
+Rscript experiments/decisions/09-fit-indices/scripts/correct_targets.R \
   /path/to/original/2026-10-09-ml-b \
+  /path/to/original/frozen-evidence \
+  experiments/decisions/09-fit-indices/results/correction-task151
+Rscript experiments/decisions/09-fit-indices/scripts/compact_production.R \
+  experiments/decisions/09-fit-indices/results/correction-task151 \
   experiments/decisions/09-fit-indices/results/fit_indices/2026-10-09-ml-b
 R_LIBS=~/.cache/magmaan-rlib/lane-c OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   nice -n 10 Rscript experiments/decisions/09-fit-indices/scripts/diagnose_arm_failure.R
-R_LIBS=~/.cache/magmaan-rlib/lane-c quarto render experiments/decisions/09-fit-indices/report.qmd
+XDG_CACHE_HOME=/tmp/magmaan-quarto-cache R_LIBS=~/.cache/magmaan-rlib/lane-c quarto render experiments/decisions/09-fit-indices/report.qmd
 ```
 
 Compaction reads the frozen originals and writes bounded summaries plus derived
-decision tables. `input_checksums.csv` identifies every original CSV; metadata
+decision tables. `input_checksums.csv` identifies the compaction input CSVs; metadata
 preserves command, seed, source, library and criteria provenance. Large
 `summary.csv`, `failures.csv`, `timing.csv` and per-draw checkpoints remain ignored.
-The originals are retained in the main checkout's result directory; raw rows stay
+For the correction, use the pre-correction frozen evidence as the second input;
+it is retained at Git revision `638979ea5dc605c9cfbaad0d6ac0ef112db073a0`
+under this study’s `results/fit_indices/2026-10-09-ml-b/`. The originals and all raw rows are
+retained in the main checkout's result directory, with a second raw copy
 on simbox at `~/magmaan-runs/magmaan-main-5a7330bc/experiments/decisions/09-fit-indices/results/fit_indices/2026-10-09-ml-b/raw/`.
 The report reads only this study's compacted results and never runs estimation.
 

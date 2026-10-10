@@ -648,6 +648,10 @@ of 768 ML cells × 1,000 attempts: the approved rules keep all four
 misspecification-robust point defaults and select no interval. FIML remains
 pending. The harness now assigns the scalar verdict status to failed-fit arm
 reasons; the 312 frozen affected ML draws remain unavailable in every arm.
+TASK-151 corrects the complete-data target convention (F = 2 fmin), including
+RMSEA-based population sizing, and recomputes summaries from all retained draws.
+Independent lavaan population checks pass; the RMSEA choices remain the corrected
+point default and no interval. CFI, TLI and SRMR judgments are unchanged.
 
 TASK-149 compacts cached preparation contexts, collects discarded checks/fits
 before each fork and releases completed sampling contexts. A three-replicate

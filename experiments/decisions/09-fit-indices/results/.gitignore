@@ -40,3 +40,7 @@ fit_indices/2026-10-09-ml-b/*
 !fit_indices/2026-10-09-ml-b/intervals.csv
 !fit_indices/2026-10-09-ml-b/point_losses_*.csv
 !fit_indices/2026-10-09-ml-b/interval_cells_*.csv
+
+# TASK-151 computational correction and independent population check.
+!fit_indices/2026-10-09-ml-b/target_check.csv
+!fit_indices/2026-10-09-ml-b/target_correction_metadata.csv

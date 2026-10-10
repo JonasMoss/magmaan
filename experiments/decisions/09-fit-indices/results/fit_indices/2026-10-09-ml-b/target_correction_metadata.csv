@@ -1,0 +1,5 @@
+"key","value"
+"correction_date","2026-10-10"
+"correction","F = 2 fmin; raw draws re-summarized; criteria unchanged"
+"raw_manifest_md5","18ce0a1bfff533205ecb9821c4007760"
+"unaffected_indices","CFI, TLI, SRMR summaries and judgments asserted unchanged"

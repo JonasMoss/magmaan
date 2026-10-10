@@ -1,9 +1,9 @@
 "index","arm","wins","losses","losing_families","eligible"
 "cfi","lavaan_robust",44,0,0,FALSE
-"rmsea","lavaan_robust",29,0,0,FALSE
+"rmsea","lavaan_robust",25,0,0,FALSE
 "srmr","lavaan_robust",0,0,0,FALSE
 "tli","lavaan_robust",12,212,11,FALSE
 "cfi","naive",17,90,10,FALSE
-"rmsea","naive",2,72,10,FALSE
+"rmsea","naive",2,59,10,FALSE
 "srmr","naive",142,524,9,FALSE
 "tli","naive",4,273,12,FALSE

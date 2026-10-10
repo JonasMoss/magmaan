@@ -90,7 +90,7 @@ build_population <- function(cell) {
     if (!isTRUE(fitted$converged)) stop("Population h1 fit failed: ", cell$model)
     list(record = record, stats = ss, model = model, generating = gen,
          fitted = fitted, df = df, delta = delta,
-         rmsea = sqrt(length(record$groups) * max(fitted$fmin, 0)/df))
+         rmsea = sqrt(length(record$groups) * 2 * max(fitted$fmin, 0)/df))
   }
   if (is.finite(cell$delta)) return(evaluate(cell$delta))
   if (cell$target_rmsea == 0) return(evaluate(0))

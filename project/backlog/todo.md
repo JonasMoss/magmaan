@@ -164,6 +164,9 @@ result under an unstated convention.
   768-cell/768,000-attempt ML production: the rules retain all four corrected
   point defaults and no intervals. The nonconvergence reason assignment is
   repaired for future runs; 312 frozen affected draws stay unavailable.
+  TASK-151 corrects complete-data targets to F = 2 fmin and re-summarizes all
+  retained draws; an independent lavaan population check passes. RMSEA still
+  retains its corrected point default and no interval; other indices are unchanged.
   FIML production remains with TASK-103 under the same criteria.
 
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML

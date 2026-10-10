@@ -40,7 +40,8 @@ compute_targets <- function(population, calibration, cell, seed, target_n = 2000
   df <- with(magmaanlab::structural_identification(population$model), n_moments-n_parameters)
   df_b <- with(magmaanlab::structural_identification(baseline_model), n_moments-n_parameters)
   fm <- magmaanlab::fit_measures(fit)
-  complete <- index_targets(fit$fmin, baseline$fmin, df, df_b, length(ss$S), fm$srmr)
+  # Complete-data ML stores half the population discrepancy: chisq = 2 N fmin.
+  complete <- index_targets(2 * fit$fmin, 2 * baseline$fmin, df, df_b, length(ss$S), fm$srmr)
   if (!complete_ok) complete[] <- NA_real_
   own <- complete; method <- "exact_population_moments"; n <- 0L
   if (cell$estimator == "FIML" && cell$missing_rate > 0) {
