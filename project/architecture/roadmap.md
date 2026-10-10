@@ -335,6 +335,14 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-10: complete-data GLS defaults to PORT with the layered start and
+information-refined coordinates (user decision applying the decisions/01 rule,
+which chose layered PORT for GLS in two runs; 39,450 versus 38,652 certified
+test fits in the 2026-10-09 rerun). ML keeps layered L-BFGS, now settled by the
+same rerun. The promotion reproduced the candidates draw by draw under the
+original portable GCC build (46,000 of 46,000 GLS and ML fits); exact optimizer
+paths differ between that build and Clang native opt builds (TASK-153).
+
 2026-10-10: lab fits carry a read-only deletion record (policy, and per group
 the rows supplied, used and deleted with reason classes) across the data-frame
 helpers, prepared estimation and every fitting route; FIML and ML2S record zero
