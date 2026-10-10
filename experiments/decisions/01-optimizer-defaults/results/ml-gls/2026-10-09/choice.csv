@@ -1,0 +1,3 @@
+"estimator","eligible","certified","second_no_net_loss_vs_first","choice"
+"ML","layered_lbfgs:TRUE layered_port:FALSE","layered_lbfgs:42079 layered_port:42362",TRUE,"layered_lbfgs"
+"GLS","layered_lbfgs:TRUE layered_port:TRUE","layered_lbfgs:38571 layered_port:39242",TRUE,"layered_port"
