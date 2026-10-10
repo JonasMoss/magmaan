@@ -335,6 +335,16 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-10: FIML fit-measure calls (policy points, compatibility measures and
+the lab Wald intervals) share fit-owned ingredients through a lazy native cache:
+the missingness pack, tight H1 moments, saturated observed information, its
+inverse and casewise scores, score breads and the independence fit. Results are
+bit-identical; a cfa_long30 FIML draw at N = 4000 fell from about 99 to 25
+seconds (TASK-148). decisions/09's ML production is frozen and judged: the
+misspecification-robust point corrections stay and no interval is adopted, after
+correcting the harness's complete-data RMSEA targets (fmin = F/2; TASK-150,
+TASK-151); the FIML cells are pending.
+
 2026-10-10: complete-data ML and GLS endpoints whose standardized extent
 exceeds 10 are certified only if the Newton audit also passes after transport
 to the std.lv chart, where that transport exists (equality constraints and
