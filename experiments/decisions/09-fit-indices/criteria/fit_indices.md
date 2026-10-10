@@ -100,3 +100,14 @@ population CFI of 1 counts as covered when the upper endpoint is 1; TLI follows
 The report opens with the register (each covered default, its value, status and
 evidence). Changes the rules imply go to implementation cards for the ordinary
 package; adoption follows the user's review of the report.
+
+## Amendment of 2026-10-10 (written before any FIML result)
+
+The FIML probe (cfa_long30, N = 4000, MAR 30%) took about 134 seconds per draw
+under load and about 8 minutes of target preparation, putting the FIML cells
+at roughly 700-1,000 CPU-hours at R = 1000. The user chose **R = 500 per FIML
+cell**; the design, rules and the ML cells (R = 1000, frozen) are unchanged.
+With 500 draws the Monte Carlo standard deviation of a 90% coverage estimate
+is about 1.3 percentage points, so the 87.5-92.5% band is about two standard
+deviations wide on each side and some flags in correctly calibrated cells are
+expected; the eligibility rules are applied as written.
