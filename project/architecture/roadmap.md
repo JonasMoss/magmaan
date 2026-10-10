@@ -335,6 +335,14 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-10: complete-data ML and GLS endpoints whose standardized extent
+exceeds 10 are certified only if the Newton audit also passes after transport
+to the std.lv chart, where that transport exists (equality constraints and
+nonpositive disturbance scales keep the previous verdict with a reason). The
+trigger avoids a 12.7% cost on interior fits. Sampled decisions/01 runaways
+were stationary where supported; twenty interior controls are unchanged
+(TASK-143).
+
 2026-10-09: (1) Fixed: the lab policy fit-measure composer evaluated
 covariance-only complete-data ML casewise scores at zero means instead of the
 profiled group means, so its misspecification-robust RMSEA, CFI and TLI were
