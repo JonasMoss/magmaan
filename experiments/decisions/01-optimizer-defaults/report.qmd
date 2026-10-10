@@ -59,7 +59,7 @@ n9_run <- rd9("runaways"); n9_choice <- rd9("choice")
 |---|---|---|---|
 | ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
 | ML optimizer | NLopt L-BFGS | settled by the rule: layered_lbfgs eligible and chosen; layered_port fails rule 2 in equality-constrained, engineering/15, research/47 and Wolf (common units), and Boomsma, engineering/15 and research/47 (separate units) | lane ml-gls, 2026-10-09 |
-| GLS optimizer | NLopt L-BFGS | rule implies PORT; author decision pending (runaways 208 vs 81, already scored as failures). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, 2026-10-09 |
+| GLS optimizer | PORT | settled (author 2026-10-10; rule choice in two runs; reproduction pending). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, third run and 2026-10-09; reproduction `2026-10-10-gls-port-repro` |
 | verdict on runaway paths | extent > 10 requires a passing std.lv Newton audit where transport exists | settled where std.lv transport exists (TASK-143); equalities and nonpositive disturbance scales retain the old verdict. Certified extents > 10 remain failures in study scoring | lane ml-gls, 2026-10-09 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
@@ -84,9 +84,10 @@ runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
 ## Answer
 
 **ML: keep the layered start with NLopt L-BFGS, settled by the rule in the
-2026-10-09 rerun. GLS: the rule chooses layered PORT; the author decision is
-pending.** L-BFGS is the current library optimizer for both. The default arm
-now equals `layered_lbfgs`, and `default_port` equals `layered_port`; this run
+2026-10-09 rerun. GLS: adopt layered PORT, authorized by the author on
+2026-10-10 after the rule chose it in two runs.** The current library uses
+L-BFGS for ML and PORT for GLS. In the 2026-10-09 run, the default arm
+equaled `layered_lbfgs`, and `default_port` equaled `layered_port`; that run
 compares optimizers after the layered-start adoption, rather than retesting
 that start against FABIN3. Both GLS candidates pass. PORT has 39,450 certified
 GLS test fits versus 38,652, or 39,242 versus 38,571 after excluding runaways.
@@ -95,8 +96,9 @@ rule in every family. Family-specific evidence and every loss appear below.
 
 TASK-143 now audits extreme endpoints in the std.lv chart when transport exists.
 It does not cover equalities or nonpositive disturbance scales; the study still
-scores every certified extent above 10 as a failure. The GLS author decision
-therefore remains pending with 208 PORT runaways versus 81 L-BFGS runaways.
+scores every certified extent above 10 as a failure. The author adopted GLS
+PORT with the recorded 208 PORT runaways versus 81 L-BFGS runaways already
+counted as failures by the decision rule.
 Runs 1–3 below retain their dated results and original scoring.
 
 **PSD ML: keep FABIN3 in both PSD routes, confirmed after the ML/GLS
