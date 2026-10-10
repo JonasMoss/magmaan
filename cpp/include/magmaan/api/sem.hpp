@@ -208,11 +208,11 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
 
 enum class OptimizerKind : std::uint8_t {
   NloptLbfgs,
-  Port,
   NloptLbfgsSlsqpFallback,
   NloptSlsqp,
   Ceres,
   Ipopt,
+  Port,
 };
 
 struct OptimizerSpec {
