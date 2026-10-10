@@ -42,7 +42,34 @@ tot <- function(r, arm, col, est = NULL) sum(r[[col]][r$role == "test" & r$arm =
   (is.null(est) | r$estimator %in% est)])
 pr <- function(p, cand, base, col) sum(p[[col]][p$role == "test" & p$candidate == cand & p$baseline == base])
 f0 <- function(x) format(round(x), big.mark = ",")
+rd9 <- function(name) {
+  p <- file.path("results", "ml-gls", "2026-10-09", paste0(name, ".csv"))
+  if (!file.exists(p)) stop("Missing ", p, ": reproduce the 2026-10-09 run below")
+  read.csv(p, stringsAsFactors = FALSE)
+}
+n9_rates <- rd9("rates_by_family"); n9_pair <- rd9("paired")
+n9_dec <- rd9("decision"); n9_loss <- rd9("losses")
+n9_run <- rd9("runaways"); n9_choice <- rd9("choice")
+
 ```
+
+## The register
+
+| Default | Current value | Current status | Evidence |
+|---|---|---|---|
+| ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
+| ML optimizer | NLopt L-BFGS | settled by the rule: layered_lbfgs eligible and chosen; layered_port fails rule 2 in equality-constrained, engineering/15, research/47 and Wolf (common units), and Boomsma, engineering/15 and research/47 (separate units) | lane ml-gls, 2026-10-09 |
+| GLS optimizer | NLopt L-BFGS | rule implies PORT; author decision pending (runaways 208 vs 81, already scored as failures). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, 2026-10-09 |
+| verdict on runaway paths | extent > 10 requires a passing std.lv Newton audit where transport exists | settled where std.lv transport exists (TASK-143); equalities and nonpositive disturbance scales retain the old verdict. Certified extents > 10 remain failures in study scoring | lane ml-gls, 2026-10-09 |
+| optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
+| PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
+| PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
+| PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
+| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. The clamp correction and a small paired route rerun are now recorded below; remaining unit-sensitive failures are still open | lane psd-ml, runs 1 and 2 |
+| ML and PSD fitting normalization | sample-normalized model and starts; estimates returned in requested units | settled and closed by author request, 2026-09-27: single-level continuous complete-data ML/PSD, groups and affine linear equalities | paired scaling revisit, scope regression checks and later challenge/timing evidence; no claim of uniformly better solutions or coverage of other estimators |
+| PSD feasibility tolerances | absolute in the internal normalized units | numerical threshold unchanged; its units now follow the fitting normalization | lane psd-ml and subsequent author-requested normalization |
+| PSD preconditioning clamp | $[10^{-4}u, 10^{4}u]$, relative to sample-derived units | implemented; further normalization now precedes fitting | PSD scaling follow-up below |
+
 
 For the latest normalization comparison, see the [executive summary](executive-summary.html).
 
@@ -56,49 +83,21 @@ runs, in [criteria/ml-gls.md](criteria/ml-gls.md) and
 
 ## Answer
 
-**ML and GLS: the layered start is the default since 2026-09-26, and the
-optimizer stays L-BFGS (the author's decision after the third run).** With
-runaways scored as failures, the layered start wins for both estimators. PORT
-adds certified fits, but also many runaway fits that the library still calls
-converged. PORT therefore waits for a runaway check in the verdict, the next
-optimization project.
+**ML: keep the layered start with NLopt L-BFGS, settled by the rule in the
+2026-10-09 rerun. GLS: the rule chooses layered PORT; the author decision is
+pending.** L-BFGS is the current library optimizer for both. The default arm
+now equals `layered_lbfgs`, and `default_port` equals `layered_port`; this run
+compares optimizers after the layered-start adoption, rather than retesting
+that start against FABIN3. Both GLS candidates pass. PORT has 39,450 certified
+GLS test fits versus 38,652, or 39,242 versus 38,571 after excluding runaways.
+ML PORT fails unit invariance in several families, despite passing the primary
+rule in every family. Family-specific evidence and every loss appear below.
 
-- A certified fit whose standardized extent exceeds 10 now counts as a
-  runaway, a failure. The extent is the largest absolute standardized
-  loading, latent path, latent correlation or residual/disturbance ratio. It
-  is unit-free, and without this rule PORT's persistence was being rewarded.
-- **GLS: the pre-registered choice is the layered start with PORT.** Both
-  candidates pass every rule. Certified fits: today
-  `r f0(t3("default", "GLS"))`, layered with L-BFGS
-  `r f0(t3("layered_lbfgs", "GLS"))`, layered with PORT
-  `r f0(t3("layered_port", "GLS"))`, of `r f0(t3("default", "GLS", "attainable"))`.
-- **ML: no candidate is eligible, so the author decides.** Both candidates
-  pass every rule except in the Chen family.
-  - Certified fits: today `r f0(t3("default", "ML"))`, layered with L-BFGS
-    `r f0(t3("layered_lbfgs", "ML"))`, layered with PORT
-    `r f0(t3("layered_port", "ML"))`, of `r f0(t3("default", "ML", "attainable"))`.
-  - Chen fails rule 1 because today's default certifies every attainable Chen
-    problem, so any loss fails. The losses are 5 of about 800 draws (model m0
-    at $N = 25$, 4 draws; model m1, 1 draw), each counted in all four unit
-    systems. On those draws the layered start sends both optimizers to a
-    worse basin (objective 0.09–0.47 higher), ending at saddles or
-    ill-conditioned points.
-- **What users would see.** The runaway rule is in the scoring, not in the
-  library's verdict. Among certified test-family fits, runaways number:
-
-  | Estimator | Today | Layered + L-BFGS | Layered + PORT |
-  |---|---:|---:|---:|
-  | ML | `r f0(t3r("default", "ML"))` | `r f0(t3r("layered_lbfgs", "ML"))` | `r f0(t3r("layered_port", "ML"))` |
-  | GLS | `r f0(t3r("default", "GLS"))` | `r f0(t3r("layered_lbfgs", "GLS"))` | `r f0(t3r("layered_port", "GLS"))` |
-
-  PORT would hand users several times as many runaway fits marked as
-  converged, unless the verdict gets a runaway check.
-- Runs 1 and 2 kept their pre-registered scoring and failed their rules. Run 2
-  exposed the runaway problem.
-- **The shipped default is the evaluated candidate.** After the promotion, a
-  run of the library's `default` arm on the third run's draws reproduces
-  `layered_lbfgs` exactly on all 92,000 fits: the same certification and the
-  same objective (`results/ml-gls/2026-09-26-library/reproduction.csv`).
+TASK-143 now audits extreme endpoints in the std.lv chart when transport exists.
+It does not cover equalities or nonpositive disturbance scales; the study still
+scores every certified extent above 10 as a failure. The GLS author decision
+therefore remains pending with 208 PORT runaways versus 81 L-BFGS runaways.
+Runs 1–3 below retain their dated results and original scoring.
 
 **PSD ML: keep FABIN3 in both PSD routes, confirmed after the ML/GLS
 promotion (second run).** The layered start does not carry over to PSD. In
@@ -184,22 +183,6 @@ this confirms its adoption. FIML, multilevel, ordinal and barrier normalization
 remain separate work; arbitrary inequality constraints are not supported.
 Two-stage is not promoted in place of direct PSD.
 
-## The register
-
-| Default | Current value | Current status | Evidence |
-|---|---|---|---|
-| ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
-| ML and GLS optimizer | NLopt L-BFGS | provisional: PORT certifies more but returns about eight times as many runaways; reopen once the verdict flags runaways | lane ml-gls, runs 2 and 3 |
-| verdict on runaway paths | the Newton check accepts divergent-path points | open: scoring has a runaway rule (extent > 10); the library verdict does not | lane ml-gls, runs 2 and 3 |
-| optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
-| PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
-| PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
-| PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
-| PSD route | direct PSD fit (`psd = TRUE`); two-stage is `frontier_fit_ml_psd_fallback` | settled for now (author, 2026-09-27): direct. Two-stage is better and faster overall only in rescaled units (replicated), where the clamp below is the suspect; in native units direct is slightly ahead. The clamp correction and a small paired route rerun are now recorded below; remaining unit-sensitive failures are still open | lane psd-ml, runs 1 and 2 |
-| ML and PSD fitting normalization | sample-normalized model and starts; estimates returned in requested units | settled and closed by author request, 2026-09-27: single-level continuous complete-data ML/PSD, groups and affine linear equalities | paired scaling revisit, scope regression checks and later challenge/timing evidence; no claim of uniformly better solutions or coverage of other estimators |
-| PSD feasibility tolerances | absolute in the internal normalized units | numerical threshold unchanged; its units now follow the fitting normalization | lane psd-ml and subsequent author-requested normalization |
-| PSD preconditioning clamp | $[10^{-4}u, 10^{4}u]$, relative to sample-derived units | implemented; further normalization now precedes fitting | PSD scaling follow-up below |
-
 ## How much to trust it
 
 - **The problems are held out.**
@@ -228,6 +211,108 @@ Two-stage is not promoted in place of direct PSD.
     carry the comparisons.
 
 ## Lane ml-gls
+
+### Rerun of 2026-10-09: current optimizer decision
+
+The pre-run amendment was committed at `40f485e8`; summaries were frozen at
+`1c8d78d0` under `results/ml-gls/2026-10-09/`. Metadata records source
+`013ec47c85c59616bc2ef4033cb964b9f419aafb`, a clean tree, magmaanlab 0.2.1,
+and seed base 2026100902. This local run used four workers and took about
+25 minutes, with 100 replications per sample size. It includes TASK-131's
+fallback-units fix, TASK-136's overlapping-block start and TASK-143's transported
+audit. The rules and outcome clauses are unchanged.
+
+`default` and `layered_lbfgs` agree, as do `default_port` and `layered_port`.
+L-BFGS is eligible for ML and GLS because it reproduces the baseline. PORT
+passes rule 1 in every family. For ML it fails rule 2 in the families named in
+the register; for GLS both candidates are eligible, and PORT has no family
+with a net loss against L-BFGS and more scored successes, so the rule chooses it.
+The pooled counts in the register are the prescribed tie-break only; family
+eligibility is evaluated separately.
+
+```{r rerun-family}
+z <- n9_rates[n9_rates$arm %in% c("layered_lbfgs", "layered_port"), ]
+z$family <- unname(fam[z$family])
+z <- z[order(z$role, z$estimator, z$family, z$arm), ]
+tab(z[, c("role", "family", "estimator", "arm", "attainable", "success", "best",
+          "median_evals_success", "median_seconds")],
+    col.names = c("Role", "Family", "Estimator", "Arm", "Attainable", "Scored successes",
+                  "Best known", "Median evaluations", "Median seconds"), digits = 3)
+```
+
+Ernst is a development control and never gates. The following paired counts
+keep every family separate; each loss counts one fitted unit version, so a draw
+can occur up to four times. L-BFGS has no losses against the current default.
+
+```{r rerun-paired}
+z <- n9_pair[n9_pair$candidate == "layered_port" & n9_pair$baseline == "default", ]
+z$family <- unname(fam[z$family])
+tab(z[, c("role", "family", "estimator", "attainable", "wins", "losses", "best_wins", "best_losses")],
+    col.names = c("Role", "Family", "Estimator", "Attainable", "Wins", "Losses", "Best wins", "Best losses"))
+```
+
+PORT's test losses are ML: Boomsma 8, equality-constrained 13, research/47 4;
+GLS: Boomsma 20, Chen 8, equality-constrained 34, research/47 20 and Wolf 102.
+The other test families have none. Ernst has one ML loss. These are endpoint
+and optimizer failures, with some additional failures from the extent screen,
+rather than evidence of a different starting basin: both arms use the layered
+start. Budget exhaustion, singular convergence and noisy-objective termination
+occur in the losing families. Nonpositive curvature and ill-conditioning also
+reject endpoints that the optimizer calls converged. The frozen rows establish
+these recorded mechanisms; they do not establish why an optimizer followed a
+particular path. The table below gives each family's complete breakdown.
+
+```{r rerun-loss-mechanisms}
+z <- n9_loss
+z$mechanism <- ifelse(z$runaway, "Certified runaway (extent > 10)",
+                     paste(z$optimizer_status, z$newton_status, sep = "; audit: "))
+z$count <- 1L
+w <- aggregate(count ~ role + family + estimator + mechanism, z, sum)
+w$family <- unname(fam[w$family])
+tab(w, col.names = c("Role", "Family", "Estimator", "Recorded loss mechanism", "Losses"))
+```
+
+Certified extreme fits by family and arm follow. They are scored as failures
+at extent > 10 even when a supported std.lv audit passes. The witness does not
+make such a problem attainable. Duplicate default arms are retained explicitly;
+controls remain separate from tests.
+
+```{r rerun-runaways}
+z <- n9_run
+z$family <- unname(fam[z$family])
+tab(z[, c("role", "family", "estimator", "arm", "certified", "beyond_5", "beyond_10", "beyond_100")],
+    col.names = c("Role", "Family", "Estimator", "Arm", "Certified", "> 5", "> 10", "> 100"))
+```
+
+::: {.callout-note collapse="true"}
+## Every loss in the 2026-10-09 rerun
+
+All 210 losses, including the one control loss, are listed from the frozen
+[losses.csv](results/ml-gls/2026-10-09/losses.csv). Population, model, sample
+size, replication, units and seed identify each fit; objectives and verdicts
+make the failure reviewable without rerunning estimation.
+
+```{r rerun-all-losses}
+z <- n9_loss
+z$family <- unname(fam[z$family])
+tab(z[, c("family", "estimator", "pop", "model", "n", "rep", "transform", "seed",
+          "fmin", "fmin_baseline", "newton_status", "optimizer_status", "runaway")],
+    col.names = c("Family", "Estimator", "Population", "Model", "N", "Replication", "Units", "Seed",
+                  "PORT objective", "Baseline objective", "Audit", "Optimizer", "Runaway"), digits = 6)
+```
+:::
+
+### Historical runs of 2026-09-26
+
+In the third run, GLS's rule chose PORT; neither ML candidate was eligible
+because of Chen losses. The author retained L-BFGS for both and adopted the
+layered start. The five losing Chen draws at N = 25 occurred in all four unit
+systems; their layered-start objectives were 0.09–0.47 higher. The subsequent
+library-default reproduction matched layered L-BFGS on all 92,000 fits
+(`results/ml-gls/2026-09-26-library/reproduction.csv`). The historical choice
+and runaway tables below retain the key counts from that run; they do not
+describe the current library.
+
 
 ### Rules
 
@@ -318,7 +403,7 @@ tab(e[order(e$estimator, e$arm), ], col.names = c("Estimator", "Arm", "Fits", "R
   runaway certifications, so the next ML/GLS run needs a runaway rule
   written into its criteria.
 
-### Third run: the runaway rule
+### Third run, 2026-09-26: the runaway rule
 
 Seed base 2026092603, candidates `layered_lbfgs` and `layered_port`, and the
 runaway rule at 10. Criteria are in the third dated section of
@@ -778,7 +863,10 @@ Rscript scripts/summarize_psd_scale.R
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 Rscript run_experiment.R --help
 Rscript run_experiment.R --lane ml-gls --smoke
-nice -n 10 Rscript run_experiment.R --lane ml-gls --workers 4   # about 10 minutes
+# Local rerun at the source/package build recorded in 2026-10-09/metadata.csv:
+nice -n 10 Rscript run_experiment.R --lane ml-gls --workers 4 --seed-base 2026100902 \
+  --run-id 2026-10-09 --candidate layered_lbfgs,layered_port \
+  --arms default,default_port,layered_lbfgs,layered_port,witness --runaway-bound 10 # about 25 minutes
 nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4   # about 13 minutes
 nice -n 10 Rscript run_experiment.R --lane psd-ml --workers 4 --seed-base 2026092604 \
   --run-id 2026-09-26-second --candidate psd_layered --runaway-bound 10 \
