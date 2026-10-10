@@ -1,0 +1,2 @@
+"cell","replicate","seed","converged","status","stationarity","original_error","fixed_reason","rows"
+"cfa_second12_d00_n200_discretized_ml_mar00",154,2071474585,FALSE,"failed","failed","replacement has 10 rows, data has 24","not_converged: failed",24

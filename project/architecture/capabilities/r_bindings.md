@@ -633,8 +633,7 @@ Compatibility requests use the separate TASK-109 composer; policy intervals awai
 lab compatibility/Wald composers for ML and MAR-FIML. Configurable populations,
 integer-score and continuous generators, estimator-specific cached targets and
 per-draw checkpoints support pricing and smoke work. Unavailable arms retain
-reasons and attempted denominators. This is a harness with criteria pending;
-its smoke establishes end-to-end plumbing only. The 48-cell/240-draw pricing
+reasons and attempted denominators. Its smoke establishes end-to-end plumbing only. The 48-cell/240-draw pricing
 pilot passes after refining population targets from default estimates with
 tighter lab stopping controls and the unchanged library convergence verdict.
 TASK-147 adds committed production configurations (768 ML, 1,536 FIML cells),
@@ -642,9 +641,13 @@ explicit configuration/run/seed requirements and an exact approved-criteria guar
 Production defaults to the fit_indices lane, supports up to 18 single-threaded
 workers and starts larger models/sample sizes first, preparing targets per work
 chunk. Atomic replication files and completion markers retain restart progress;
-criteria content joins the strict resume fingerprint. Production evidence remains
-pending approval. Target diagnostics and separate preparation costs are retained; failed targets
-remain explicit. Judged arms keep defaults; no default changes or coverage claim.
+criteria content joins the strict resume fingerprint. Criteria were approved before
+production. Target diagnostics and separate preparation costs are retained; failed targets
+remain explicit. Judged arms keep defaults. TASK-150 retains bounded summaries
+of 768 ML cells × 1,000 attempts: the approved rules keep all four
+misspecification-robust point defaults and select no interval. FIML remains
+pending. The harness now assigns the scalar verdict status to failed-fit arm
+reasons; the 312 frozen affected ML draws remain unavailable in every arm.
 
 TASK-149 compacts cached preparation contexts, collects discarded checks/fits
 before each fork and releases completed sampling contexts. A three-replicate

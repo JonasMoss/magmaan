@@ -24,7 +24,11 @@ run_arms <- function(data, population, cell) {
   if (inherits(fit, "error")) { out$reason <- conditionMessage(fit); return(out) }
   lab <- magmaan::as_lab_fit(fit)
   out$converged <- isTRUE(lab$converged)
-  if (!isTRUE(lab$converged)) { out$reason <- paste0("not_converged: ", (lab$verdict %||% "library_verdict_false")); return(out) }
+  if (!isTRUE(lab$converged)) {
+    # The verdict is a ten-field list; row reasons require its scalar status.
+    out$reason <- paste0("not_converged: ", lab$verdict$status %||% "library_verdict_false")
+    return(out)
+  }
   naive <- attempt(magmaanlab::convention_fit_measures(lab, "ML"))
   robust <- attempt(magmaanlab::convention_fit_measures(lab, if (cell$estimator == "FIML") "MLR" else "MLM"))
   policy <- attempt(magmaan::fit_measures(fit))

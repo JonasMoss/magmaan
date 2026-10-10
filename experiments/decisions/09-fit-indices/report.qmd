@@ -1,5 +1,5 @@
 ---
-title: "Fit-index points and intervals: harness and pricing"
+title: "Fit-index points and intervals: ML production decision"
 format:
   html:
     toc: true
@@ -9,100 +9,176 @@ execute:
   warning: false
   message: false
 params:
-  lane: pricing
-  run_id: pilot-task145-refined
+  run_id: 2026-10-09-ml-b
 ---
+
+```{r}
+path <- file.path('results','fit_indices',params$run_id)
+indices <- c('rmsea','cfi','tli','srmr')
+files <- file.path(path,paste0('summary_',indices,'.csv'))
+if (!all(file.exists(files))) stop('Missing compacted ML production. Run scripts/compact_production.R INPUT_DIRECTORY OUTPUT_DIRECTORY; see Reproduce.')
+source('R/judge_production.R')
+summary <- do.call(rbind,lapply(files,read.csv,stringsAsFactors=FALSE))
+cells <- read.csv(file.path(path,'cells.csv'),stringsAsFactors=FALSE)
+j <- judge_production(summary,cells)
+targets <- read.csv(file.path(path,'targets.csv'))
+failure_counts <- read.csv(file.path(path,'failure_counts.csv'))
+affected <- read.csv(file.path(path,'harness_affected_draws.csv'))
+show_table <- function(x, digits=4) {
+  names(x) <- tools::toTitleCase(gsub('_',' ',names(x)))
+  cat(as.character(knitr::kable(x,digits=digits,format='pipe')),sep='\n'); cat('\n\n')
+}
+```
 
 ## Default register
 
-| Choice | Current value | Status | Evidence |
-|---|---|---|---|
-| Ordinary RMSEA, CFI, TLI, SRMR points | Misspecification-robust policy composer | Adopted; evaluation pending | Component gates; this pilot only prices evaluation |
-| Ordinary fit-index intervals | None | Open | Lab Wald candidates; registration pending |
-| Evaluation design | Tier-1 basis, ML and MAR-FIML | Harness; criteria pending | Smoke and bounded pricing controls |
-
-Which fit-index corrections and intervals should ordinary users receive? This
-harness prepares the comparison. The bounded pricing pilot uses five draws per
-cell and records target preparation separately from sampling. All 48 targets
-and all 240 draws passed the library convergence verdict. Mean sampling costs
-by generator, estimator and sample size were 0.060–0.172 seconds per draw.
-The retained mtmm9 MAR target passed after refinement (Newton distance
-0.000166, unchanged budget 0.01). Tighter numerical
-controls are used only for population inputs; judged arms use library defaults.
-Criteria and production authorization remain pending. This run cannot establish
-bias, coverage or a preferred interval.
-
-## Pricing timings
-
-```{r}
-path <- file.path("results", params$lane, params$run_id)
-if (!file.exists(file.path(path, "cost.csv")))
-  stop("Missing pricing results. Run scripts/run_pilot.sh, or select an existing run_id.")
-cost <- read.csv(file.path(path, "cost.csv"))
-checks <- read.csv(file.path(path, "generator_checks.csv"))
-timing <- read.csv(file.path(path, "timing.csv"))
-setup <- read.csv(file.path(path, "setup_timing.csv"))
-priced <- aggregate(seconds ~ generator + estimator + N, cost, mean)
-names(priced) <- c("Generator", "Estimator", "Sample size", "Mean seconds per draw")
-priced[[4]] <- round(priced[[4]], 3)
-knitr::kable(priced)
+```{r, results='asis'}
+register <- data.frame(index=toupper(j$decisions$index),estimator='ML',
+  point='Misspecification-robust',interval='None',status='Decided by approved rules',
+  evidence=paste0('768 cells × 1,000 attempts; ',params$run_id))
+register <- rbind(register,data.frame(index=toupper(indices),estimator='FIML (MAR 15%, 30%)',
+  point='Misspecification-robust',interval='None',status='Pending production',evidence='Not evaluated here'))
+show_table(register)
 ```
 
-These costs average timing over the three pilot models and two misfit controls.
-They price computation only; five replications do not estimate coverage reliably. The
-full per-cell costs, setup timings, attempted denominators, availability and
-failures are in this run's CSV files. Sampling costs include ordinary default
-fitting, all point arms and all lab interval arms. Target calibration is a
-separate one-time cost. Cached target timings repeat in cells sharing a target
-and must not be summed as if they were independent work.
+The approved rules retain all four ML point defaults and select no interval.
+Neither candidate point correction is eligible for any index. Lavaan-robust
+CFI and RMSEA have no losses, but their 44 and 29 wins respectively fall short
+of the required net improvement in at least 10% of 768 cells (at least 77).
+All available interval methods fail the coverage rule; the square-root Wald
+method additionally fails availability. These are decisions from the frozen
+ML run, with no retuning and no library default changes. FIML remains pending.
 
-## Runner memory diagnostic (TASK-149)
+## Question and decision rules
 
-Collecting discarded preparation objects before forking reduced the parent at
-fork from 653 to 119 MiB and the worker peak from 642 to 397 MiB for one
-normal long30 ML cell at N=4000. Parent setup peaks were essentially unchanged
-(794 versus 790 MiB): the million-row check still needs memory while running.
-The runner caches only generator parameters, population records/moments and
-check/target summaries, and releases completed cells' sampling contexts.
+Which point corrections and 90% intervals should ordinary users receive for
+RMSEA, CFI, TLI and SRMR? The [approved criteria](criteria/fit_indices.md) were
+recorded before production. A point candidate wins a cell at RMSE at most
+0.9 times the default's, and loses when the default's RMSE is at most 0.9 times
+its own. Eligibility requires losses no greater than wins in **every model
+family**, and at least 77 net wins across the 768 cells for that index.
 
-The bounded comparison used three replicates with seed base 1490901. All 72
-raw result rows were exactly identical after excluding elapsed time. A separate
-two-worker pricing run checks the normal fork path. Measurements sampled Linux
-resident memory every 20 ms with fresh preparation caches; an isolated
-`mcparallel` worker forced a fork for the single-cell measurement (one-element
-`mclapply` otherwise runs serially). Summed RSS counts shared pages twice and
-therefore gives a conservative process total. The frozen diagnostic summary
-and provenance are in `results/task149/{memory,metadata}.csv`.
+An interval needs at least 95% availability in **every cell**, coverage outside
+87.5–92.5% in at most 5% of cells (at most 38 of 768), and coverage at least 80%
+in every cell. Among eligible methods, the smallest median width decides.
+Coverage uses available converged draws; availability uses all 1,000 attempts.
+Undefined coverage is reported separately and cannot establish eligibility.
+The retained cell width is the mean available-draw width; the comparison table
+shows the median of those cell means. No method reaches the width tie-break.
 
-Use **eight workers initially on the 10 GiB simbox for ML**. Budgeting 0.8 GiB
-for the parent and 0.4 GiB per worker gives about 4 GiB, leaving more than the
-required 2 GiB from the reported 9.4 GiB initially available. Check available
-memory during the first chunk; this local three-draw measurement does not bound
-long-run allocator growth, other generators or FIML. No production was run for
-this diagnostic. The source fingerprint changes, so prior production checkpoints
-require a fresh run ID under the existing strict resume policy.
+A family is one model, estimator setting and index. Family bias and RMSE below
+combine its 64 cells using the available-draw counts; wins and losses still
+use each cell's own RMSE and population target. No cross-family average
+replaces a family eligibility check. Population RMSEA, CFI and TLI are
+**outcomes of the delta grid**, not preset fit-index levels; exact values are
+retained in `targets.csv` and the cell tables.
 
-## Target preparation
+## ML production and failures
 
-```{r}
-targets <- read.csv(file.path(path, "targets.csv"))
-prep <- merge(cost[,c("id","model","generator","estimator","N")], setup,
-              by.x="id",by.y="cell")
-prep <- prep[prep$N == 200, ]
-priced_prep <- aggregate(cbind(target_seconds, setup_seconds) ~ model + generator + estimator,
-                         prep, mean)
-priced_prep[,4:5] <- round(priced_prep[,4:5], 3)
-names(priced_prep) <- c("Model", "Generator", "Estimator", "Target seconds", "Total setup seconds")
-knitr::kable(priced_prep)
-knitr::kable(as.data.frame(table(targets$status)), col.names=c("Target status", "Cells"))
+The production has 768 cells, each with 1,000 attempted draws: twelve tier-1
+models, four standardized misspecification sizes, four sample sizes and four
+generators. All population targets are available. The run used seed base
+2026101001, runner commit `5a7330bc` and library build `dd6325ad`.
+
+The harness defect affects **312 draws in 29 cells**: 299 `cfa_second12`,
+11 `sem_worland11` and two `cfa_bifactor15` draws. It occurs **after a fit
+fails the library convergence verdict**. The old code pasted the ten-field
+`lab$verdict` list into a reason vector, then assigned that vector to a
+24-row arm table. The runner caught “replacement has 10 rows, data has 24”
+and retained all 24 arms as unavailable. These were not converged fits lost
+to an interval calculation. Reproduction of second-order CFA, delta 0,
+N=200, discretized generator, replicate 154, seed 2071474585 confirms a failed
+stationarity verdict and the exact error. The fixed harness reads the scalar
+`lab$verdict$status` and returns 24 unavailable rows with `not_converged: failed`.
+The branch causing the defect is entered only for nonconverged fits.
+
+No ML cell was rerun. The frozen summaries retain these failures and all
+attempted denominators. The complete draw/cell inventories and the reproduction
+are `harness_affected_draws.csv`, `harness_affected_cells.csv` and
+`harness_diagnostic.csv`. The repair applies to future runs, including FIML.
+
+```{r, results='asis'}
+conv <- unique(summary[c('cell','convergence')])
+show_table(data.frame(attempted_draws=sum(cells$N*0+1000),
+  converged_draws=round(sum(conv$convergence*1000)),
+  minimum_cell_convergence=min(conv$convergence),
+  harness_defect_draws=nrow(affected),affected_cells=length(unique(affected$cell))))
+f <- aggregate(count~reason_class,failure_counts,sum)
+names(f)[2] <- 'unavailable_arm_index_rows'
+show_table(f)
 ```
 
-Setup includes population sizing and the million-row covariance check. Targets
-are reused across sample sizes, so this table selects one sample size to avoid
-counting cache reuse twice. `setup_timing.csv` retains each cell's target and total
-preparation time; `target_diagnostics.csv` retains both fitting stages. The prior
-blocked attempt remains frozen under `pilot-task145`, with its reproducer in
-`scripts/diagnose_target.R`.
+Failure counts count arm/index rows, rather than distinct draws: a failed draw
+contributes 24 such rows. Structural absence remains in the denominators.
+Lavaan supplies no robust SRMR point correction and noncentral intervals only
+for RMSEA; the unavailable arms fail eligibility rather than disappearing from
+the comparison. The square-root Wald arm is undefined when the corrected
+discrepancy is not positive. There is no SRMR interval arm in the registered grid.
+
+## Per-index results
+
+The following tables are calculated from the compacted frozen summaries.
+Each index includes every model family, every candidate loss and the complete
+interval cell grid in expandable tables. CSV links retain unrounded precision.
+
+```{r, results='asis'}
+for (index in indices) {
+  cat('\n### ',toupper(index),'\n\n',sep='')
+  cat('The rules retain the misspecification-robust point and no interval.\n\n')
+  show_table(j$candidates[j$candidates$index==index,c('arm','wins','losses','losing_families','eligible')],digits=3)
+  cat('#### Point results by family\n\n')
+  show_table(j$family[j$family$index==index,c('model','arm','availability','bias','rmse','wins','losses','ties','unavailable')])
+  losses <- j$losses[j$losses$index==index,c('cell','arm','target','rmse','default_rmse','availability')]
+  loss_path <- file.path(path,paste0('point_losses_',index,'.csv'))
+  cat('Every loss against the default (',nrow(losses),' candidate–cell losses) is retained in [the loss CSV](',loss_path,').\n\n',sep='')
+  cat('<details><summary>Every point loss</summary>\n\n')
+  show_table(losses)
+  cat('</details>\n\n')
+  if (index=='srmr') {
+    cat('Lavaan-robust SRMR is structurally unavailable in all 768 cells. No SRMR interval candidate was registered.\n\n')
+    next
+  }
+  cat('#### Interval eligibility\n\n')
+  show_table(j$intervals[j$intervals$index==index,c('arm','min_availability','availability_failures','flagged','undefined_coverage','below_floor','min_coverage','median_cell_width','eligible')])
+  interval_path <- file.path(path,paste0('interval_cells_',index,'.csv'))
+  cat('Coverage, width, availability, flags and targets for every cell are in [the interval CSV](',interval_path,'). A flag means coverage outside 87.5–92.5%; the floor is 80%.\n\n',sep='')
+  cat('<details><summary>Every interval cell (conditional coverage and mean width)</summary>\n\n')
+  show_table(j$interval[j$interval$index==index,c('cell','arm','target','available','availability','coverage','width','flag','below_floor')])
+  cat('</details>\n\n')
+}
+```
+
+## Cost and uncertainty
+
+```{r, results='asis'}
+timing <- read.csv(file.path(path,'timing_summary.csv'))
+timing <- merge(timing,cells[c('id','model')],by.x='cell',by.y='id')
+model_cost <- do.call(rbind,lapply(split(timing,timing$model),function(x)
+  data.frame(model=x$model[1],mean_seconds_per_draw=mean(x$mean),
+    median_cell_median_seconds=median(x$q50),largest_cell_p95_seconds=max(x$q95),
+    sampling_cpu_hours=sum(x$mean*x$attempted)/3600)))
+show_table(model_cost,digits=3)
+```
+
+Cost measures sampling, including all arms, separately from target preparation.
+Per-cell timing quantiles are in `timing_summary.csv`; setup costs and target
+diagnostics are retained separately. The sum of sampling seconds is CPU time,
+not simbox wall time. At 90% coverage, 1,000 available draws give a Monte Carlo
+standard error of about 0.95 percentage points; fewer available draws increase
+that error. The flag band and floor are applied as registered, with no
+multiple-comparison adjustment or post-results widening. RMSE comparisons also
+have sampling error; eligibility here is the registered empirical decision,
+not a significance test.
+
+## Caveats
+
+ML is the only production evaluated here. This result does not settle FIML,
+DWLS, ordinal data or other missingness laws. Conditional coverage can look good
+when availability is poor; both are reported and both are gating. Retained
+floating-point population targets and frozen boundary conventions are used
+without rounding targets for judgment. No failed fit is removed from attempted
+denominators. The retained draw used to diagnose the harness is development
+data for future fixes; it is not fresh confirmation evidence.
 
 ## Targets and conventions
 
@@ -155,28 +231,36 @@ at zero corrected discrepancy. RMSEA lower bounds are clipped at zero and zero i
 covered when that bound is zero. Conditional coverage, attempted-draw coverage,
 availability and convergence are all retained per cell; no fit is discarded.
 
-## Caveats
+## Retained pricing and memory evidence
 
-The pilot uses three models, two misfit controls, two sample sizes and normal/VM
-data for ML and 15% MAR-FIML. Five draws per cell price the computation; they do
-not estimate performance reliably. Smoke additionally exercises independent and
-integer discretized generators. All tier-1 models are configurable. DWLS, richer
-MAR, bootstrap comparators and a production grid await their own registration.
+The earlier 48-cell/240-draw pricing pilot establishes harness plumbing only;
+it does not enter the ML decisions above. TASK-149's bounded long30 diagnostic
+preserved all 72 result rows while reducing worker peak RSS from 642 to 397 MiB.
+Its frozen memory/provenance CSVs remain under `results/task149/`; FIML memory
+remains unmeasured.
 
 ## Reproduce
 
-From the repository root, using the read-only lane library:
+From the repository root, with the lane library read-only:
 
 ```sh
-R_LIBS=~/.cache/magmaan-rlib/lane-c Rscript experiments/decisions/09-fit-indices/run_experiment.R --help
-R_LIBS=~/.cache/magmaan-rlib/lane-c nice -n 10 Rscript experiments/decisions/09-fit-indices/run_experiment.R --smoke --workers 2 --run-id fresh-smoke
-experiments/decisions/09-fit-indices/scripts/run_pilot.sh fresh-pilot
-quarto render experiments/decisions/09-fit-indices/report.qmd -P run_id:pilot-task145-refined
+Rscript experiments/decisions/09-fit-indices/scripts/compact_production.R \
+  /path/to/original/2026-10-09-ml-b \
+  experiments/decisions/09-fit-indices/results/fit_indices/2026-10-09-ml-b
+R_LIBS=~/.cache/magmaan-rlib/lane-c OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 Rscript experiments/decisions/09-fit-indices/scripts/diagnose_arm_failure.R
+R_LIBS=~/.cache/magmaan-rlib/lane-c quarto render experiments/decisions/09-fit-indices/report.qmd
 ```
 
-Run within the repository's shared compute slice, with single-threaded BLAS/OpenMP.
-Use fresh run IDs after changing source, configuration, libraries or seed base.
-Matching runs resume per-draw checkpoints; changing the filter or worker count
-preserves seeds. `R/config.R` is the pricing configuration; a CSV with those same
-columns may be supplied with `--config`. Reports read only the selected local
-result directory and never launch estimation.
+Compaction reads the frozen originals and writes bounded summaries plus derived
+decision tables. `input_checksums.csv` identifies every original CSV; metadata
+preserves command, seed, source, library and criteria provenance. Large
+`summary.csv`, `failures.csv`, `timing.csv` and per-draw checkpoints remain ignored.
+The originals are retained in the main checkout's result directory; raw rows stay
+on simbox at `~/magmaan-runs/magmaan-main-5a7330bc/experiments/decisions/09-fit-indices/results/fit_indices/2026-10-09-ml-b/raw/`.
+The report reads only this study's compacted results and never runs estimation.
+
+The production command is retained in `metadata.csv`. Future production needs a
+fresh run ID after this harness change; strict source/library/config/seed/criteria
+fingerprints prevent resuming old checkpoints with changed code. No ML rerun is
+needed for these decisions. FIML remains under the same approved criteria.

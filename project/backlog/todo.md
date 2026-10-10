@@ -160,7 +160,11 @@ result under an unstated convention.
   TASK-149 releases preparation garbage before forks, caches compact contexts,
   and drops completed sampling state. Three long30 ML replicates match exactly;
   the bounded memory check recommends eight initial simbox ML workers.
-  Criteria approval and production authorization remain with TASK-103.
+  Criteria were approved before production. TASK-150 compacts and reports the
+  768-cell/768,000-attempt ML production: the rules retain all four corrected
+  point defaults and no intervals. The nonconvergence reason assignment is
+  repaired for future runs; 312 frozen affected draws stay unavailable.
+  FIML production remains with TASK-103 under the same criteria.
 
 - [x] **L — continuous lab fit-index Wald candidate** (TASK-142): ML/FIML
   casewise likelihood influence plus saturated-coordinate second-order variance,

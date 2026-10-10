@@ -103,7 +103,11 @@ calibrates/diagnoses one of those steps.
   population target under MAR and misspecification); and tiers that run from a
   small priced basis up to stress panels. First consumer: the fit-index study
   ([design](../design/fit-index-evaluation-study.md), TASK-103; decisions
-  settled 2026-10-09, criteria pending the harness and a pricing pilot).
+  settled 2026-10-09; criteria approved before production). TASK-150 freezes
+  768 ML cells × 1,000 attempts: the rules retain all four misspecification-robust
+  points and no intervals. The 312 nonconverged draws affected by the ten-field
+  verdict/24-row reason defect stay unavailable; future harness runs use the
+  scalar status. FIML production remains pending under the same criteria.
 - Keep the landed model-implied simulation bridge moment-based: it lowers
   fitted or hand-authored SEM state to population moments and projection specs,
   then calls the normal/elliptical mixed-population stack. Do not route it into

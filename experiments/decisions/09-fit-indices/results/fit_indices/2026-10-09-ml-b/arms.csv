@@ -1,0 +1,8 @@
+"arm","function_call","estimator"
+"naive","magmaanlab::convention_fit_measures(lab, 'ML')","ML"
+"lavaan_robust","magmaanlab::convention_fit_measures(lab, 'MLM'); *.robust","ML"
+"misspec_robust","magmaan::fit_measures(fit)","ML"
+"ncc_naive","magmaanlab::convention_fit_measures(lab, 'ML'); rmsea.ci.*","ML"
+"ncc_scaled","magmaanlab::convention_fit_measures(lab, 'MLM'); rmsea.ci.*.scaled","ML"
+"wald_f","magmaanlab::fit_index_intervals_misspec(lab, level=.90); variant=wald_f","ML"
+"wald_sqrt","magmaanlab::fit_index_intervals_misspec(lab, level=.90); variant=wald_sqrt","ML"

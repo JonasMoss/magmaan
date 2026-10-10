@@ -1,0 +1,5 @@
+"index","point","interval"
+"rmsea","misspec_robust","none"
+"cfi","misspec_robust","none"
+"tli","misspec_robust","none"
+"srmr","misspec_robust","none"

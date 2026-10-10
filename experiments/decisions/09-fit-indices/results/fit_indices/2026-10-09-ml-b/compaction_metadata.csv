@@ -1,0 +1,6 @@
+"key","value"
+"purpose","Frozen ML production; approved criteria unchanged; original large inputs remain ignored"
+"library_commit","dd6325ad"
+"harness_defect_draws","312"
+"harness_defect_cells","29"
+"compaction","summary split by index; failure reason classes counted; timing quantiles per cell; no refitting"
