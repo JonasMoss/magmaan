@@ -1,0 +1,15 @@
+"lane","role","family","estimator","arm","fits","escapes","success","success_no_escape"
+"ml-gls","test","boomsma","GLS","default",2400,8,2106,2099
+"ml-gls","test","chen","GLS","default",800,0,776,776
+"ml-gls","test","constrained","GLS","default",2000,2,1718,1716
+"ml-gls","test","engineering15","GLS","default",400,4,257,254
+"ml-gls","control","ernst","GLS","default",200,0,167,167
+"ml-gls","test","research47","GLS","default",2600,0,2471,2471
+"ml-gls","test","wolf","GLS","default",3600,10,2913,2905
+"ml-gls","test","boomsma","ML","default",2400,0,2144,2144
+"ml-gls","test","chen","ML","default",800,0,800,800
+"ml-gls","test","constrained","ML","default",2000,0,1811,1811
+"ml-gls","test","engineering15","ML","default",400,0,269,269
+"ml-gls","control","ernst","ML","default",200,0,170,170
+"ml-gls","test","research47","ML","default",2600,0,2567,2567
+"ml-gls","test","wolf","ML","default",3600,0,3384,3384

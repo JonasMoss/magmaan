@@ -1,0 +1,3 @@
+"estimator","reference_run","reference_arm","fits","matched","same_certified","same_objective"
+"ML","2026-10-09","layered_lbfgs",46000,46000,46000,46000
+"GLS","2026-10-09","layered_port",46000,46000,46000,46000

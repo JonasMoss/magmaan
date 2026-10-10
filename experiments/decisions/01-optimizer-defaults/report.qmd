@@ -59,7 +59,7 @@ n9_run <- rd9("runaways"); n9_choice <- rd9("choice")
 |---|---|---|---|
 | ML and GLS start | the layered moment start (formerly transported FABIN3 for ML, native FABIN3 for GLS) | settled 2026-09-26 (author, after run 3). Named losses: 5 Chen draws at $N = 25$, and one real-data model found by the R examples (Geiser's latent AR cross-lagged model, marker identification; backlog) | lane ml-gls, third run |
 | ML optimizer | NLopt L-BFGS | settled by the rule: layered_lbfgs eligible and chosen; layered_port fails rule 2 in equality-constrained, engineering/15, research/47 and Wolf (common units), and Boomsma, engineering/15 and research/47 (separate units) | lane ml-gls, 2026-10-09 |
-| GLS optimizer | PORT | settled (author 2026-10-10; rule choice in two runs; reproduction pending). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, third run and 2026-10-09; reproduction `2026-10-10-gls-port-repro` |
+| GLS optimizer | PORT | settled (author 2026-10-10; rule choice in two runs; reproduction `2026-10-10-gls-port-repro` passed). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, third run and 2026-10-09; reproduction `2026-10-10-gls-port-repro` |
 | verdict on runaway paths | extent > 10 requires a passing std.lv Newton audit where transport exists | settled where std.lv transport exists (TASK-143); equalities and nonpositive disturbance scales retain the old verdict. Certified extents > 10 remain failures in study scoring | lane ml-gls, 2026-10-09 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
@@ -100,6 +100,34 @@ scores every certified extent above 10 as a failure. The author adopted GLS
 PORT with the recorded 208 PORT runaways versus 81 L-BFGS runaways already
 counted as failures by the decision rule.
 Runs 1–3 below retain their dated results and original scoring.
+
+The adoption reproduction (`2026-10-10-gls-port-repro`, seed base
+2026100902) ran the same complete ML/GLS draw grid with only the library
+default arm. All 46,000 GLS fits exactly match the 2026-10-09 `layered_port`
+arm, and all 46,000 ML fits exactly match `layered_lbfgs`: no unmatched draws,
+convergence-verdict differences or objective differences. The 10,400 draw
+tasks took 322 seconds with four workers. These are reproduction draws,
+not additional independent decision evidence.
+
+Exact reproduction required the reference's portable GCC 15.2 build at
+`-O2`. The first attempt used Clang's native Release build and is retained
+as `2026-10-10-gls-port-repro-opt`: 62 ML and 36 GLS verdict differences,
+and 23,149 ML and 12,235 GLS objective differences. Repeating with the
+reference build configuration removed every difference. The decision rule
+and comparison tolerances were unchanged; this check does not establish
+identical optimizer paths across compilers or build configurations.
+
+Reproduce the adoption check after a clean portable install into an isolated
+R library (delete package objects after header changes):
+
+```bash
+just jobs=2 r-install
+Rscript experiments/decisions/01-optimizer-defaults/run_experiment.R \
+  --lane ml-gls --seed-base 2026100902 \
+  --run-id 2026-10-10-gls-port-repro --workers 4 --arms default \
+  --runaway-bound 10 --reproduces 2026-10-09:layered_port \
+  --reproduces-ml 2026-10-09:layered_lbfgs
+```
 
 **PSD ML: keep FABIN3 in both PSD routes, confirmed after the ML/GLS
 promotion (second run).** The layered start does not carry over to PSD. In

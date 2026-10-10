@@ -1,0 +1,15 @@
+"lane","role","family","estimator","arm","certified","beyond_5","beyond_10","beyond_100"
+"ml-gls","test","boomsma","GLS","default",8456,100,32,0
+"ml-gls","test","chen","GLS","default",3108,8,4,0
+"ml-gls","test","constrained","GLS","default",5202,97,45,3
+"ml-gls","test","engineering15","GLS","default",1044,41,16,0
+"ml-gls","control","ernst","GLS","default",676,12,8,0
+"ml-gls","test","research47","GLS","default",9925,83,43,0
+"ml-gls","test","wolf","GLS","default",11715,192,68,4
+"ml-gls","test","boomsma","ML","default",8572,49,1,0
+"ml-gls","test","chen","ML","default",3200,0,0,0
+"ml-gls","test","constrained","ML","default",5548,133,111,0
+"ml-gls","test","engineering15","ML","default",1078,7,3,0
+"ml-gls","control","ernst","ML","default",686,13,5,0
+"ml-gls","test","research47","ML","default",10288,49,21,0
+"ml-gls","test","wolf","ML","default",13533,36,4,0

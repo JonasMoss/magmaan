@@ -46,7 +46,11 @@ still pass, and low-extent chart poles are outside this supplementary check.
 - `Backend::NloptLbfgs` is the complete-data ML and other scalar LS default.
   Complete-data GLS defaults to `Backend::Port`, retaining layered starts and
   information-refined coordinates (author decision 2026-10-10; decisions/01
-  chose PORT in the third run and the 2026-10-09 rerun). FIML defaults to
+  chose PORT in the third run and the 2026-10-09 rerun). The portable GCC
+  reproduction `2026-10-10-gls-port-repro` exactly matches all 46,000 GLS
+  draws to layered PORT and all 46,000 ML draws to layered L-BFGS. Clang
+  native Release paths differ from that reference; both builds pass the
+  maintained regression checks. FIML defaults to
   `Backend::NloptLbfgsSlsqpFallback`, which retries NLopt SLSQP from the same
   start if L-BFGS fails or returns a non-clean optimizer status. NLopt is a
   required dependency in the ordinary build, so both pieces of the fallback are

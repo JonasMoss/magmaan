@@ -1713,6 +1713,8 @@ separate final decision for each explicitly covered scope.
 - [x] **M — adopt PORT for complete-data GLS (TASK-153).** Author decision
   2026-10-10 applies decisions/01 choice in two runs; ML retains L-BFGS.
   Retain layered starts, information coordinates and all other controls.
+  Portable GCC reproduction `2026-10-10-gls-port-repro`: zero mismatches
+  across 46,000 GLS and 46,000 ML fits against the selected prior arms.
 
 - [ ] **M — repair PSD finalization and retained route losses.** Diagnose std.lv
   equal-loading lift round-trip failures and constrained-chain objective losses
