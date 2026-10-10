@@ -734,3 +734,81 @@ ordinal delta/theta one/two groups, and FIML MAR plus grouped missingness.
 FIML oracle H1 EM uses the same 1e-10 convergence tolerance. Composer parity
 is checked at semantically matched oracle coefficients at 1e-6; optimizer coefficient agreement is checked
 separately at 1e-4 because tail probabilities amplify small endpoint differences.
+
+#### Dated changes
+
+2026-10-06: complete mixed DWLS/WLS robust modification indices and equality
+releases include the estimated-weight influence (TASK-92): exact empirical
+first-stage rows, the mixed IJ Gamma channel and observed nuisance sensitivity
+with an expected score metric, gated by explicit H/B Schur reconstruction,
+augmented case-score derivatives, exact-fit cancellation and the one-restriction
+nested-law identity (one/two groups, delta/theta). The plain C++
+`api::modification_indices()`/`api::score_tests()` keep the standard statistic
+for every estimator; ULS and absent recipes return `UnsupportedInference`.
+`main` is pushed (no tags); CI's gcc 13 build needed two `-Werror` fixes.
+Seven mixed preset cases keep strict retained WLSMV parity; grouped theta
+configural is gated by objective acceptance and identical-point reporting,
+because BLAS-dependent search paths move lavaan's endpoint in a flat region
+(TASK-94). Ordinary `summary()`/`anova()` test tables share one layout
+(`test, statistic, df, reference, pvalue, recommended, reason`) with stable
+test codes (`score`, `lr`, `fit_function`, `fit_function_difference`) and
+typed rows for unavailable tests; `references =` adds any of std, sb, ss, mv,
+scaled_f, all, pall, peba<k>, eba<k> computed from the policy statistic and
+its retained spectrum, so simulation studies compare tests in `magmaan` alone
+(TASK-95). Default rows and p-values are unchanged. `recommended` marks only
+the policy's primary test (score, or the DWLS fit-function statistic) with its
+default references; the likelihood-ratio rows are reported because they are
+standard, never recommended (TASK-96). ML and FIML policy tests default to
+PEBA4 alone (user decision 2026-10-06; SB stays a `references` comparator),
+so their default tables hold one row per test (TASK-97). DWLS nested tests
+(all-ordinal and mixed, parameter- and moment-nested) use the All reference
+like the DWLS global test, with SB/PEBA4 as comparators (TASK-81, user
+decision 2026-10-06); decisions/07 is the pending cross-model confirmation.
+`api::policy_fit_measures()` / lab `policy_fit_measures()` give
+misspecification-robust point fit indices (TASK-101; design
+[fit-indices.md](../../design/fit-indices.md)): each estimator's own discrepancy
+corrected by its first-order bias (Takeuchi trace difference with the moment
+bias for ML/FIML; exact-first-stage observed-geometry trace for ordinal and
+mixed DWLS), Steiger's multigroup RMSEA, nominal-df truncated TLI and
+bias-corrected pooled SRMR/CRMR; typed refusals elsewhere. Intervals wait
+for the TASK-103 study; the ordinary interface is TASK-102. The exact
+first-stage all-ordinal DWLS policy is reconfirmed on fresh draws (TASK-79,
+simbox production): no global or nested size flag at N >= 500, IJ coverage
+near nominal except nonconvergence in the hardest binary two-group cell.
+decisions/07 (184 cells, eight textbook models) confirms All for DWLS global
+and nested tests: 4 of 138 global and 15 of 120 nested cells outside
+[3%, 7%] at N >= 500 against SB 94/23 and PEBA4 76/20; the shared nested
+failures come from a bifactor null that is not exact under DWLS and Worland
+nonconvergence.
+Ordinary `modindices()` reports robust one-df score modification indices and
+equality releases (chi-square(1), EPC, standardized EPC) for ML, FIML and
+all-ordinal/mixed DWLS through `api::policy_modification_indices()`, with
+optional `test = "lr"` refits via lab `policy_mi_refit()` and the nested
+policy (TASK-99). ML/FIML robust MI and releases project nuisance scores with
+observed sensitivity and use the expected metric, bread and EPC, so saddle
+directions keep their generalized score statistic (TASK-106; HS reports all
+54 candidates). Candidates include absent structural regressions, reverse
+paths among them as lavaan proposes, through model-triple augmentation with
+typed unidentified rows (TASK-105).
+`summary(fit, standardized = TRUE)` adds std.lv/std.all estimates with
+delta-method SEs from the active covariance and an R-squared table (lab
+`standardized_rows()`), lavaan-gated at matching covariance (TASK-98).
+Ordinary `fit_measures(fit)` and `summary(fit, fit_measures = TRUE)` report the
+policy point indices with fixed row sets per estimator (TASK-102);
+`fit_measures(fit, lavaan_compat = ...)` reproduces lavaan's fitMeasures for
+complete-data ML/MLM/MLR and all-ordinal DWLS/WLSMV, ULS/ULSMV and WLS with
+analytic categorical baselines (TASK-109; same-point parity 1e-6); FIML
+bundles use 1e-10 H1 EM solves in the compatibility path and match lavaan at
+1e-6 (TASK-110; the native 1e-5 H1 tolerance was the cause).
+
+2026-10-03: `magmaan_model()` lazily caches native prepared structure;
+`magmaan()` fits through it and rebuilds after serialization, falling back for
+ML2S and ordinal fitting options. Prepared ordinal fits match fresh
+equality-constrained fits and retain the reporting moment/weight layout.
+
+2026-10-02: ordinary reporting selects historical lavaan bundles through
+`lavaan_compat = NULL` (policy default), with matching cache keys, inference
+metadata and result attributes. Explicit output says lavaan compatibility;
+the unreleased `convention` argument was renamed without an alias.
+
+The 2026-10-07 noncentral chi-square and RMSEA-bound change is recorded in [optimizer dated changes](optimizers.md#dated-changes); the 2026-10-03 Mplus ordinary interface is recorded in [parser dated changes](parser.md#dated-changes).

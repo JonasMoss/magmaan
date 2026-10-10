@@ -347,3 +347,25 @@ These values describe where the optimizers stopped, not comparable optima:
 | ex8_5c | GLS | PORT | 0.0104402876685199 | 0.0104402876684467 |
 | ex8_5c | ML | L-BFGS | 0.0230056841197252 | 0.0116990628930935 |
 | ex8_5c | ML | PORT | 0.0116990628931142 | 0.0116990628931121 |
+
+#### Dated changes
+
+2026-10-07: three lane fixes merged. (1) PORT and PORT-NLS adapters now
+return matching point/objective pairs: they recover the best evaluated point
+when the backend restores only its stored value at singular or noisy stops,
+and record raw endpoint telemetry; audit failures remain failures (TASK-33.7;
+38 retained witnesses and 32/100 scalar baseline mismatches). (2) The
+noncentral chi-square CDF uses incomplete-gamma recurrences with Poisson
+remainder bounds and explicit work limits; it now has error <= 8.8e-15 against
+60-digit references (the old code erred by up to 0.035), and unsupported
+extreme tails give NA RMSEA bounds (TASK-107). (3) The all-ordinal named
+compatibility covariance keeps n_g/N sandwich geometry with an N-G reporting
+denominator; unequal-group parity is gated at 1e-5 (TASK-104).
+
+On 2026-09-30 the research surface was pruned: ML ridge continuation,
+automatic marker/std.lv fitting, adaptive Guttman composites, MI4/structured
+fourth-moment weights, empirical-Bayes DLS selection, fitted-weight GMM and its
+profile/audit adapters, PNTML, and the dedicated GLSpw fitter were removed.
+Fixed-scalar DLS, ordinary fixed-weight GMM/WLS, the start transport pipeline,
+and sphere/gauge coordinates remain supported. Archived experiments retain
+historical source references; rerunning them requires their original revision.

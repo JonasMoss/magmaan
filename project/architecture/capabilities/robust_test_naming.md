@@ -99,3 +99,13 @@ Explicit quadratic references reuse the projected-score PSD validator
 (`1e-10 * max(1, max|lambda|)`), clipping roundoff-negative entries and
 rejecting materially negative spectra with `NumericIssue`; fit-time FMG
 continues to clip every negative entry, a deliberate difference for now.
+
+#### Dated changes
+
+2026-10-03: misspecification-robust inference is a
+[scope requirement](../../scope.md#misspecification-robust-inference-requirement).
+Lab `estimated_weight` switches default to TRUE, and generic lab covariance and
+nested scores default to robust geometry. Named compatibility and diagnostic
+routes stay explicit, and unsupported observed or estimated-weight laws fail.
+
+The 2026-10-05 exact likelihood projection defaults are recorded in [ordinal and mixed dated changes](ordinal_and_mixed.md#dated-changes).

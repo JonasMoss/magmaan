@@ -282,3 +282,16 @@ constraints. The calibration sweep, coverage and cost are recorded in the
 [terminal audit](../../design/terminal-audit.md#structural-identification-2026-10-07);
 `cpp/tests/tools/identification_sweep.py` reruns it. Empirical
 underidentification at an estimate remains a diagnostic, never a refusal.
+
+#### Dated changes
+
+2026-10-07: the isolated sphere-study optimizer audit programme is merged into
+`main` (TASK-33.11, b55a0ea8). It adds opt-in construction-aware Newton audits
+for covariance-only ULS/ML and sphere fits, weighted-LS, ordinal/mixed,
+direct-FIML and ML2S audit composition, and NLopt soft-exit candidate retention
+(budget stops now return rejected candidates rather than errors). No default
+changes; the audit contract is in
+[numerical auditing](numerical_audit.md). Open 0.3.0 work:
+identification (TASK-33.3), mixed-scale L-BFGS failures (TASK-33.10.5.2),
+profiled PORT-NLS consistency (TASK-33.7), starts (TASK-33.9), and the scoped
+audit-default decision (TASK-33.6.6).

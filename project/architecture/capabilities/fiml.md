@@ -144,7 +144,7 @@ confirmatory calibration is claimed. FIML lavaan compatibility is composed separ
   construction bounds explicitly unsupported; it supplies no identification
   guard, raw-sample normalization extension, inference/default/PSD guarantee.
   Evidence and reproduction are in
-  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  [sphere reference fits](../../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
   (`fiml_audit` lane).
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
@@ -225,7 +225,7 @@ confirmatory calibration is claimed. FIML lavaan compatibility is composed separ
   its repaired ACOV remains unchecked. Separate stage passes imply no
   propagated structural-parameter accuracy or inference/default recommendation.
   Nonordinary covariance policies are explicitly outside this adapter. See
-  [sphere reference fits](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
+  [sphere reference fits](../../../experiments/engineering/active/15-sphere-reference-fits/report.qmd)
   (`ml2s_audit` lane).
   `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
@@ -613,3 +613,20 @@ casewise score cross-products for meat. The one-df generalized statistic does
 not require positive observed release curvature; EPCs use expected information.
 Identified numerical failures remain typed table rows. Ordinary lab FIML MI
 retains its separate observed-information comparator.
+
+#### Dated changes
+
+2026-10-03: the ordinary FIML policy is composed for single-level random-x
+models with affine equalities, one or more groups. Covariance is the
+observed-bread casewise-score sandwich. Global and nested score tests use
+observed sensitivity with the expected metric. The global LR uses the saturated
+observed-H1 spectrum, and the nested LR uses the larger fit's observed bread
+and direct casewise-score meat through the exact restriction map, reported with
+SB and PEBA4. Calibration is limited (research/44, decisions/03). The lab's
+transported-influence FIML Satorra driver is unchanged and is no longer a default.
+
+2026-10-03: FIML `lavaan_compat = "ML"`/`"MLR"` reports lavaan 0.7.2's
+`missing = "ml"` bundles: observed-Hessian or Huber-White covariance, the
+standard or Yuan-Bentler Mplus global test, and the standard or SB2001 nested
+difference, gated against installed lavaan on MCAR/MAR and grouped invariance.
+The FIML policy is unchanged.

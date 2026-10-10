@@ -48,3 +48,11 @@ in `r-package/tests/testthat/fixtures/delta_scale_models.json`, so portable
 source-package checks run the same seven cases without a checkout of C++ test
 fixtures. Estimates, standard errors, global tests, standardized reporting and
 factor scores are still compared with installed lavaan.
+
+#### Dated changes
+
+2026-10-02: CI is configured for both portable R source-package checks, with
+weekly dev-preset sanitizers and domain-level LLVM coverage artifacts (no
+percentage gate).
+
+The 2026-10-05 release dry-run results are recorded in [ordinal and mixed dated changes](ordinal_and_mixed.md#dated-changes).

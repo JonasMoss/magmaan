@@ -276,3 +276,8 @@ The expected-metric candidate rank gate runs before the observed projection,
 so residual curvature does not admit identification-only releases. Finite-difference gates in `score_robust_test.cpp` check
 continuous and ordinal Hessians, unequal-group case-weight gradient rows and
 the projected influence, with scalar and multi-df calibration reductions.
+
+#### Dated changes
+
+2026-10-02: RBM exposes fixed/estimated-weight selection. (That day's FALSE
+lab default was reversed on 2026-10-03.)

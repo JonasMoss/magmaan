@@ -235,3 +235,43 @@
   and varying-zero arguments return typed `PostError::NumericIssue`; constant
   zero has zero value and SE. Exact ex5.21/ex5.22 source inputs are not gated.
 - Effect coding for loadings.
+
+#### Dated changes
+
+2026-10-03: the Mplus input frontend (0.3.0, [mplus.md](../../grammar/mplus.md))
+imports whole input files with continuous single- and multiple-group models
+(GROUPING, group sections, cross-group defaults, one CONFIGURAL/METRIC/SCALAR
+shortcut) through `api::model_from_mplus()` and `magmaanlab::mplus_model()`;
+everything else is rejected with rule IDs. `magmaanlab::mplus_data()` reads the
+data file from the C++ data plan (free/fixed FORMAT, missing flags, FILE and
+NGROUPS groups, summary matrices taken as N-1 and rescaled for ML as Mplus
+does). Categorical outcomes (thresholds, DELTA/THETA, grouped defaults,
+CONFIGURAL/SCALAR) fit through all-ordinal DWLS; mixed, conditional and
+categorical-ML routes are explicit boundaries. Growth (`|`, free time scores,
+piecewise, categorical and grouped), MODEL CONSTRAINT (NEW parameters as
+auxiliary coordinates, equalities, DO loops) and MODEL INDIRECT (defined
+effects with delta SEs) are imported; inequalities stay
+[deliberately refused](../../scope.md#inequality-constraints-deliberately-refused).
+Gated against lavaan and the Mplus 9.1 Demo; of 68 eligible verified corpus
+cases, 50 are accepted: 44 match Mplus and 6 end in an explicit unsupported-fit
+route. The stability bar is closed: per-rule rejection messages, an
+ASan/UBSan sweep of all 2,440 corpus inputs without crashes or unclassified
+rejections, lab round trips for seven model families and one coverage matrix
+keyed to the inventory. All-ordinal nonlinear equality constraints fit with
+lavaan-compatible expected-information inference (TASK-54.2; lavaan 0.7-2's
+start-value Jacobian in nonlinear nested and score tests is an
+[oracle defect](../../validation/oracle-defects.md)); the ordinary policy refuses
+nonlinear constraints. Ordinary `magmaan()` accepts explicit
+`magmaanlab::mplus_model()` specs under the
+[same-model rule](../../scope.md#mplus-inputs-in-the-ordinary-api): construction
+always succeeds, and fitting refuses conditional observed covariates,
+NOMEANSTRUCTURE and summary data without MEANS with a classed error naming the
+input edit (`x1 x2;` brings every covariate into the joint model, as Mplus 9.1
+does; probe P-MS08b). A data-free output gate (`check_mplus_outputs.R`) checks
+groups, free parameters and df for all 130 accepted inputs among the corpus's
+1,337 Mplus outputs; it found and fixed silent label loss in consecutive
+bracket groups (means, thresholds, scales) and leaves no mismatch. A
+real-data gate (`check_mplus_real_data.R`) reads all 373 corpus input/data
+pairs with `mplus_data()`: 244 match their references (verified `raw.csv`, N,
+missing patterns, moments) and none mismatch; a terminal DOS end-of-file
+marker is accepted and an embedded one rejected, where Mplus truncates.

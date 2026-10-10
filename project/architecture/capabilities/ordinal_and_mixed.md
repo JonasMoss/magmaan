@@ -1234,3 +1234,103 @@ and seven other numerical gates observed above about 60 seconds in Debug;
 `cpp/tests/slow_tests.cmake` records the list. Debug checks and primary CI
 exclude these nine cases; full optimized CTest and merge validation run them
 all, preserving the complete test count.
+
+#### Dated changes
+
+2026-10-05: complete mixed continuous/ordinal DWLS has the ordinary policy
+(TASK-71): exact first-stage IJ covariance, the global n F test with the All
+reference on the spectrum from exact sampling rows (OPG NACOV still sets the
+fitting weights), and the observed-Hessian parameter-space nested law with
+SB/PEBA4, including moment-nested pairs. One- and two-group delta/theta
+composition gates give limited validation; calibration, nested score, mixed
+ULS/WLS policy and mixed `lavaan_compat` remain open. The user decided that the
+all-ordinal policy also adopts the exact first stage (TASK-69, via TASK-74),
+with decisions/05 reconfirmation. The decisions/04 structured-mean production
+found no flag for the exact-row ML nested LR meat.
+Lab empirical complete-data ML robust SEs and score/MI meats now default to
+exact joint-sampling likelihood projections (TASK-77) for raw, centered-Zc and
+caller-Gamma inputs; structured/unstructured moments remain explicit
+comparators, GOF moment primitives keep their named conventions, and grouped
+centered LS meats are documented as fixed-allocation.
+Complete all-ordinal data have exact empirical score-Jacobian first-stage
+sampling rows and Gamma, with `first_stage = "exact"` as a lab IJ comparator
+(TASK-74). The all-ordinal ordinary DWLS policy now uses them (TASK-69, user
+decision): complete-data exact first-stage rows cached once per fit, the
+estimated-weight IJ covariance and nested meat on those rows, and the global
+spectrum from their Gamma. OPG NACOV still sets the fitting weights, so
+estimates and fit statistics are unchanged; `lavaan_compat` and lab defaults
+keep OPG. decisions/05 validated the OPG version; TASK-79 reconfirmed the
+exact policy and the TASK-84/127 latent non-normality production shows the
+OPG first stage inconsistent for skewed five-category items. decisions/06 found SB/PEBA4
+over-rejecting for the threshold step with seven categories while All passed
+a fresh-draw confirmation; the nested reference choice is TASK-81.
+Association ML (Gaussian ML on Stage-1 polychorics) has a lab-only
+`association_ml_ij()` (TASK-32.2): observed correlation-map sensitivity and
+exact Stage-1 transport give active/full covariance with joint threshold
+influence; ordinary association inference stays refused until reference laws,
+MI/releases and calibration (TASK-32 subcards 4-5). Its lab global and nested
+spectral tests (`association_ml_global_test()`, `association_ml_nested_test()`,
+TASK-32.3) report All, SB and PEBA4 on the exact Stage-1 Gamma, with the
+correlation-ML residual metric for the global test and the observed-H/IJ
+parameter-space law for nested tests. Lab modification indices and affine
+releases (`association_ml_modification_indices()`,
+`association_ml_score_tests()`, TASK-32.4) use observed Schur sensitivity/EPC
+and the exact projected Stage-1 meat; ordinary exposure awaits the subcard-5
+calibration.
+The exact ordinal and mixed first-stage Jacobians use block-sparse mean-score
+finite differences (TASK-83), gated against the dense reference at 1e-7: a
+fresh all-ordinal policy call at N = 1000 (two groups, 12 five-category items)
+takes 0.14 s against 0.10 s for OPG; mixed calls remain dominated by their
+estimated-weight/Gamma work. TASK-88 replaced the dense per-case diagonal
+Gamma-influence products with sparse contractions (dense WLS path kept as a
+1e-10 reference): a mixed policy call (6+6 items) drops from 3.5 to 1.1 s at
+N = 1000 (one group). TASK-89 made the Gamma-diagonal kappa movement sparse for
+observed ordinal and mixed data (dense references kept, 1e-8 gates): a
+two-group mixed call falls from 2.0 to 0.45 s at N = 1000 per group.
+Complete mixed DWLS now has an explicit `lavaan_compat = "WLSMV"` bundle
+(TASK-90): NACOV covariance, scaled-shifted global and default Satorra-2000
+delta nested tests, gated at identical parameter points against installed
+lavaan for one/two groups and delta/theta. Retained-fit parity is validated
+for one-group delta; grouped/theta retained fits differ because lavaan weights
+unequal groups by n_g - 1 and stops earlier (magmaan's endpoint has the better
+canonical objective). The lavaan-0.7.2 preset now covers complete mixed DWLS
+(TASK-91: mixed FABIN3/sample starts, n_g - 1 search weighting, ordered
+equality coordinates, pinned PORT stopping), and all eight retained WLSMV
+cases pass under it; default mixed fitting is bit-identical.
+A second release dry run (TASK-31.2, main 08851406 plus release-check fixes)
+passes `just check` (1,550 C++ tests, examples, ordinary tests), the parity
+label (32 tests) and `R CMD check --no-manual` for both packages with no
+errors, warnings or notes; both NEWS files are consolidated into 0.2.0 release
+notes. Versions, tag and push remain the user's (TASK-31/29).
+
+2026-10-03: ordinal DELTA response scales use lavaan's coordinates: each
+`~*~` row is a live parameter (free, fixed at any value, equal, constrained,
+released across groups) and ordinal residual variances are derived. Released,
+equal and fixed scales and delta measurement invariance match lavaan on frozen
+fixtures (`ordinal/delta_scales.json`); explicitly freed THETA residuals keep
+their coordinates on every lab route.
+
+2026-10-03: ordinal `anova(lavaan_compat = )` composes lavaan's default
+nested test: WLSMV/ULSMV use the delta Satorra-2000 scaled-shifted difference;
+plain DWLS/ULS keep the statistic and df without a p-value, and WLS uses the
+standard difference. Live gates cover delta/theta and grouped theta invariance.
+
+2026-10-03: the `lavaan-0.7.2` preset fits all-ordinal DWLS in both R packages.
+The named eight-case simulated parity set passes all 160 replicates under the
+approved endpoint contract (exit criterion 2). `LatentStructure` records its
+ordinal preparation, projected through the partable and an R attribute;
+re-preparation is a no-op or an error.
+
+2026-10-03: the DWLS policy is calibrated (decisions/05). The IJ covariance
+covers at about 95%. The global test uses the exact spectrum tail (All) on the
+robust-ordinal spectrum, because SB and PEBA4 over-reject at df >= 53; it was
+confirmed on fresh draws at 2.9-6.8%. The nested test uses the r-term
+parameter-space law (observed Hessian, estimated-weight IJ meat, exact
+restriction map) with SB and PEBA4, after the separate-point profile law's
+cancellation artifact was diagnosed; confirmed at 4.3-7.8%. ML/FIML likelihood-score
+contracts have their own gates (task-22). FIML and DWLS policy ingredients
+(observed bread and casewise scores; IJ influence and exact Hessian) are built
+once per fit and reused across reports and nested pairs, bit-identically
+(task-23).
+
+The 2026-10-07 grouped compatibility covariance change is recorded in [optimizer dated changes](optimizers.md#dated-changes); the 2026-10-06 mixed MI and policy reporting changes are recorded in [R-binding dated changes](r_bindings.md#dated-changes), and the 2026-10-04 mixed MI and prepared-option changes in [complete-data ML dated changes](complete_data_ml.md#dated-changes).
