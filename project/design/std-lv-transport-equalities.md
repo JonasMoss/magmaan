@@ -60,7 +60,15 @@ that mix kinds with different forms (for
 example a loading equal to a covariance) or that tie regressions, whose form
 $u_k-u_j$ is a difference, are refused with a named reason, as now.
 
-**Phase 2: general linear forms.** Compute $\mathcal U$ from all equality
+**Phase 2: general linear forms (parked 2026-10-11).** The TASK-161 lane showed
+that regression equalities make the marker restrictions nonlinear (for
+$\beta_{21}=\beta_{32}$, $u_1-2u_2+u_3=0$ and $m_1m_3=m_2^2$) and that the
+projected gauge does not yield unit variances, so phase 2 needs a nonlinearly
+constrained audit chart. Phase 1 already audits all 29 retained constrained
+near-pole fits, so no known case needs it. Build if a retained near-pole or
+runaway endpoint with regression or mixed-form equalities stays unauditable;
+until then those models keep the previous verdict with an explicit reason. The
+original sketch follows. Compute $\mathcal U$ from all equality
 groups and choose the chart's scale as the projection of the std.lv target
 $u^\star_j=\tfrac12\log\psi_{jj}$ onto $\mathcal U$; the gauge is then fixed by
 unit variances for a basis of $\mathcal U$'s free directions. This covers equal
