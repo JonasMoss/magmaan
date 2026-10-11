@@ -90,6 +90,11 @@ per tied scale class. The improved transport also serves the automatic start
 fallback for constrained models where it applies, as a separate step with its
 own no-loss evidence, because it changes default starts.
 
+**Start fallback (TASK-162, not adopted).** Using the transported std.lv start
+for constrained models lost 19 of 120 retained decisions/02 constrained fits,
+all at x0.01, because TASK-131's fallback builds in normalized sample units.
+TASK-131's construction stays; the transport serves the endpoint audits only.
+
 ## Questions as discussed
 
 1. Is "one unit-variance representative per tied scale class" the right chart
