@@ -61,3 +61,7 @@ normalization-revisit/paired/*
 !normalization-revisit/paired/invariance.csv
 !normalization-revisit/paired/unit_exceptions.csv
 !normalization-revisit/paired/objective_covariance_checks.csv
+
+# TASK-159 non-confirmatory smoke and pricing outputs remain local.
+ls-coordinates/smoke*/
+ls-coordinates/pilot*/

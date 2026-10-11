@@ -4,22 +4,23 @@
 # on. The criteria in criteria/<lane>.md were committed before the run.
 
 args <- commandArgs(trailingOnly = TRUE)
-usage <- "Usage: Rscript run_experiment.R --lane ml-gls|psd-ml [options]
+usage <- "Usage: Rscript run_experiment.R --lane ml-gls|psd-ml|ls-coordinates [options]
 
 Runs every configuration of the lane on fresh draws from the populations in
 R/families.R, under four unit transforms (native, x100, x0.01, and separate
 units for invariant models), then writes the scored summaries.
 
   --lane L          ml-gls (ML and GLS: start x optimizer) or psd-ml
-                    (direct PSD fits, preconditioning, two-stage route)
+                    (direct PSD fits, preconditioning, two-stage route); ls-coordinates
+                    (ULS, DWLS, WLS and MAR ML2S with those three weights)
   --reps R          replications per population and N (default 100 ml-gls, 50 psd-ml)
   --seed-base B     seed base (default 20260926, the freeze date)
   --pops a,b        restrict to these population keys
   --roles r         test, control, or test,control (default)
   --workers W       parallel workers, one thread each (default 4)
   --batch B         tasks per checkpointed batch (default 40)
-  --run-id ID       results/<lane>/<ID> (default 2026-09-26)
-  --candidate A[,B] the arm(s) the rules test against `default` (default layered_port);
+  --run-id ID       results/<lane>/<ID> (default 2026-09-26; smoke default smoke)
+  --candidate A[,B] the arm(s) the rules test against `default` (default layered_port, or objective_downward,objective for ls-coordinates);
                     with two, choice.csv applies the pre-registered choice
   --runaway-bound X certified fits with a standardized extent above X are runaways,
                     scored as failures (default Inf: no runaway rule)
@@ -41,23 +42,24 @@ opt <- function(name, default = NULL) if (name %in% args) args[match(name, args)
 script <- normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))
 here <- dirname(script)
 source(file.path(here, "..", "..", "_support", "R", "helpers.R"))
+source(file.path(here, "..", "..", "_support", "R", "missingness.R"))
 set_single_threaded_math()
 suppressPackageStartupMessages(library(magmaanlab))
 for (f in c("families.R", "fits.R", "score.R")) source(file.path(here, "R", f))
 
 lane <- opt("--lane")
-if (is.null(lane) || !lane %in% c("ml-gls", "psd-ml")) stop("--lane ml-gls|psd-ml is required")
+if (is.null(lane) || !lane %in% c("ml-gls", "psd-ml", "ls-coordinates")) stop("--lane ml-gls|psd-ml|ls-coordinates is required")
 smoke <- "--smoke" %in% args
 seed_base <- as.integer(opt("--seed-base", "20260926")) + if (smoke) 1L else 0L
-reps <- if (smoke) 1L else as.integer(opt("--reps", if (lane == "ml-gls") "100" else "50"))
+reps <- if (smoke) 1L else as.integer(opt("--reps", if (lane != "psd-ml") "100" else "50"))
 workers <- as.integer(opt("--workers", "4"))
 batch_size <- as.integer(opt("--batch", "40"))
-run_id <- if (smoke) "smoke" else opt("--run-id", "2026-09-26")
+run_id <- opt("--run-id", if (smoke) "smoke" else "2026-09-26")
 out <- file.path(here, "results", lane, run_id)
 raw_dir <- file.path(out, "raw")
 dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 
-candidates <- strsplit(opt("--candidate", "layered_port"), ",")[[1]]
+candidates <- strsplit(opt("--candidate", if (lane == "ls-coordinates") "objective_downward,objective" else "layered_port"), ",")[[1]]
 candidate <- candidates[1]
 runaway_bound <- as.numeric(opt("--runaway-bound", "Inf"))
 arm_filter <- if (is.null(opt("--arms"))) NULL else strsplit(opt("--arms"), ",")[[1]]
@@ -77,7 +79,19 @@ tasks <- do.call(rbind, lapply(pops_run, function(p) {
 }))
 batches <- split(seq_len(nrow(tasks)), ceiling(seq_len(nrow(tasks)) / batch_size))
 
+# A resume must use the same design, seeds, source and installed package.
+fingerprint <- c(lane, seed_base, reps, names(pops_run), arm_filter, candidates,
+  runaway_bound, batch_size, as.character(tools::md5sum(c(script,
+    file.path(here, "R", c("fits.R", "score.R", "families.R")),
+    file.path(here, "criteria", paste0(lane, ".md")),
+    file.path(find.package("magmaanlab"), "libs", "magmaanlab.so")))))
+manifest <- file.path(raw_dir, "manifest.rds")
+if (lane == "ls-coordinates" && file.exists(manifest) && !identical(readRDS(manifest), fingerprint))
+  stop("Resume fingerprint differs; use a fresh --run-id")
+if (lane == "ls-coordinates" && !file.exists(manifest) && length(list.files(raw_dir, "^batch_")))
+  stop("Existing batches lack a resume fingerprint; use a fresh --run-id")
 if (!"--summarize" %in% args) {
+  if (lane == "ls-coordinates") saveRDS(fingerprint, manifest)
   write_metadata(file.path(out, "metadata.csv"), values = list(
     lane = lane, seed_base = seed_base, reps = reps, smoke = smoke,
     populations = paste(names(pops_run), collapse = ","), tasks = nrow(tasks),
@@ -87,6 +101,10 @@ if (!"--summarize" %in% args) {
     transforms = "native,x100,x0.01,mixed (mixed only for unit-invariant models)",
     judge = "fit$converged (Newton check); PSD fits also admissible",
     git_head = git_scalar(c("rev-parse", "HEAD")), git_dirty = git_dirty(),
+    criteria_md5 = unname(tools::md5sum(file.path(here, "criteria", paste0(lane, ".md")))),
+    runner_md5 = paste(tools::md5sum(c(script, file.path(here, "R", c("fits.R", "score.R", "families.R")))), collapse = ","),
+    missingness = if (lane == "ls-coordinates") "single_cause_mar; cause first variable; targets last floor(p/2); rate .15" else "none",
+    reference = if (lane == "ls-coordinates") "objective coordinates; max_iter 20000; arm witness" else "population-start witness",
     magmaanlab_built = utils::packageDescription("magmaanlab")$Built,
     magmaanlab_path = find.package("magmaanlab")), packages = "magmaanlab")
   t_start <- proc.time()[["elapsed"]]

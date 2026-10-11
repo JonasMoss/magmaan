@@ -21,7 +21,8 @@ draw_moments <- function(pop, n, seed) {
   m <- colMeans(X)
   S <- crossprod(sweep(X, 2, m)) / n
   dimnames(S) <- dimnames(pop$Sigma); names(m) <- colnames(pop$Sigma)
-  list(S = S, mean = m, n = n)
+  colnames(X) <- colnames(pop$Sigma)
+  list(S = S, mean = m, n = n, X = as.data.frame(X))
 }
 
 # Units: every variable times 100, every variable times 0.01, or alternate
@@ -44,6 +45,10 @@ build_model <- function(fm) {
 
 lane_arms <- function(lane) {
   switch(lane,
+    "ls-coordinates" = list(
+      default = list(kind = "ls"),
+      objective_downward = list(kind = "ls", control = list(coordinate_scaling = "objective_downward")),
+      objective = list(kind = "ls", control = list(coordinate_scaling = "objective"))),
     "ml-gls" = list(
       default       = list(kind = "ordinary"),
       default_port  = list(kind = "ordinary", optimizer = "port"),
@@ -68,7 +73,9 @@ lane_arms <- function(lane) {
     stop("unknown lane ", lane))
 }
 
-lane_estimators <- function(lane) if (lane == "ml-gls") c("ML", "GLS") else "ML"
+lane_estimators <- function(lane) switch(lane,
+  "ml-gls" = c("ML", "GLS"), "psd-ml" = "ML",
+  "ls-coordinates" = c("ULS", "DWLS", "WLS", "ML2S_ULS", "ML2S_DWLS", "ML2S_ADF"))
 
 blank_record <- function() {
   data.frame(returned = FALSE, certified = FALSE, admissible = NA, fmin = NA_real_,
@@ -135,6 +142,12 @@ run_arm <- function(arm, model, sample, estimator) {
   if (!length(ctl)) ctl <- NULL
   t0 <- proc.time()[["elapsed"]]
   fit <- tryCatch(switch(arm$kind,
+    ls = {
+      if (startsWith(estimator, "ML2S_"))
+        magmaanlab::magmaan_core$fit_ml2s(model, sample,
+          stage2_weight = tolower(sub("ML2S_", "", estimator)), control = ctl)
+      else magmaanlab::fit_model(model, sample, estimator = estimator, control = ctl)
+    },
     ordinary = {
       fitter <- if (estimator == "ML") magmaanlab::magmaan_core$fit_ml else magmaanlab::magmaan_core$fit_gls
       if (is.null(arm$optimizer)) fitter(model, sample, control = ctl)
@@ -186,7 +199,13 @@ run_task <- function(task, pops, lane, cache, arm_filter = NULL) {
   moments <- draw_moments(pop, task$n, task$seed)
   arms <- lane_arms(lane)
   if (!is.null(arm_filter)) arms <- arms[names(arms) %in% arm_filter]
-  want_witness <- is.null(arm_filter) || "witness" %in% arm_filter
+  want_witness <- lane != "ls-coordinates" && (is.null(arm_filter) || "witness" %in% arm_filter)
+  if (lane == "ls-coordinates") {
+    # Mask once in native units, preserving the same missingness under transforms.
+    targets <- tail(names(moments$X), floor(pop$p / 2))
+    missing <- single_cause_mar(moments$X, names(moments$X)[1], targets, .15,
+                                hash_int(paste(task$seed, "MAR")))
+  }
   rows <- list()
   transforms <- c("native", "x100", "x0.01", "mixed")
   for (fm in pop$models) for (tr in transforms) {
@@ -202,8 +221,21 @@ run_task <- function(task, pops, lane, cache, arm_filter = NULL) {
       theta_pop <- get(key, envir = cache)
       if (!is.null(theta_pop)) all_arms$witness <- witness_arm(lane, theta_pop)
     }
+    if (lane == "ls-coordinates") all_arms$witness <- list(kind = "ls",
+      control = list(max_iter = 20000L, coordinate_scaling = "objective"))
     for (est in lane_estimators(lane)) for (a in names(all_arms)) {
-      rec <- run_arm(all_arms[[a]], model, sample, est)
+      input <- if (lane != "ls-coordinates") sample else {
+        x <- if (startsWith(est, "ML2S_")) missing else moments$X
+        as.data.frame(sweep(as.matrix(x), 2, factors, "*"))
+      }
+      fit_model <- model
+      if (startsWith(est, "ML2S_")) {
+        # Stage-1 ACOV includes means even for covariance-only population models.
+        ml2s_model <- fm
+        ml2s_model$meanstructure <- TRUE
+        fit_model <- build_model(ml2s_model)
+      }
+      rec <- run_arm(all_arms[[a]], fit_model, input, est)
       rows[[length(rows) + 1L]] <- cbind(data.frame(
         lane = lane, family = pop$family, role = pop$role, pop = pop$key, model = fm$key,
         n = task$n, rep = task$rep, seed = task$seed, transform = tr, estimator = est,

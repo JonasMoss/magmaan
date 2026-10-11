@@ -9,6 +9,7 @@ group_keys <- setdiff(problem_keys, "transform")
 
 comparisons <- function(lane, candidate = "layered_port") {
   switch(lane,
+    "ls-coordinates" = list(c(candidate, "default"), c("objective", "objective_downward")),
     "ml-gls" = unique(list(c(candidate, "default"), c("layered_port", "default"),
                     c("layered_lbfgs", "default"), c("default_port", "default"),
                     c("layered_port", "layered_lbfgs"), c("layered_port_ml", "layered_port"),
@@ -24,7 +25,7 @@ comparisons <- function(lane, candidate = "layered_port") {
 # Comparisons whose losses are listed one by one: the candidates of the
 # gating rules and the routes. Preconditioning (rule B) is decided by counts.
 primary_comparisons <- function(lane, candidate = "layered_port")
-  comparisons(lane, candidate)[if (lane == "ml-gls") 1 else c(1, 4, 5, 7)]
+  comparisons(lane, candidate)[if (lane %in% c("ml-gls", "ls-coordinates")) 1 else c(1, 4, 5, 7)]
 
 key_of <- function(d, keys) do.call(paste, c(d[keys], sep = "|"))
 
@@ -56,6 +57,7 @@ rate_table <- function(s, by) {
       best = sum(a$best), success_unattainable = sum(d$success & !d$attainable),
       median_seconds = stats::median(d$seconds, na.rm = TRUE),
       total_seconds = sum(d$seconds, na.rm = TRUE),
+      median_seconds_success = stats::median(a$seconds[a$success], na.rm = TRUE),
       median_evals_success = stats::median(a$f_evals[a$success], na.rm = TRUE)))
   })
   out <- do.call(rbind, rows); rownames(out) <- NULL
@@ -175,6 +177,23 @@ decision_table <- function(s, lane, candidate = "layered_port") {
       sprintf("wins %d losses %d; best wins %d losses %d", wins, losses, best_wins, best_losses),
       wins >= losses && (!best_gates || best_wins >= best_losses)))))
   }
+  if (lane == "ls-coordinates") {
+    d <- s[s$role == "test" & s$arm %in% c(candidate, "default"), ]
+    counts <- stats::aggregate(list(success = d$success),
+      d[c("family", "estimator", "arm", "transform")], sum)
+    native <- counts[counts$transform == "native", c("family", "estimator", "arm", "success")]
+    names(native)[4] <- "native"
+    m <- merge(counts[counts$transform != "native", ], native,
+      by = c("family", "estimator", "arm"))
+    m$drop <- m$native - m$success
+    w <- merge(m[m$arm == candidate, ], m[m$arm == "default", ],
+      by = c("family", "estimator", "transform"), suffixes = c("_candidate", "_baseline"))
+    inv <- do.call(rbind, lapply(seq_len(nrow(w)), function(i) with(w[i, ],
+      row("3 invariance", paste(family, estimator, transform),
+        sprintf("candidate drop %d baseline drop %d", drop_candidate, drop_baseline),
+        drop_candidate <= drop_baseline))))
+    return(rbind(pair_rows("1 primary and 2 best known", candidate, "default", TRUE), inv))
+  }
   if (lane == "ml-gls") {
     inv <- invariance_table(s)
     inv <- inv[inv$role == "test" & inv$arm %in% c(candidate, "default"), ]
@@ -269,7 +288,7 @@ runaway_table <- function(s, bounds = c(5, 10, 100)) {
 # any test family.
 choice_table <- function(s, lane, candidates) {
   if (length(candidates) != 2L) return(data.frame())
-  p <- paired_table(s, lane)
+  p <- paired_table(s, lane, candidate = candidates[1])
   rates <- rate_table(s, c("role", "estimator", "arm"))
   out <- list()
   for (est in lane_estimators(lane)) {
@@ -284,7 +303,7 @@ choice_table <- function(s, lane, candidates) {
     no_net_loss <- nrow(q) > 0 && all(q$wins >= q$losses)
     choice <- if (all(elig)) {
       if (succ[2] > succ[1] && no_net_loss) candidates[2] else candidates[1]
-    } else if (any(elig)) candidates[elig][1] else "none (author decides)"
+    } else if (any(elig)) candidates[elig][1] else if (lane == "ls-coordinates") "default" else "none (author decides)"
     out[[est]] <- data.frame(estimator = est,
       eligible = paste(sprintf("%s:%s", candidates, elig), collapse = " "),
       certified = paste(sprintf("%s:%d", candidates, succ), collapse = " "),
