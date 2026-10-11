@@ -50,7 +50,11 @@ loadings across different factors tie those factors. Equalities among
 residual variances or intercepts constrain nothing. The target chart fixes the
 latent variance of one representative factor per tied class (the first group's,
 as lavaan does for invariance models) and leaves the others free, and keeps the
-equalities as linear rows. Groups that mix kinds with different forms (for
+equalities as linear rows. Within a tied class of k factors the k unit markers
+fix the common gauge and also k-1 restrictions on relative scales, so the chart
+adds k-1 rows tying the released markers to the representative's marker; the
+constrained tangent dimension must equal the source's (found by the TASK-160
+lane). Groups that mix kinds with different forms (for
 example a loading equal to a covariance) or that tie regressions, whose form
 $u_k-u_j$ is a difference, are refused with a named reason, as now.
 
