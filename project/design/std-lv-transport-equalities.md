@@ -50,11 +50,13 @@ loadings across different factors tie those factors. Equalities among
 residual variances or intercepts constrain nothing. The target chart fixes the
 latent variance of one representative factor per tied class (the first group's,
 as lavaan does for invariance models) and leaves the others free, and keeps the
-equalities as linear rows. Within a tied class of k factors the k unit markers
-fix the common gauge and also k-1 restrictions on relative scales, so the chart
-adds k-1 rows tying the released markers to the representative's marker; the
-constrained tangent dimension must equal the source's (found by the TASK-160
-lane). Groups that mix kinds with different forms (for
+equalities as linear rows. For a class of $k$ marker-identified factors, add
+$k-1$ equality rows tying the released markers to the representative marker;
+these preserve the relative-scale restrictions of the original unit markers.
+Remap every original equality to the rebuilt indices, including affine rows
+when a formerly free representative variance becomes fixed. Require equal
+constrained tangent dimensions and vector/moment/equality round trips. Groups
+that mix kinds with different forms (for
 example a loading equal to a covariance) or that tie regressions, whose form
 $u_k-u_j$ is a difference, are refused with a named reason, as now.
 
@@ -89,3 +91,28 @@ own no-loss evidence, because it changes default starts.
    the sphere fit instead once its constraint geometry is complete?
 3. Should the transport also serve the start fallback for constrained models,
    replacing TASK-131's normalized-unit construction where it applies?
+
+## Phase 1 implementation
+
+TASK-160 implements the simple-tie chart for endpoint audits. Automatic starts
+keep TASK-131's normalized-unit fallback until TASK-162. Homogeneous affine
+rows whose members share a scale form also survive; nonzero right-hand sides
+are supported only for unchanged residual/intercept forms. Regression
+equalities, mixed forms, nonlinear constraints and nonzero scale anchors have
+distinct refusal reasons. Covariance equalities are accepted only when their
+forms already agree after the simple loading/mean ties.
+
+The fixed-endpoint replay of decisions/02's 2026-10-09 default arm makes all
+29 constrained certified historical near-pole rows auditable. Recreating their
+baseline endpoints certifies 27 (two already fail the marker audit); all 29
+fail the new chart audit, including those 27 previously certified points.
+The maximum endpoint change is $1.5\times10^{-11}$ and the transported
+objective difference is below $1.8\times10^{-15}$. Twenty additional interior
+marker-identified constrained controls pass the chart audit and retain
+certification; their objective differences are below $10^{-15}$. The retained
+TASK-143 constrained runaway and four controls already use native `std.lv`
+models with fixed unit variances, so the marker-to-unit transport remains
+unavailable (`fixed-values-unsupported`) and their verdicts are unchanged.
+Scratch inputs, endpoints and comparison tables are retained under
+`~/.cache/magmaan-logs/task-160/`; these measurements do not promote starts or
+change the chart-extent screening rule.

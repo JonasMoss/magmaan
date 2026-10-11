@@ -15,7 +15,8 @@ enum class StartMethod { Simple, Fabin2, Fabin3, Guttman, Bentler1982, JamesStei
 enum class StartTransport { Native, AutoStdLv, RequireStdLv };
 enum class StartTransportIssue {
   None, ConstructorRequiresMarker, EqualityConstraints, FixedValues, MarkerLayout, SourceModel,
-  SourceStarts, InvalidScale, NonfiniteValues, FixedValueMismatch, InvalidVector
+  SourceStarts, InvalidScale, NonfiniteValues, FixedValueMismatch, InvalidVector,
+  NonlinearConstraints, MixedScaleForms, RegressionEqualities, GeneralLinearEqualities, TangentDimension
 };
 const char* start_transport_reason(StartTransportIssue);
 
@@ -26,6 +27,8 @@ struct StdLvStartTransport {
   spec::LatentStructure target, source;
   model::MatrixRep target_rep, source_rep;
   std::vector<std::vector<int>> markers;
+  // Representative marker row for each factor, possibly in another block.
+  std::vector<std::vector<int>> scale_markers;
 };
 std::expected<StdLvStartTransport, StartTransportIssue> prepare_std_lv_transport(
     const spec::LatentStructure&, const model::MatrixRep&);

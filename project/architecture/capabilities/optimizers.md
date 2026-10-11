@@ -34,9 +34,19 @@ disturbance-unit std.lv coordinates when standardized extent exceeds 10 (the
 decisions/01 runaway threshold). Both charts must pass Newton accuracy for
 certification; a failed std.lv check reports accuracy unresolved with a
 chart-proximity reason. `std_lv_accuracy` records the extent, trigger, audit
-and objective preservation. Equalities, unsupported fixed cells and nonpositive
-disturbance scales retain the prior verdict with an explicit transport reason.
-The extra audit does not refit or change estimates. The conditional trigger
+and objective preservation. Simple loading and latent-mean equalities now
+use common factor scales across tied factors or groups. The chart fixes one
+representative disturbance variance per class and ties its released markers;
+original equality rows are remapped and the constrained tangent dimension is
+checked. Residual/intercept equalities need no scale tie. Mixed scale forms,
+regression equalities, nonlinear constraints, affine nonzero scale anchors,
+unsupported fixed cells and nonpositive disturbance scales retain the prior
+verdict with an explicit transport reason.
+The extra audit does not refit or change estimates. TASK-160's retained-point
+replay makes 29/29 constrained historical near-pole rows auditable and rejects
+all 27 recreated baseline certifications; 20 supported constrained interior
+controls retain certification and pass the chart audit. Native `std.lv` models
+with fixed unit variances remain outside this marker-to-unit transport. The conditional trigger
 follows a 50-fit interior timing check: unconditional auditing raised median
 total ML fit time from 0.593 ms to 0.668 ms (12.7%). Standardized extent is a
 screening rule, not a proof of nonstationarity; stationary high-extent fits can
@@ -104,7 +114,8 @@ still pass, and low-extent chart poles are outside this supplementary check.
 
 ### Equality-constrained automatic start fallback
 
-When equality constraints prevent std.lv start transport, the automatic start
+Automatic starts continue to refuse constrained std.lv transport pending
+TASK-162, even when the audit chart supports the equalities. The automatic start
 pipeline constructs the fallback in normalized sample units and maps it back
 to caller units. This scales the simple baseline's latent variance constants
 with the data, including for FABIN2/3, and preserves supplied start hints.

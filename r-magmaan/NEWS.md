@@ -1,5 +1,11 @@
 # magmaan (development)
 
+- Complete-data endpoint audits now support simple equality-constrained std.lv
+  charts, including loading and latent-mean ties across factors or groups.
+  Released marker ties preserve the constrained model dimension. Automatic
+  constrained starts retain the existing normalized-unit fallback.
+
+
 - The embedded lab fit now retains read-only deletion provenance by group
   and reason. The summary continues to show rows supplied, used and deleted.
 

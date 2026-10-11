@@ -297,3 +297,137 @@ TEST_CASE("Equality fallback starts and barrier fits follow common data units") 
     CHECK(hinted->theta(0) == doctest::Approx(.123));
   }
 }
+
+TEST_CASE("Equality-aware std.lv transport classifies simple scale ties") {
+  using Issue = estimate::StartTransportIssue;
+  for (const char* syntax : {
+      "f =~ x1 + a*x2 + a*x3 + x4",
+      "f =~ x1 + a*x2 + b*x3 + x4\na == 2*b",
+      "f =~ x1 + a*x2\ng =~ x3 + a*x4",
+      "f =~ x1 + x2\ng =~ x3 + x4\nx1 ~~ r*x1\nx3 ~~ r*x3",
+      "f =~ x1 + a*x2\ng =~ x3 + a*x4\nf ~~ c*g"}) {
+    auto c = example(syntax);
+    auto plan = estimate::prepare_std_lv_transport(c.pt, c.rep); REQUIRE(plan);
+    auto old_con = estimate::build_eq_constraints(c.pt); REQUIRE(old_con);
+    auto new_con = estimate::build_eq_constraints(plan->source); REQUIRE(new_con);
+    CHECK(old_con->n_alpha == new_con->n_alpha);
+  }
+  for (auto [syntax, issue] : {
+      std::pair{"f =~ x1 + a*x2 + b*x3 + x4\na == b*b", Issue::NonlinearConstraints},
+      std::pair{"f =~ x1 + a*x2 + x3 + x4\nx1 ~~ a*x1", Issue::MixedScaleForms},
+      std::pair{"f =~ x1 + a*x2\ng =~ x3 + x4\ng ~ a*f", Issue::RegressionEqualities},
+      std::pair{"f =~ x1 + a*x2 + b*x3 + x4\na + b == 2", Issue::GeneralLinearEqualities}}) {
+    auto c = example(syntax);
+    auto plan = estimate::prepare_std_lv_transport(c.pt, c.rep);
+    REQUIRE_FALSE(plan); CHECK(plan.error() == issue);
+  }
+}
+
+TEST_CASE("Equality-aware std.lv transport preserves tied markers and the model tangent") {
+  auto c = example("f =~ x1 + a*x2\ng =~ x3 + a*x4");
+  auto plan = estimate::prepare_std_lv_transport(c.pt, c.rep); REQUIRE(plan);
+  CHECK(plan->scale_markers[0][0] == plan->scale_markers[0][1]);
+  auto con = estimate::build_eq_constraints(plan->source); REQUIRE(con);
+  auto source = estimate::construct_start_values(plan->source, plan->source_rep,
+      c.sample, estimate::StartMethod::Simple); REQUIRE(source);
+  auto se = model::ModelEvaluator::build(plan->source, plan->source_rep); REQUIRE(se);
+  auto te = model::ModelEvaluator::build(c.pt, c.rep); REQUIRE(te);
+  // Twenty interior chart points vary both the common gauge and the unanchored
+  // variance. Projecting onto the equality manifold includes the marker ties.
+  for (int trial = 0; trial < 20; ++trial) {
+    for (std::size_t i = 0; i < plan->source.size(); ++i) {
+      const int free = plan->source.free[i]; if (free <= 0) continue;
+      const auto cell = plan->source_rep.cell_for_row[i];
+      (*source)(free - 1) = cell.mat == model::MatId::Lambda ? .7 + .01 * trial
+          : cell.row == cell.col ? .5 + .02 * trial : .05;
+    }
+    *source = con->expand(con->contract(*source));
+    auto target = estimate::transport_start_values(*plan, *source); REQUIRE(target);
+    auto target_con = estimate::build_eq_constraints(c.pt); REQUIRE(target_con);
+    CHECK((target_con->expand(target_con->contract(*target)) - *target).norm() < 1e-12);
+    auto before = se->evaluate(*source, false, false); REQUIRE(before);
+    auto after = te->evaluate(*target, false, false); REQUIRE(after);
+    CHECK((before->moments.sigma[0] - after->moments.sigma[0]).norm() < 1e-12);
+    auto matrices = te->assembled(*target); REQUIRE(matrices);
+    const double scale = std::sqrt(matrices->blocks[0].Psi(0, 0));
+    const auto& m = matrices->blocks[0];
+    Eigen::VectorXd round_trip = Eigen::VectorXd::Zero(source->size());
+    for (std::size_t i = 0; i < plan->source.size(); ++i) {
+      const int free = plan->source.free[i]; if (free <= 0) continue;
+      const auto cell = plan->source_rep.cell_for_row[i];
+      round_trip(free - 1) = cell.mat == model::MatId::Lambda ? m.Lambda(cell.row, cell.col) * scale
+          : cell.mat == model::MatId::Psi ? m.Psi(cell.row, cell.col) / (scale * scale)
+          : m.Theta(cell.row, cell.col);
+    }
+    CHECK((round_trip - *source).norm() < 1e-12);
+  }
+}
+
+TEST_CASE("Equality-aware std.lv transport ties group scales for loadings and latent means") {
+  for (auto family : {spec::GroupEqual::Loadings, spec::GroupEqual::Means, spec::GroupEqual::LvVariances}) {
+    auto parsed = parse::Parser::parse("f =~ x1 + x2 + x3 + x4"); REQUIRE(parsed);
+    spec::BuildOptions options;
+    options.fixed_x = false; options.n_groups = 2;
+    options.meanstructure = true; options.int_lv_free = true;
+    options.group_equal = {family};
+    if (family == spec::GroupEqual::LvVariances)
+      options.group_equal.push_back(spec::GroupEqual::Loadings);
+    auto pt = spec::build(*parsed, options); REQUIRE(pt);
+    auto rep = model::build_matrix_rep(*pt); REQUIRE(rep);
+    auto plan = estimate::prepare_std_lv_transport(*pt, *rep); REQUIRE(plan);
+    CHECK(plan->scale_markers[0][0] == plan->scale_markers[1][0]);
+    auto old_con = estimate::build_eq_constraints(*pt); REQUIRE(old_con);
+    auto new_con = estimate::build_eq_constraints(plan->source); REQUIRE(new_con);
+    CHECK(old_con->n_alpha == new_con->n_alpha);
+    Eigen::VectorXd point = Eigen::VectorXd::Constant(plan->source.n_free(), .7);
+    point = new_con->expand(new_con->contract(point));
+    auto transported = estimate::transport_start_values(*plan, point); REQUIRE(transported);
+    auto se = model::ModelEvaluator::build(plan->source, plan->source_rep); REQUIRE(se);
+    auto te = model::ModelEvaluator::build(*pt, *rep); REQUIRE(te);
+    auto before = se->evaluate(point, false, false); REQUIRE(before);
+    auto after = te->evaluate(*transported, false, false); REQUIRE(after);
+    for (std::size_t b = 0; b < 2; ++b) {
+      CHECK((before->moments.sigma[b] - after->moments.sigma[b]).norm() < 1e-12);
+      CHECK((before->moments.mu[b] - after->moments.mu[b]).norm() < 1e-12);
+    }
+    CHECK((old_con->expand(old_con->contract(*transported)) - *transported).norm() < 1e-12);
+    auto matrices = te->assembled(*transported); REQUIRE(matrices);
+    Eigen::VectorXd round_trip = Eigen::VectorXd::Zero(point.size());
+    for (std::size_t i = 0; i < plan->source.size(); ++i) {
+      const int free = plan->source.free[i]; if (free <= 0) continue;
+      const auto cell = plan->source_rep.cell_for_row[i];
+      const auto marker = rep->cell_for_row[static_cast<std::size_t>(plan->scale_markers[static_cast<std::size_t>(cell.block)][0])];
+      const double scale = std::sqrt(matrices->blocks[static_cast<std::size_t>(marker.block)].Psi(marker.col, marker.col));
+      const auto& m = matrices->blocks[static_cast<std::size_t>(cell.block)];
+      switch (cell.mat) {
+        case model::MatId::Lambda: round_trip(free-1) = m.Lambda(cell.row,cell.col)*scale; break;
+        case model::MatId::Psi: round_trip(free-1) = m.Psi(cell.row,cell.col)/(scale*scale); break;
+        case model::MatId::Theta: round_trip(free-1) = m.Theta(cell.row,cell.col); break;
+        case model::MatId::Nu: round_trip(free-1) = m.Nu(cell.row); break;
+        case model::MatId::Alpha: round_trip(free-1) = m.Alpha(cell.row)/scale; break;
+        case model::MatId::Beta: round_trip(free-1) = m.Beta(cell.row,cell.col); break;
+      }
+    }
+    CHECK((round_trip - point).norm() < 1e-12);
+  }
+}
+
+TEST_CASE("Equality-aware std.lv covariance forms must agree after simple ties") {
+  auto parsed = parse::Parser::parse("f =~ x1 + x2\ng =~ x3 + x4"); REQUIRE(parsed);
+  spec::BuildOptions options; options.fixed_x = false; options.n_groups = 2;
+  options.group_equal = {spec::GroupEqual::Loadings, spec::GroupEqual::LvCovariances};
+  auto pt = spec::build(*parsed, options); REQUIRE(pt);
+  auto rep = model::build_matrix_rep(*pt); REQUIRE(rep);
+  auto plan = estimate::prepare_std_lv_transport(*pt, *rep); REQUIRE(plan);
+  CHECK(plan->scale_markers[0][0] == plan->scale_markers[1][0]);
+  CHECK(plan->scale_markers[0][1] == plan->scale_markers[1][1]);
+  auto old_con = estimate::build_eq_constraints(*pt); REQUIRE(old_con);
+  auto new_con = estimate::build_eq_constraints(plan->source); REQUIRE(new_con);
+  CHECK(old_con->n_alpha == new_con->n_alpha);
+  options.group_equal = {spec::GroupEqual::LvCovariances};
+  pt = spec::build(*parsed, options); REQUIRE(pt);
+  rep = model::build_matrix_rep(*pt); REQUIRE(rep);
+  auto unsupported = estimate::prepare_std_lv_transport(*pt, *rep);
+  REQUIRE_FALSE(unsupported);
+  CHECK(unsupported.error() == estimate::StartTransportIssue::MixedScaleForms);
+}

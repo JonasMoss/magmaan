@@ -2816,8 +2816,13 @@ void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
       return;
     }
   }
-  for (auto& m : assembled->blocks) {
-    Eigen::VectorXd scale = m.Psi.diagonal().array().sqrt();
+  std::vector<Eigen::VectorXd> chart_scales;
+  for (std::size_t b = 0; b < assembled->blocks.size(); ++b) {
+    Eigen::VectorXd scale(assembled->blocks[b].Psi.rows());
+    for (Eigen::Index j = 0; j < scale.size(); ++j) {
+      const auto c = rep.cell_for_row[static_cast<std::size_t>(plan->scale_markers[b][static_cast<std::size_t>(j)])];
+      scale(j) = std::sqrt(assembled->blocks[static_cast<std::size_t>(c.block)].Psi(c.col, c.col));
+    }
     if (!scale.allFinite() || (scale.array() <= 0).any()) {
       diagnostics.std_lv_accuracy.required = !ordinary;
       diagnostics.std_lv_accuracy.reason = ordinary
@@ -2825,6 +2830,11 @@ void attach_std_lv_accuracy(Estimates& est, const spec::LatentStructure& pt,
           : "chart proximity: nonpositive disturbance scale";
       return;
     }
+    chart_scales.push_back(std::move(scale));
+  }
+  for (std::size_t b = 0; b < assembled->blocks.size(); ++b) {
+    auto& m = assembled->blocks[b];
+    const auto& scale = chart_scales[b];
     m.Lambda = (m.Lambda * scale.asDiagonal()).eval();
     m.Beta = (scale.cwiseInverse().asDiagonal() * m.Beta * scale.asDiagonal()).eval();
     m.Psi = (scale.cwiseInverse().asDiagonal() * m.Psi * scale.cwiseInverse().asDiagonal()).eval();

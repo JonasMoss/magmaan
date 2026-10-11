@@ -1246,3 +1246,30 @@ TEST_CASE("ordinary ML and GLS: interior endpoint remains certified") {
     CHECK(magmaan::estimate::fit_verdict(*replay).status == magmaan::estimate::FitCheck::Passed);
   }
 }
+
+TEST_CASE("penalized ML: equality-constrained near-pole endpoint is audited") {
+  const auto pt = lavaanify("f =~ x1 + a*x2 + a*x3 + x4");
+  auto rep = build_matrix_rep(pt); REQUIRE_OK(rep);
+  auto ev = ModelEvaluator::build(pt, *rep); REQUIRE_OK(ev);
+  auto endpoint = interior_theta(*ev);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.free[i] <= 0) continue;
+    const auto c = rep->cell_for_row[i];
+    if (c.mat == magmaan::model::MatId::Lambda) endpoint(pt.free[i]-1) = 10000;
+    if (c.mat == magmaan::model::MatId::Psi) endpoint(pt.free[i]-1) = 1e-8;
+  }
+  auto S = implied_sigma(pt, *rep, endpoint);
+  S(1, 2) += .01; S(2, 1) += .01;
+  magmaan::estimate::OptimOptions opts;
+  opts.normalize_sample = false; opts.nlopt.max_eval = 1;
+  auto fit = fit_ml_multiinfo(pt, *rep, stats_from(S, 500), endpoint,
+      determinacy_options(), {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_OK(fit);
+  const auto& d = fit->estimates.diagnostics;
+  CHECK((fit->estimates.theta - endpoint).norm() == doctest::Approx(0));
+  CHECK(d.std_lv_accuracy.required);
+  CHECK(d.std_lv_accuracy.newton.checked);
+  CHECK_FALSE(d.std_lv_accuracy.newton.passed);
+  CHECK(std::abs(d.std_lv_accuracy.objective_difference) < 1e-10);
+  CHECK(d.std_lv_accuracy.reason.find("chart proximity") != std::string::npos);
+}

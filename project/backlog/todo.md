@@ -1372,6 +1372,14 @@ ordinary-user default.
 
 ## 0.3.0: magmaan's own fitting, mixed data and barriers
 
+- [x] **TASK-160 — equality-aware std.lv audit chart, phase 1.** Simple loading
+  and latent-mean ties share factor scales across blocks; one representative
+  variance and released-marker ties preserve the constrained tangent dimension.
+  Original affine/merge equalities are remapped. Regression/mixed/nonlinear
+  forms remain explicit refusals. TASK-162 retains ownership of constrained
+  automatic start adoption; the normalized-unit fallback is unchanged.
+
+
 - [x] **TASK-143 — ordinary complete-data ML/GLS runaway verdict.** Supported
   marker endpoints with standardized extent > 10 receive the same-objective
   std.lv Newton audit; certification requires both charts. Diagnostics record
@@ -1851,14 +1859,15 @@ release, including dependencies otherwise shared with the primary programme.
   failures now certify; native and ×100 controls keep the same minima). TASK-137
   adds a same-endpoint std.lv Newton audit to complete-data penalized ML:
   marker-chart certification also requires finite-chart accuracy when transport
-  is supported, and unsupported transports (equality constraints) keep the
-  existing verdict with an explicit reason. **Fresh paired lane done:** decisions/02 run `2026-10-09` retains every
+  is supported. TASK-160 extends that chart to simple scale-tied equalities;
+  unsupported regression/mixed/nonlinear transports keep the existing verdict
+  with an explicit reason. **Fresh paired lane done:** decisions/02 run `2026-10-09` retains every
   loss and keeps FABIN3/PORT (88,049 successful test fits; no candidate eligible).
   Constrained ×0.01 failures fell from 2,677 to 44; certified chart extent >1000
   fell from 287 to 31 for default and 510 to 91 for layered PORT. Most remaining
   pole cases are constrained, but two default Boomsma and three layered-PORT
-  engineering/15 cases remain. **Remaining check:** transport under equality
-  constraints and classification of those nonconstrained exceptions.
+  engineering/15 cases remain. **Remaining check:** general scale-form equalities (TASK-161), constrained
+  start adoption (TASK-162), and classification of the nonconstrained exceptions.
   Chart extent is not proof of nonattainment; do not change markers
   automatically. Evidence: barrier defaults and
   [sphere references](../../experiments/engineering/active/15-sphere-reference-fits/report.qmd).
