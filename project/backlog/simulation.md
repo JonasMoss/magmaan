@@ -107,7 +107,10 @@ calibrates/diagnoses one of those steps.
   768 ML cells × 1,000 attempts: the rules retain all four misspecification-robust
   points and no intervals. The 312 nonconverged draws affected by the ten-field
   verdict/24-row reason defect stay unavailable; future harness runs use the
-  scalar status. FIML production remains pending under the same criteria.
+  scalar status. TASK-157 bounds sampling-worker memory with short-lived
+  25-draw children, retaining atomic per-draw resume checkpoints. FIML
+  production remains pending under the same criteria; TASK-158 owns the
+  underlying library memory growth.
 - Keep the landed model-implied simulation bridge moment-based: it lowers
   fitted or hand-authored SEM state to population moments and projection specs,
   then calls the normal/elliptical mixed-population stack. Do not route it into

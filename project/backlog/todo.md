@@ -167,7 +167,11 @@ result under an unstated convention.
   TASK-151 corrects complete-data targets to F = 2 fmin and re-summarizes all
   retained draws; an independent lavaan population check passes. RMSEA still
   retains its corrected point default and no interval; other indices are unchanged.
-  FIML production remains with TASK-103 under the same criteria.
+  TASK-157 runs sampling in short-lived 25-draw children, including a single
+  worker; each atomic draw checkpoint survives interruption. Seeds remain
+  cell/replicate-stable and batch size is recorded in provenance.
+  FIML production remains with TASK-103 under the same criteria; TASK-158
+  owns the underlying library memory growth.
   TASK-154 diagnoses Wald over-coverage from all frozen ML draws: unclipped
   variance ratios approach one with N at fixed positive misfit; near-zero
   clipping limits interpretation. V1-only away from zero is a future-study

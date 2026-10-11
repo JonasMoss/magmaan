@@ -6,6 +6,7 @@ if ("--help" %in% args) {
       "  --reps N          default 1 smoke, 5 pilot, 1000 production\n",
       "  --seed-base N     defaults 1450901 smoke, 1451901 pilot; distinct from production\n",
       "  --workers N       1 or 2 pricing; 1-18 production; single-threaded math\n",
+      "  --batch-size N    default 25 draws per short-lived child (Unix required)\n",
       "  --run-id NAME     required for new runs; existing runs resume only with matching provenance\n",
       "  --lane NAME       default pricing; fit_indices for production\n",
       "Output: results/<lane>/<run-id>/{raw,summary.csv,timing.csv,targets.csv,metadata.csv}.\n",
@@ -30,7 +31,7 @@ option <- function(name, default = NULL) {
   args[position+1]
 }
 flags <- c("--smoke", "--pilot", "--production")
-value_flags <- paste0("--", c("config", "cells", "reps", "seed-base", "workers", "run-id", "lane", "criteria"))
+value_flags <- paste0("--", c("config", "cells", "reps", "seed-base", "workers", "run-id", "lane", "criteria", "batch-size"))
 if (any(!args[startsWith(args,"--")] %in% c(flags,value_flags))) stop("Unknown option")
 if (sum(flags %in% args) != 1) stop("Select --smoke, --pilot or --production")
 mode <- if ("--production" %in% args) "production" else if ("--smoke" %in% args) "smoke" else "pilot"
@@ -45,6 +46,9 @@ if (mode == "production") {
 reps <- as.integer(option("reps", if (mode == "production") "1000" else if (mode == "smoke") "1" else "5"))
 seed_base <- as.integer(option("seed-base", if (mode == "smoke") "1450901" else "1451901"))
 workers <- as.integer(option("workers", "1"))
+batch_size <- as.integer(option("batch-size", "25"))
+if (.Platform$OS.type != "unix") stop("Replicate batching requires Unix fork support")
+if (!is.finite(batch_size) || batch_size < 1) stop("Invalid --batch-size")
 run_id <- option("run-id"); lane <- option("lane", if (mode == "production") "fit_indices" else "pricing")
 if (is.null(run_id) || !grepl("^[A-Za-z0-9_-]+$", run_id) || !grepl("^[A-Za-z0-9_-]+$",lane) ||
     !is.finite(reps) || reps < 1 || !workers %in% seq_len(if (mode == "production") 18L else 2L) || !is.finite(seed_base) || seed_base < 1)
@@ -76,18 +80,18 @@ source_files <- c(list.files(file.path(leaf,"R"), full.names=TRUE),
 library_files <- unlist(lapply(c("magmaanlab","magmaan"), function(p)
   list.files(find.package(p), recursive=TRUE, full.names=TRUE, pattern="\\.(so|rdb)$")))
 fingerprint <- hash_object(list(source=tools::md5sum(source_files), library=tools::md5sum(library_files),
-  config=all_cells, seed_base=seed_base, mode=mode,
+  config=all_cells, seed_base=seed_base, mode=mode, batch_size=batch_size,
   criteria=if (is.null(criteria)) NULL else unname(tools::md5sum(criteria))))
 manifest <- file.path(out_dir,"raw","manifest.rds")
 if (file.exists(manifest)) {
   if (!identical(readRDS(manifest),fingerprint)) stop("Resume refused: source/library/config/seed changed; use a fresh run-id")
 } else saveRDS(fingerprint,manifest)
 metadata <- data.frame(key=c("git_head","dirty","library_build","library_hash","source_hash","config_hash",
-  "seed_base","mode","command","R_version","magmaan_version","magmaanlab_version","target_n","check_n","target_controls","criteria"),
+  "seed_base","mode","command","R_version","magmaan_version","magmaanlab_version","target_n","check_n","target_controls","criteria","batch_size","batch_resume"),
   value=c(git_scalar(c("rev-parse","HEAD")),git_dirty(), packageDescription("magmaanlab")$Built,
     hash_object(tools::md5sum(library_files)),hash_object(tools::md5sum(source_files)),hash_object(all_cells),
     seed_base,mode,paste(commandArgs(),collapse=" "),R.version.string,
-    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"nlopt: ftol_rel=1e-14; xtol_rel=1e-12; max_eval=10000; start=default estimates",if (is.null(criteria)) "pending; engineering only" else paste(criteria, unname(tools::md5sum(criteria)))))
+    as.character(packageVersion("magmaan")),as.character(packageVersion("magmaanlab")),200000,1000000,"nlopt: ftol_rel=1e-14; xtol_rel=1e-12; max_eval=10000; start=default estimates",if (is.null(criteria)) "pending; engineering only" else paste(criteria, unname(tools::md5sum(criteria))),batch_size,"atomic per-replicate checkpoints retained; incomplete batches resume missing draws"))
 if (!file.exists(file.path(out_dir,"metadata.csv"))) write_csv(metadata,file.path(out_dir,"metadata.csv"))
 write_csv(cells,file.path(out_dir,"cells.csv"))
 write_csv(do.call(rbind,lapply(unique(cells$estimator),function(e)
@@ -130,10 +134,10 @@ prepare_cell <- function(i) {
   }
 }
 if (mode != "production") for (i in seq_len(nrow(cells))) prepare_cell(i)
-run_cell <- function(i) {
+run_batch <- function(i, replicates) {
   cell <- as.list(cells[i,]); context <- prepared[[i]]
   dir <- file.path(out_dir,"raw",cell$id); dir.create(dir,showWarnings=FALSE)
-  for (replicate in seq_len(reps)) {
+  for (replicate in replicates) {
     path <- file.path(dir,sprintf("rep_%05d.rds",replicate))
     if (file.exists(path)) next
     seed <- cell_seed(cell,replicate)
@@ -148,9 +152,30 @@ run_cell <- function(i) {
     })
     result$cell <- cell$id; result$replicate <- replicate; result$seed <- seed
     result$seconds <- proc.time()[[3]]-started
-    tmp <- paste0(path,".tmp"); saveRDS(result,tmp); file.rename(tmp,path)
+    tmp <- paste0(path,".tmp"); saveRDS(result,tmp); if (!file.rename(tmp,path)) stop("Could not save replicate checkpoint")
   }
+  TRUE
+}
+run_cell <- function(i) {
+  dir <- file.path(out_dir,"raw",cells$id[i])
+  dir.create(dir,showWarnings=FALSE)
+  pending <- which(!file.exists(file.path(dir,sprintf("rep_%05d.rds",seq_len(reps)))))
   marker <- file.path(dir,"COMPLETE")
+  if (length(pending) && file.exists(marker) && unlink(marker) != 0L)
+    stop("Could not remove stale completion marker")
+  batches <- split(pending, ceiling(seq_along(pending)/batch_size))
+  for (replicates in batches) {
+    # Fork even with one cell worker: its supervisor never performs a fit.
+    gc(full = TRUE)
+    child <- parallel::mcparallel(run_batch(i,replicates), mc.set.seed=FALSE)
+    answer <- parallel::mccollect(child)
+    if (length(answer) != 1L || !isTRUE(answer[[1]]))
+      stop("Batch child failed for ",cells$id[i],"; inspect raw checkpoints")
+    if (!all(file.exists(file.path(dir,sprintf("rep_%05d.rds",replicates)))))
+      stop("Batch child left missing checkpoints for ",cells$id[i])
+    cat("Batch completed",cells$id[i],"through replicate",max(replicates),"/",reps,"\n")
+    flush.console()
+  }
   writeLines(as.character(reps),paste0(marker,".tmp"))
   if (!file.rename(paste0(marker,".tmp"),marker)) stop("Could not save completion marker")
   i

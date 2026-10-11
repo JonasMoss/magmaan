@@ -1,0 +1,4 @@
+"model","estimator","replicates","rows","identical_except_seconds"
+"cfa_ptsd8","ML",50,1200,TRUE
+"cfa_ptsd8","FIML",50,1200,TRUE
+"cfa_long18","FIML",400,9600,TRUE

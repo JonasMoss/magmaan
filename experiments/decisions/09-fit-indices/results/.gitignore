@@ -49,3 +49,10 @@ fit_indices/2026-10-09-ml-b/*
 !fit_indices/2026-10-09-ml-b/wald_diagnosis/
 fit_indices/2026-10-09-ml-b/wald_diagnosis/*
 !fit_indices/2026-10-09-ml-b/wald_diagnosis/*.csv
+
+# TASK-157 bounded parity/RSS evidence; raw rows and sampled process traces ignored.
+!task157/
+task157/*
+!task157/parity.csv
+!task157/memory.csv
+!task157/metadata.csv

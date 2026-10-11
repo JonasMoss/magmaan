@@ -260,3 +260,13 @@
   `MomentMatchFamily::Fleishman` reuses the Vale-Maurelli coefficient solver
   and exposes the resulting cubic as a regular transform marginal, while
   `marginal_quantile()` rejects it because the cubic need not be monotone.
+
+### Fit-index study runner
+
+The decisions/09 harness bounds per-process sampling lifetime with configurable
+short-lived replicate batches (default 25, TASK-157). Cell workers supervise one
+forked child at a time, including with one worker. Cell/replicate seeds do not
+depend on batch boundaries; atomic per-draw checkpoints permit partial-batch
+resume, and cell completion markers follow all requested checkpoints. Source,
+library, configuration, seed and batch-size fingerprints remain strict. This
+contains memory growth during production; TASK-158 owns its library cause.

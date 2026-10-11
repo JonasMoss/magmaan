@@ -280,7 +280,53 @@ The earlier 48-cell/240-draw pricing pilot establishes harness plumbing only;
 it does not enter the ML decisions above. TASK-149's bounded long30 diagnostic
 preserved all 72 result rows while reducing worker peak RSS from 642 to 397 MiB.
 Its frozen memory/provenance CSVs remain under `results/task149/`; FIML memory
-remains unmeasured.
+growth is addressed by short-lived replicate batches (TASK-157).
+
+The runner now uses `--batch-size 25` by default. Each cell worker supervises
+one short-lived child at a time; only the child fits models. The same mechanism
+runs with `--workers 1`. Seeds depend on the cell and replicate, independently
+of the batch size. All 1,200 rows in each 50-draw ML and FIML comparison were
+identical except for elapsed time, including unavailable components and reasons.
+Atomic per-draw files remain resumable: an interrupted batch recomputes only
+missing draws, and `COMPLETE` is written after every requested draw exists.
+Batch size is recorded in metadata and checked in the resume fingerprint.
+The source fingerprint remains strict, so production made with the earlier
+runner requires a fresh run ID; this change does not rewrite its manifest.
+
+The bounded long18 memory comparison uses N = 2,000, normal data, delta = -.1,
+FIML MAR .30, 400 draws, and one worker. Frozen `results/task157/` CSVs retain
+row parity, process peak RSS, slope against completed draws, and provenance;
+raw draws and one-second RSS traces remain ignored. The probe bypasses target
+preparation and exercises the actual cell-worker functions with a calibrated
+population, so it measures sampling memory rather than population-target cost.
+RSS counts shared fork pages in each process and does not add up to physical
+memory usage. This cell establishes bounded process memory, not a worker count
+for the largest production cells.
+The supervisor's RSS trend is zero; all 16 children peak between 277.8 and
+279.5 MiB. The table uses per-draw RSS trends for the original worker and
+supervisor (draws 25--375), and the trend of child peaks against batch-end
+replicate IDs for children, whose within-batch RSS repeatedly resets.
+
+```{r}
+memory_path <- 'results/task157/memory.csv'
+if (!file.exists(memory_path)) stop('Missing batch memory evidence; run scripts/check_batch_memory.py with a fresh --output directory.')
+memory <- read.csv(memory_path)
+trend <- ifelse(memory$role == 'child', memory$batch_peak_slope_mib_per_draw,
+  memory$slope_mib_per_draw)
+process <- ifelse(memory$mode == 'before', 'Original worker',
+  ifelse(memory$role == 'parent', 'Batch supervisor', 'Batch children'))
+knitr::kable(data.frame(Process = process,
+  `Peak RSS (MiB)` = round(memory$peak_mib, 1),
+  `RSS trend (MiB/draw)` = round(trend, 4),
+  check.names = FALSE))
+```
+
+Reproduce these measurements with the chosen library read-only:
+
+```sh
+R_LIBS=~/.cache/magmaan-rlib/merge-153 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  nice -n 10 python3 experiments/decisions/09-fit-indices/scripts/check_batch_memory.py
+```
 
 ## Reproduce
 
