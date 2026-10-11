@@ -335,6 +335,17 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-11: the std.lv endpoint transport accepts linear equality constraints
+whose members share one scale form after tying factor scales (same-factor
+loadings, a factor's loadings or latent means across groups, loadings across
+factors, residual and intercept equalities): one unit-variance representative
+per tied class, k-1 released-marker equality rows, and an equal constrained
+tangent dimension gate. The barrier and ML/GLS std.lv audits now cover these
+models: all 29 retained constrained barrier near-pole fits are audited and
+rejected, and twenty interior constrained controls stay certified. Regression
+and mixed-form equalities stay refused (phase 2 is TASK-161); automatic starts
+are unchanged until TASK-162 (TASK-160).
+
 2026-10-10: complete-data GLS defaults to PORT with the layered start and
 information-refined coordinates (user decision applying the decisions/01 rule,
 which chose layered PORT for GLS in two runs; 39,450 versus 38,652 certified
