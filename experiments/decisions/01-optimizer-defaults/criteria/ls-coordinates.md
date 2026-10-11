@@ -1,8 +1,11 @@
 # Criteria: least-squares search coordinates (lane ls-coordinates)
 
-**Status: proposed 2026-10-11 by the planner (TASK-33.10.5.5) for the user's
-review. It becomes binding when the user approves it, before any decision run;
-the adoption decision itself stays with the user.**
+Status: approved
+
+Approved by the user on 2026-10-11, before any decision run (proposed the same
+day by the planner, TASK-33.10.5.5). The adoption decision itself stays with
+the user; later changes are dated and marked as written before or after
+seeing results.
 
 ## Decision
 

@@ -1,4 +1,4 @@
-# std.lv transport under equality constraints (DRAFT for discussion)
+# std.lv transport under equality constraints
 
 Draft 2026-10-11 by the planner. Gap noted by TASK-131, TASK-137 and TASK-143:
 `prepare_std_lv_transport()` (cpp/src/estimate/start_pipeline.cpp) refuses every
@@ -69,7 +69,14 @@ equality-constrained runaways, reporting how many become auditable and whether
 any certified fit flips. Phase 2 waits for phase 1's coverage numbers; the
 equal-path chain (`eqchain_b20`) is its main target.
 
-## Open questions for discussion
+## Decisions (user, 2026-10-11)
+
+Build phase 1, then phase 2. The audit chart fixes one unit-variance factor
+per tied scale class. The improved transport also serves the automatic start
+fallback for constrained models where it applies, as a separate step with its
+own no-loss evidence, because it changes default starts.
+
+## Questions as discussed
 
 1. Is "one unit-variance representative per tied scale class" the right chart
    for the audit, or should the audit use a chart that is closer to the
