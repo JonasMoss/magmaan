@@ -62,6 +62,7 @@ n9_run <- rd9("runaways"); n9_choice <- rd9("choice")
 | GLS optimizer | PORT | settled (author 2026-10-10; rule choice in two runs; reproduction `2026-10-10-gls-port-repro` passed). Both eligible; PORT certifies 39,450 test fits vs 38,652 | lane ml-gls, third run and 2026-10-09; reproduction `2026-10-10-gls-port-repro` |
 | verdict on runaway paths | extent > 10 requires a passing std.lv Newton audit where transport exists | settled where std.lv transport exists (TASK-143); equalities and nonpositive disturbance scales retain the old verdict. Certified extents > 10 remain failures in study scoring | lane ml-gls, 2026-10-09 |
 | optimizer coordinates | information-refined sample units | settled (2026-09-26); every arm here used them, and the candidate's success and objective agree across units | engineering/active/17-corpus-optimizer-recovery; lane ml-gls invariance |
+| least-squares search coordinates | information-refined sample units | settled by the rule for ULS, DWLS, WLS and ML2S ULS/DWLS/ADF: neither candidate eligible for any estimator | lane ls-coordinates, 2026-10-11 |
 | PSD cold start | transported FABIN3 | settled: keep (rule A fails in 4 of 6 families, and in 5 of 6 in the second run) | lane psd-ml, runs 1 and 2 |
 | PSD fallback ordinary step | transported FABIN3 with L-BFGS, pinned apart from the ML default | settled: keep (rule E fails in 4 of 6 families) | lane psd-ml, second run |
 | PSD preconditioning | lifted information diagonal | settled: keep (rule B fails in every family) | lane psd-ml |
@@ -72,6 +73,127 @@ n9_run <- rd9("runaways"); n9_choice <- rd9("choice")
 
 
 For the latest normalization comparison, see the [executive summary](executive-summary.html).
+
+## Least-squares search coordinates: 2026-10-11
+
+**Keep information-refined sample units for all six estimators.** Neither
+`objective_downward` nor two-sided `objective` is eligible under the
+[approved criteria](criteria/ls-coordinates.md) (`b1de46be`). The frozen
+results (`a8d657cd`) apply the rule separately to every test family and
+estimator. Pooled counts do not decide eligibility: `objective_downward`
+certifies more ULS test fits (14,318 versus 11,178) and ML2S-ULS test fits
+(13,653 versus 10,976), with only 31 and 267 losses against the default,
+respectively, yet fails the per-family invariance rule. Two-sided `objective`
+is clearly worse for the weighted estimators. For these held-out problems,
+the answer to whether enlarging units is safe is **no**.
+
+The baseline uses the library default without options. Both candidates use
+the fitting objective's Gauss–Newton diagonal: `objective_downward` clamps
+unit multipliers to $[10^{-3},1]$, and `objective` to $[10^{-6},10^6]$.
+The six test families cover regular, weak-loading, mixed-unit and
+collapsed/Heywood-prone problems, with native, x100, x0.01 and separate
+units (where the model permits them). There are 100 replications per
+population and sample size, seed base 2026101101. ML2S adds single-cause MAR
+missingness at 15% on the last half of the variables. The Ernst development
+control is reported separately and never gates.
+
+The judge is the library's `fit$converged`; best-known objectives include a
+long reference fit (`objective`, 20,000 iterations). Rule 1 requires no net
+loss in certified attainable problems in any test family; rule 2 requires
+no net loss in reaching the best-known objective; rule 3 allows no larger
+certified-count drop under a unit transform than the baseline's drop.
+The following tables preserve each estimator and family. Counts include
+all tested unit transforms; they are paired fits, not independent draws.
+Secondary costs are medians among successful fits within each family and
+arm, and do not gate the choice.
+
+```{r ls-coordinate-results, results='asis'}
+ls_read <- function(name) {
+  p <- file.path("results", "ls-coordinates", "2026-10-11", paste0(name, ".csv"))
+  if (!file.exists(p)) stop("Missing ", p, ": reproduce the ls-coordinates run below")
+  read.csv(p, stringsAsFactors = FALSE)
+}
+ls_rates <- ls_read("rates_by_family")
+ls_pair <- ls_read("paired")
+ls_dec <- ls_read("decision")
+ls_run <- ls_read("runaways")
+ls_choice <- ls_read("choice")
+stopifnot(all(ls_choice$choice == "default"))
+ls_arms <- c("default", "objective_downward", "objective")
+for (est in c("ULS", "DWLS", "WLS", "ML2S_ULS", "ML2S_DWLS", "ML2S_ADF")) {
+  cat("\n### ", gsub("_", "-", est), "\n\n", sep = "")
+  for (cd in ls_arms[-1]) {
+    pair <- subset(ls_pair, role == "test" & estimator == est & candidate == cd)
+    failed <- subset(ls_dec, candidate == cd & !pass)
+    failed <- failed[vapply(strsplit(failed$scope, " "), function(x) x[2] == est, logical(1)), ]
+    family_names <- function(x) if (!length(x)) "none" else paste(unname(fam[unique(x)]), collapse = ", ")
+    inv <- failed[failed$rule == "3 invariance", ]
+    cat("`", cd, "`: rule 1 fails in ", family_names(pair$family[pair$wins < pair$losses]),
+        "; rule 2 fails in ", family_names(pair$family[pair$best_wins < pair$best_losses]),
+        "; rule 3 fails in ", family_names(sub(" .*", "", inv$scope)), ".\n\n", sep = "")
+  }
+  d <- subset(ls_rates, estimator == est)
+  families <- unique(d$family)
+  out <- data.frame(Family = unname(fam[families]), check.names = FALSE)
+  for (arm in ls_arms) {
+    a <- d[d$arm == arm, ]; a <- a[match(families, a$family), ]
+    losses <- rep("—", length(families))
+    if (arm != "default") {
+      z <- subset(ls_pair, estimator == est & candidate == arm)
+      losses <- f0(z$losses[match(families, z$family)])
+    }
+    z <- subset(ls_run, estimator == est & arm == a$arm[1])
+    runaway <- z$beyond_10[match(families, z$family)]
+    out[[arm]] <- paste0(f0(a$success), "/", f0(a$attainable), "; ", losses,
+      "; ", f0(runaway), "; ", f0(a$median_evals_success), "; ",
+      formatC(a$median_seconds_success, format = "f", digits = 3))
+  }
+  cat("Each arm: **certified/attainable; losses versus default; extent > 10; median evaluations; median seconds**.\n\n")
+  print(tab(out))
+  cat("\n\n")
+}
+```
+
+The runaway columns count certified standardized extents above 10; further
+thresholds (5 and 100) are retained in `runaways.csv`. This lane used
+`runaway_bound = Inf`, so these diagnostics do **not** subtract fits from
+certified counts or change eligibility, unlike the later ML/GLS scoring.
+Unit-specific invariance failures remain in `decision.csv` and
+`rates_by_family_transform.csv`; `failures.csv` retains failure causes.
+
+Every loss is recorded in the local full `losses.csv`. The compact draw
+inventories `losses_<estimator>_<candidate>.csv` identify population, sample
+size, replication, transform and Newton status; the full attribution table
+stays local. The paired loss counts above come from the frozen `paired.csv`,
+which is the rule's counting source. Compact inventories may omit rows:
+for example, the ULS and ML2S-ULS downward inventories contain 30 and 266
+rows, respectively, versus 31 and 267 paired test losses. They should not
+be used to replace the paired counts.
+
+This settles the tested continuous fixed-weight LS and ML2S Stage-2 choices;
+it does not establish a default for ordinal/mixed routes, ML, GLS or FIML.
+More pooled successes cannot compensate for a failing family under the
+approved rule. No adoption or reproduction of a changed default follows.
+
+### Reproduce the LS-coordinate lane
+
+The frozen run used runner `adb3b697`, the read-only `merge-153` library
+(magmaanlab 0.2.1; package build recorded in `metadata.csv`), and the local
+work slice with four workers, nice 10 and one BLAS/OpenMP thread per worker.
+The 10,400 draw tasks took about eight hours. These commands describe that
+run; use a fresh run id for a new execution and preserve the frozen evidence.
+Launch the run inside `magmaan-work.slice`, restricted to CPUs 6–11:
+
+```bash
+cd experiments/decisions/01-optimizer-defaults
+export R_LIBS="$HOME/.cache/magmaan-rlib/merge-153"
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+nice -n 10 Rscript run_experiment.R --lane ls-coordinates \
+  --reps 100 --seed-base 2026101101 --workers 4 --run-id 2026-10-11
+quarto render report.qmd
+```
+
+Rendering reads frozen summaries only and uses MathML.
 
 ## Question
 
