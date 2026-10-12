@@ -1,0 +1,7 @@
+"estimator","eligible","certified","second_no_net_loss_vs_first","choice"
+"ULS","objective_downward:FALSE objective:FALSE","objective_downward:14318 objective:12690",FALSE,"default"
+"DWLS","objective_downward:FALSE objective:FALSE","objective_downward:32387 objective:19406",FALSE,"default"
+"WLS","objective_downward:FALSE objective:FALSE","objective_downward:19273 objective:10726",FALSE,"default"
+"ML2S_ULS","objective_downward:FALSE objective:FALSE","objective_downward:13653 objective:12160",FALSE,"default"
+"ML2S_DWLS","objective_downward:FALSE objective:FALSE","objective_downward:24947 objective:18197",FALSE,"default"
+"ML2S_ADF","objective_downward:FALSE objective:FALSE","objective_downward:13786 objective:8885",FALSE,"default"

@@ -1,0 +1,703 @@
+"role","family","estimator","arm","units","pattern","groups"
+"test","boomsma","DWLS","default","separate","native:fail mixed:ok",11
+"test","wolf","DWLS","default","separate","native:fail mixed:ok",4
+"test","boomsma","WLS","default","separate","native:fail mixed:ok",7
+"test","engineering15","WLS","default","separate","native:fail mixed:ok",1
+"test","research47","WLS","default","separate","native:fail mixed:ok",27
+"test","wolf","WLS","default","separate","native:fail mixed:ok",11
+"test","boomsma","DWLS","objective_downward","separate","native:fail mixed:ok",7
+"control","ernst","DWLS","objective_downward","separate","native:fail mixed:ok",1
+"test","wolf","DWLS","objective_downward","separate","native:fail mixed:ok",2
+"test","boomsma","WLS","objective_downward","separate","native:fail mixed:ok",7
+"test","chen","WLS","objective_downward","separate","native:fail mixed:ok",1
+"test","engineering15","WLS","objective_downward","separate","native:fail mixed:ok",1
+"control","ernst","WLS","objective_downward","separate","native:fail mixed:ok",1
+"test","research47","WLS","objective_downward","separate","native:fail mixed:ok",58
+"test","wolf","WLS","objective_downward","separate","native:fail mixed:ok",19
+"test","boomsma","DWLS","default","common","native:fail x100:fail x0.01:ok",6
+"test","constrained","DWLS","default","common","native:fail x100:fail x0.01:ok",7
+"test","engineering15","DWLS","default","common","native:fail x100:fail x0.01:ok",1
+"test","research47","DWLS","default","common","native:fail x100:fail x0.01:ok",1
+"test","wolf","DWLS","default","common","native:fail x100:fail x0.01:ok",2
+"test","boomsma","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",3
+"test","chen","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",26
+"test","constrained","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",3
+"test","engineering15","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",5
+"test","research47","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",47
+"test","wolf","ML2S_ADF","default","common","native:fail x100:fail x0.01:ok",3
+"test","boomsma","ML2S_DWLS","default","common","native:fail x100:fail x0.01:ok",5
+"test","constrained","ML2S_DWLS","default","common","native:fail x100:fail x0.01:ok",8
+"test","engineering15","ML2S_DWLS","default","common","native:fail x100:fail x0.01:ok",1
+"test","research47","ML2S_DWLS","default","common","native:fail x100:fail x0.01:ok",3
+"test","wolf","ML2S_DWLS","default","common","native:fail x100:fail x0.01:ok",5
+"test","boomsma","WLS","default","common","native:fail x100:fail x0.01:ok",15
+"test","chen","WLS","default","common","native:fail x100:fail x0.01:ok",24
+"test","constrained","WLS","default","common","native:fail x100:fail x0.01:ok",3
+"test","engineering15","WLS","default","common","native:fail x100:fail x0.01:ok",22
+"control","ernst","WLS","default","common","native:fail x100:fail x0.01:ok",1
+"test","research47","WLS","default","common","native:fail x100:fail x0.01:ok",38
+"test","wolf","WLS","default","common","native:fail x100:fail x0.01:ok",8
+"test","boomsma","DWLS","objective","common","native:fail x100:fail x0.01:ok",6
+"test","chen","DWLS","objective","common","native:fail x100:fail x0.01:ok",12
+"test","constrained","DWLS","objective","common","native:fail x100:fail x0.01:ok",3
+"control","ernst","DWLS","objective","common","native:fail x100:fail x0.01:ok",1
+"test","research47","DWLS","objective","common","native:fail x100:fail x0.01:ok",1
+"test","wolf","DWLS","objective","common","native:fail x100:fail x0.01:ok",2
+"test","boomsma","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",48
+"test","chen","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",318
+"test","constrained","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",5
+"test","engineering15","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",6
+"test","research47","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",525
+"test","wolf","ML2S_ADF","objective","common","native:fail x100:fail x0.01:ok",37
+"test","boomsma","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",9
+"test","chen","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",18
+"test","constrained","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",9
+"test","engineering15","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",2
+"control","ernst","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",1
+"test","research47","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",2
+"test","wolf","ML2S_DWLS","objective","common","native:fail x100:fail x0.01:ok",7
+"test","chen","ML2S_ULS","objective","common","native:fail x100:fail x0.01:ok",3
+"test","chen","ULS","objective","common","native:fail x100:fail x0.01:ok",5
+"test","boomsma","WLS","objective","common","native:fail x100:fail x0.01:ok",101
+"test","chen","WLS","objective","common","native:fail x100:fail x0.01:ok",336
+"test","constrained","WLS","objective","common","native:fail x100:fail x0.01:ok",11
+"test","engineering15","WLS","objective","common","native:fail x100:fail x0.01:ok",18
+"control","ernst","WLS","objective","common","native:fail x100:fail x0.01:ok",12
+"test","research47","WLS","objective","common","native:fail x100:fail x0.01:ok",549
+"test","wolf","WLS","objective","common","native:fail x100:fail x0.01:ok",85
+"test","boomsma","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",9
+"test","constrained","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",7
+"test","engineering15","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",1
+"control","ernst","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",1
+"test","research47","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",3
+"test","wolf","DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",4
+"test","chen","ML2S_ADF","objective_downward","common","native:fail x100:fail x0.01:ok",80
+"test","constrained","ML2S_ADF","objective_downward","common","native:fail x100:fail x0.01:ok",1
+"test","engineering15","ML2S_ADF","objective_downward","common","native:fail x100:fail x0.01:ok",8
+"test","research47","ML2S_ADF","objective_downward","common","native:fail x100:fail x0.01:ok",165
+"test","wolf","ML2S_ADF","objective_downward","common","native:fail x100:fail x0.01:ok",5
+"test","boomsma","ML2S_DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",10
+"test","constrained","ML2S_DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",12
+"test","engineering15","ML2S_DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",1
+"test","research47","ML2S_DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",5
+"test","wolf","ML2S_DWLS","objective_downward","common","native:fail x100:fail x0.01:ok",5
+"test","boomsma","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",20
+"test","chen","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",71
+"test","constrained","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",4
+"test","engineering15","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",20
+"control","ernst","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",6
+"test","research47","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",107
+"test","wolf","WLS","objective_downward","common","native:fail x100:fail x0.01:ok",17
+"test","boomsma","DWLS","default","common","native:fail x100:ok x0.01:fail",9
+"test","chen","DWLS","default","common","native:fail x100:ok x0.01:fail",3
+"test","constrained","DWLS","default","common","native:fail x100:ok x0.01:fail",1
+"test","engineering15","DWLS","default","common","native:fail x100:ok x0.01:fail",2
+"control","ernst","DWLS","default","common","native:fail x100:ok x0.01:fail",1
+"test","research47","DWLS","default","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","DWLS","default","common","native:fail x100:ok x0.01:fail",3
+"test","boomsma","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",2
+"test","chen","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",2
+"test","constrained","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",6
+"test","engineering15","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",2
+"test","research47","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",4
+"test","wolf","ML2S_ADF","default","common","native:fail x100:ok x0.01:fail",4
+"test","boomsma","ML2S_DWLS","default","common","native:fail x100:ok x0.01:fail",10
+"test","constrained","ML2S_DWLS","default","common","native:fail x100:ok x0.01:fail",50
+"test","engineering15","ML2S_DWLS","default","common","native:fail x100:ok x0.01:fail",5
+"test","research47","ML2S_DWLS","default","common","native:fail x100:ok x0.01:fail",2
+"test","wolf","ML2S_DWLS","default","common","native:fail x100:ok x0.01:fail",61
+"test","constrained","ML2S_ULS","default","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","ML2S_ULS","default","common","native:fail x100:ok x0.01:fail",2
+"test","boomsma","WLS","default","common","native:fail x100:ok x0.01:fail",15
+"test","chen","WLS","default","common","native:fail x100:ok x0.01:fail",6
+"test","constrained","WLS","default","common","native:fail x100:ok x0.01:fail",4
+"test","engineering15","WLS","default","common","native:fail x100:ok x0.01:fail",6
+"test","research47","WLS","default","common","native:fail x100:ok x0.01:fail",27
+"test","wolf","WLS","default","common","native:fail x100:ok x0.01:fail",5
+"test","constrained","ML2S_ADF","objective","common","native:fail x100:ok x0.01:fail",1
+"test","constrained","ML2S_DWLS","objective","common","native:fail x100:ok x0.01:fail",1
+"test","boomsma","DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",4
+"test","constrained","DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","research47","DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","boomsma","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",2
+"test","chen","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",16
+"test","constrained","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",4
+"test","engineering15","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","research47","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",10
+"test","wolf","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:fail",8
+"test","boomsma","ML2S_DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",3
+"test","constrained","ML2S_DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",52
+"test","engineering15","ML2S_DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",3
+"test","research47","ML2S_DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","ML2S_DWLS","objective_downward","common","native:fail x100:ok x0.01:fail",70
+"test","boomsma","ML2S_ULS","objective_downward","common","native:fail x100:ok x0.01:fail",11
+"test","constrained","ML2S_ULS","objective_downward","common","native:fail x100:ok x0.01:fail",6
+"test","research47","ML2S_ULS","objective_downward","common","native:fail x100:ok x0.01:fail",1
+"test","wolf","ML2S_ULS","objective_downward","common","native:fail x100:ok x0.01:fail",11
+"test","boomsma","ULS","objective_downward","common","native:fail x100:ok x0.01:fail",13
+"test","constrained","ULS","objective_downward","common","native:fail x100:ok x0.01:fail",4
+"test","wolf","ULS","objective_downward","common","native:fail x100:ok x0.01:fail",9
+"test","boomsma","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",45
+"test","chen","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",15
+"test","engineering15","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",16
+"control","ernst","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",5
+"test","research47","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",100
+"test","wolf","WLS","objective_downward","common","native:fail x100:ok x0.01:fail",16
+"test","chen","ML2S_ADF","default","common","native:fail x100:ok x0.01:ok",9
+"test","constrained","ML2S_ADF","default","common","native:fail x100:ok x0.01:ok",1
+"test","research47","ML2S_ADF","default","common","native:fail x100:ok x0.01:ok",38
+"test","wolf","ML2S_ADF","default","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","ML2S_DWLS","default","common","native:fail x100:ok x0.01:ok",1
+"test","boomsma","WLS","default","common","native:fail x100:ok x0.01:ok",2
+"test","chen","WLS","default","common","native:fail x100:ok x0.01:ok",6
+"test","research47","WLS","default","common","native:fail x100:ok x0.01:ok",18
+"test","wolf","WLS","default","common","native:fail x100:ok x0.01:ok",2
+"test","boomsma","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:ok",2
+"test","chen","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:ok",22
+"test","constrained","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:ok",1
+"test","research47","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:ok",38
+"test","wolf","ML2S_ADF","objective_downward","common","native:fail x100:ok x0.01:ok",5
+"test","boomsma","WLS","objective_downward","common","native:fail x100:ok x0.01:ok",7
+"test","chen","WLS","objective_downward","common","native:fail x100:ok x0.01:ok",29
+"test","engineering15","WLS","objective_downward","common","native:fail x100:ok x0.01:ok",2
+"test","research47","WLS","objective_downward","common","native:fail x100:ok x0.01:ok",46
+"test","wolf","WLS","objective_downward","common","native:fail x100:ok x0.01:ok",12
+"test","boomsma","DWLS","default","separate","native:ok mixed:fail",744
+"test","chen","DWLS","default","separate","native:ok mixed:fail",762
+"test","engineering15","DWLS","default","separate","native:ok mixed:fail",270
+"control","ernst","DWLS","default","separate","native:ok mixed:fail",144
+"test","research47","DWLS","default","separate","native:ok mixed:fail",1145
+"test","wolf","DWLS","default","separate","native:ok mixed:fail",548
+"test","boomsma","ML2S_ADF","default","separate","native:ok mixed:fail",1111
+"test","chen","ML2S_ADF","default","separate","native:ok mixed:fail",353
+"test","engineering15","ML2S_ADF","default","separate","native:ok mixed:fail",123
+"control","ernst","ML2S_ADF","default","separate","native:ok mixed:fail",99
+"test","research47","ML2S_ADF","default","separate","native:ok mixed:fail",1674
+"test","wolf","ML2S_ADF","default","separate","native:ok mixed:fail",1336
+"test","boomsma","ML2S_DWLS","default","separate","native:ok mixed:fail",2170
+"test","chen","ML2S_DWLS","default","separate","native:ok mixed:fail",791
+"test","engineering15","ML2S_DWLS","default","separate","native:ok mixed:fail",291
+"control","ernst","ML2S_DWLS","default","separate","native:ok mixed:fail",179
+"test","research47","ML2S_DWLS","default","separate","native:ok mixed:fail",2565
+"test","wolf","ML2S_DWLS","default","separate","native:ok mixed:fail",2808
+"test","boomsma","ML2S_ULS","default","separate","native:ok mixed:fail",2166
+"test","chen","ML2S_ULS","default","separate","native:ok mixed:fail",789
+"test","engineering15","ML2S_ULS","default","separate","native:ok mixed:fail",283
+"control","ernst","ML2S_ULS","default","separate","native:ok mixed:fail",178
+"test","research47","ML2S_ULS","default","separate","native:ok mixed:fail",2568
+"test","wolf","ML2S_ULS","default","separate","native:ok mixed:fail",3196
+"test","boomsma","ULS","default","separate","native:ok mixed:fail",2200
+"test","chen","ULS","default","separate","native:ok mixed:fail",799
+"test","engineering15","ULS","default","separate","native:ok mixed:fail",289
+"control","ernst","ULS","default","separate","native:ok mixed:fail",189
+"test","research47","ULS","default","separate","native:ok mixed:fail",2581
+"test","wolf","ULS","default","separate","native:ok mixed:fail",3479
+"test","boomsma","WLS","default","separate","native:ok mixed:fail",657
+"test","chen","WLS","default","separate","native:ok mixed:fail",350
+"test","engineering15","WLS","default","separate","native:ok mixed:fail",214
+"control","ernst","WLS","default","separate","native:ok mixed:fail",140
+"test","research47","WLS","default","separate","native:ok mixed:fail",1235
+"test","wolf","WLS","default","separate","native:ok mixed:fail",374
+"test","boomsma","DWLS","objective","separate","native:ok mixed:fail",2209
+"test","chen","DWLS","objective","separate","native:ok mixed:fail",739
+"test","engineering15","DWLS","objective","separate","native:ok mixed:fail",307
+"control","ernst","DWLS","objective","separate","native:ok mixed:fail",188
+"test","research47","DWLS","objective","separate","native:ok mixed:fail",2569
+"test","wolf","DWLS","objective","separate","native:ok mixed:fail",3477
+"test","boomsma","ML2S_ADF","objective","separate","native:ok mixed:fail",1072
+"test","chen","ML2S_ADF","objective","separate","native:ok mixed:fail",19
+"test","engineering15","ML2S_ADF","objective","separate","native:ok mixed:fail",125
+"control","ernst","ML2S_ADF","objective","separate","native:ok mixed:fail",99
+"test","research47","ML2S_ADF","objective","separate","native:ok mixed:fail",1180
+"test","wolf","ML2S_ADF","objective","separate","native:ok mixed:fail",1266
+"test","boomsma","ML2S_DWLS","objective","separate","native:ok mixed:fail",2177
+"test","chen","ML2S_DWLS","objective","separate","native:ok mixed:fail",736
+"test","engineering15","ML2S_DWLS","objective","separate","native:ok mixed:fail",296
+"control","ernst","ML2S_DWLS","objective","separate","native:ok mixed:fail",179
+"test","research47","ML2S_DWLS","objective","separate","native:ok mixed:fail",2557
+"test","wolf","ML2S_DWLS","objective","separate","native:ok mixed:fail",3012
+"test","boomsma","ML2S_ULS","objective","separate","native:ok mixed:fail",2167
+"test","chen","ML2S_ULS","objective","separate","native:ok mixed:fail",685
+"test","engineering15","ML2S_ULS","objective","separate","native:ok mixed:fail",284
+"control","ernst","ML2S_ULS","objective","separate","native:ok mixed:fail",177
+"test","research47","ML2S_ULS","objective","separate","native:ok mixed:fail",2560
+"test","wolf","ML2S_ULS","objective","separate","native:ok mixed:fail",3203
+"test","boomsma","ULS","objective","separate","native:ok mixed:fail",2203
+"test","chen","ULS","objective","separate","native:ok mixed:fail",709
+"test","engineering15","ULS","objective","separate","native:ok mixed:fail",297
+"control","ernst","ULS","objective","separate","native:ok mixed:fail",187
+"test","research47","ULS","objective","separate","native:ok mixed:fail",2571
+"test","wolf","ULS","objective","separate","native:ok mixed:fail",3484
+"test","boomsma","WLS","objective","separate","native:ok mixed:fail",1402
+"test","chen","WLS","objective","separate","native:ok mixed:fail",22
+"test","engineering15","WLS","objective","separate","native:ok mixed:fail",209
+"control","ernst","WLS","objective","separate","native:ok mixed:fail",146
+"test","research47","WLS","objective","separate","native:ok mixed:fail",1557
+"test","wolf","WLS","objective","separate","native:ok mixed:fail",1549
+"test","boomsma","DWLS","objective_downward","separate","native:ok mixed:fail",820
+"test","chen","DWLS","objective_downward","separate","native:ok mixed:fail",776
+"test","engineering15","DWLS","objective_downward","separate","native:ok mixed:fail",260
+"control","ernst","DWLS","objective_downward","separate","native:ok mixed:fail",135
+"test","research47","DWLS","objective_downward","separate","native:ok mixed:fail",1033
+"test","wolf","DWLS","objective_downward","separate","native:ok mixed:fail",569
+"test","boomsma","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",1108
+"test","chen","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",234
+"test","engineering15","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",123
+"control","ernst","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",99
+"test","research47","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",1529
+"test","wolf","ML2S_ADF","objective_downward","separate","native:ok mixed:fail",1316
+"test","boomsma","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",2172
+"test","chen","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",796
+"test","engineering15","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",288
+"control","ernst","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",179
+"test","research47","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",2566
+"test","wolf","ML2S_DWLS","objective_downward","separate","native:ok mixed:fail",2809
+"test","boomsma","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",2155
+"test","chen","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",794
+"test","engineering15","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",286
+"control","ernst","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",179
+"test","research47","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",2569
+"test","wolf","ML2S_ULS","objective_downward","separate","native:ok mixed:fail",3191
+"test","boomsma","ULS","objective_downward","separate","native:ok mixed:fail",2194
+"test","chen","ULS","objective_downward","separate","native:ok mixed:fail",800
+"test","engineering15","ULS","objective_downward","separate","native:ok mixed:fail",292
+"control","ernst","ULS","objective_downward","separate","native:ok mixed:fail",189
+"test","research47","ULS","objective_downward","separate","native:ok mixed:fail",2581
+"test","wolf","ULS","objective_downward","separate","native:ok mixed:fail",3471
+"test","boomsma","WLS","objective_downward","separate","native:ok mixed:fail",770
+"test","chen","WLS","objective_downward","separate","native:ok mixed:fail",226
+"test","engineering15","WLS","objective_downward","separate","native:ok mixed:fail",212
+"control","ernst","WLS","objective_downward","separate","native:ok mixed:fail",142
+"test","research47","WLS","objective_downward","separate","native:ok mixed:fail",1198
+"test","wolf","WLS","objective_downward","separate","native:ok mixed:fail",422
+"test","boomsma","DWLS","default","common","native:ok x100:fail x0.01:fail",6
+"test","constrained","DWLS","default","common","native:ok x100:fail x0.01:fail",2
+"test","engineering15","DWLS","default","common","native:ok x100:fail x0.01:fail",2
+"test","research47","DWLS","default","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","DWLS","default","common","native:ok x100:fail x0.01:fail",6
+"test","boomsma","ML2S_ADF","default","common","native:ok x100:fail x0.01:fail",3
+"test","chen","ML2S_ADF","default","common","native:ok x100:fail x0.01:fail",4
+"test","constrained","ML2S_ADF","default","common","native:ok x100:fail x0.01:fail",4
+"test","research47","ML2S_ADF","default","common","native:ok x100:fail x0.01:fail",21
+"test","wolf","ML2S_ADF","default","common","native:ok x100:fail x0.01:fail",6
+"test","boomsma","ML2S_DWLS","default","common","native:ok x100:fail x0.01:fail",10
+"test","constrained","ML2S_DWLS","default","common","native:ok x100:fail x0.01:fail",3
+"test","engineering15","ML2S_DWLS","default","common","native:ok x100:fail x0.01:fail",2
+"test","research47","ML2S_DWLS","default","common","native:ok x100:fail x0.01:fail",5
+"test","wolf","ML2S_DWLS","default","common","native:ok x100:fail x0.01:fail",5
+"test","boomsma","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",2165
+"test","chen","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",789
+"test","constrained","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",1654
+"test","engineering15","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",283
+"control","ernst","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",178
+"test","research47","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",2566
+"test","wolf","ML2S_ULS","default","common","native:ok x100:fail x0.01:fail",3046
+"test","boomsma","ULS","default","common","native:ok x100:fail x0.01:fail",2200
+"test","chen","ULS","default","common","native:ok x100:fail x0.01:fail",799
+"test","constrained","ULS","default","common","native:ok x100:fail x0.01:fail",1827
+"test","engineering15","ULS","default","common","native:ok x100:fail x0.01:fail",289
+"control","ernst","ULS","default","common","native:ok x100:fail x0.01:fail",189
+"test","research47","ULS","default","common","native:ok x100:fail x0.01:fail",2581
+"test","wolf","ULS","default","common","native:ok x100:fail x0.01:fail",3476
+"test","boomsma","WLS","default","common","native:ok x100:fail x0.01:fail",11
+"test","chen","WLS","default","common","native:ok x100:fail x0.01:fail",2
+"test","constrained","WLS","default","common","native:ok x100:fail x0.01:fail",3
+"test","engineering15","WLS","default","common","native:ok x100:fail x0.01:fail",7
+"control","ernst","WLS","default","common","native:ok x100:fail x0.01:fail",2
+"test","research47","WLS","default","common","native:ok x100:fail x0.01:fail",48
+"test","wolf","WLS","default","common","native:ok x100:fail x0.01:fail",9
+"test","boomsma","DWLS","objective","common","native:ok x100:fail x0.01:fail",676
+"test","chen","DWLS","objective","common","native:ok x100:fail x0.01:fail",531
+"test","constrained","DWLS","objective","common","native:ok x100:fail x0.01:fail",569
+"test","engineering15","DWLS","objective","common","native:ok x100:fail x0.01:fail",114
+"control","ernst","DWLS","objective","common","native:ok x100:fail x0.01:fail",18
+"test","research47","DWLS","objective","common","native:ok x100:fail x0.01:fail",238
+"test","wolf","DWLS","objective","common","native:ok x100:fail x0.01:fail",1360
+"test","boomsma","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",360
+"test","chen","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",1
+"test","constrained","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",446
+"test","engineering15","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",41
+"control","ernst","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",7
+"test","research47","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",238
+"test","wolf","ML2S_ADF","objective","common","native:ok x100:fail x0.01:fail",386
+"test","boomsma","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",726
+"test","chen","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",539
+"test","constrained","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",592
+"test","engineering15","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",105
+"control","ernst","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",23
+"test","research47","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",262
+"test","wolf","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:fail",1179
+"test","boomsma","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",2155
+"test","chen","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",678
+"test","constrained","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",1094
+"test","engineering15","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",261
+"control","ernst","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",165
+"test","research47","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",2288
+"test","wolf","ML2S_ULS","objective","common","native:ok x100:fail x0.01:fail",3171
+"test","boomsma","ULS","objective","common","native:ok x100:fail x0.01:fail",2194
+"test","chen","ULS","objective","common","native:ok x100:fail x0.01:fail",699
+"test","constrained","ULS","objective","common","native:ok x100:fail x0.01:fail",1147
+"test","engineering15","ULS","objective","common","native:ok x100:fail x0.01:fail",259
+"control","ernst","ULS","objective","common","native:ok x100:fail x0.01:fail",177
+"test","research47","ULS","objective","common","native:ok x100:fail x0.01:fail",2321
+"test","wolf","ULS","objective","common","native:ok x100:fail x0.01:fail",3457
+"test","boomsma","WLS","objective","common","native:ok x100:fail x0.01:fail",545
+"test","constrained","WLS","objective","common","native:ok x100:fail x0.01:fail",335
+"test","engineering15","WLS","objective","common","native:ok x100:fail x0.01:fail",105
+"control","ernst","WLS","objective","common","native:ok x100:fail x0.01:fail",27
+"test","research47","WLS","objective","common","native:ok x100:fail x0.01:fail",595
+"test","wolf","WLS","objective","common","native:ok x100:fail x0.01:fail",431
+"test","boomsma","DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",2
+"test","constrained","DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","engineering15","DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","research47","DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",4
+"test","boomsma","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","chen","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",5
+"test","constrained","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",9
+"test","engineering15","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","research47","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",18
+"test","wolf","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:fail",5
+"test","boomsma","ML2S_DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",4
+"test","constrained","ML2S_DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",3
+"test","engineering15","ML2S_DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","research47","ML2S_DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",1
+"test","wolf","ML2S_DWLS","objective_downward","common","native:ok x100:fail x0.01:fail",5
+"test","boomsma","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",1766
+"test","chen","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",794
+"test","constrained","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",960
+"test","engineering15","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",286
+"control","ernst","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",179
+"test","research47","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",1399
+"test","wolf","ML2S_ULS","objective_downward","common","native:ok x100:fail x0.01:fail",2655
+"test","boomsma","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",1758
+"test","chen","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",800
+"test","constrained","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",988
+"test","engineering15","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",292
+"control","ernst","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",189
+"test","research47","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",1335
+"test","wolf","ULS","objective_downward","common","native:ok x100:fail x0.01:fail",2865
+"test","boomsma","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",47
+"test","chen","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",10
+"test","constrained","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",4
+"test","engineering15","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",27
+"control","ernst","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",5
+"test","research47","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",91
+"test","wolf","WLS","objective_downward","common","native:ok x100:fail x0.01:fail",12
+"test","boomsma","DWLS","default","common","native:ok x100:fail x0.01:ok",1
+"test","chen","ML2S_ADF","default","common","native:ok x100:fail x0.01:ok",20
+"test","engineering15","ML2S_ADF","default","common","native:ok x100:fail x0.01:ok",1
+"test","research47","ML2S_ADF","default","common","native:ok x100:fail x0.01:ok",48
+"test","boomsma","WLS","default","common","native:ok x100:fail x0.01:ok",5
+"test","chen","WLS","default","common","native:ok x100:fail x0.01:ok",27
+"test","constrained","WLS","default","common","native:ok x100:fail x0.01:ok",1
+"test","engineering15","WLS","default","common","native:ok x100:fail x0.01:ok",2
+"test","research47","WLS","default","common","native:ok x100:fail x0.01:ok",45
+"test","wolf","WLS","default","common","native:ok x100:fail x0.01:ok",3
+"test","boomsma","DWLS","objective","common","native:ok x100:fail x0.01:ok",1533
+"test","chen","DWLS","objective","common","native:ok x100:fail x0.01:ok",208
+"test","constrained","DWLS","objective","common","native:ok x100:fail x0.01:ok",544
+"test","engineering15","DWLS","objective","common","native:ok x100:fail x0.01:ok",193
+"control","ernst","DWLS","objective","common","native:ok x100:fail x0.01:ok",170
+"test","research47","DWLS","objective","common","native:ok x100:fail x0.01:ok",2331
+"test","wolf","DWLS","objective","common","native:ok x100:fail x0.01:ok",2117
+"test","boomsma","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",712
+"test","chen","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",18
+"test","constrained","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",74
+"test","engineering15","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",84
+"control","ernst","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",92
+"test","research47","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",942
+"test","wolf","ML2S_ADF","objective","common","native:ok x100:fail x0.01:ok",876
+"test","boomsma","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",1451
+"test","chen","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",197
+"test","constrained","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",434
+"test","engineering15","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",191
+"control","ernst","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",156
+"test","research47","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",2295
+"test","wolf","ML2S_DWLS","objective","common","native:ok x100:fail x0.01:ok",1832
+"test","boomsma","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",12
+"test","chen","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",7
+"test","engineering15","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",23
+"control","ernst","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",12
+"test","research47","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",272
+"test","wolf","ML2S_ULS","objective","common","native:ok x100:fail x0.01:ok",31
+"test","boomsma","ULS","objective","common","native:ok x100:fail x0.01:ok",9
+"test","chen","ULS","objective","common","native:ok x100:fail x0.01:ok",10
+"test","constrained","ULS","objective","common","native:ok x100:fail x0.01:ok",1
+"test","engineering15","ULS","objective","common","native:ok x100:fail x0.01:ok",38
+"control","ernst","ULS","objective","common","native:ok x100:fail x0.01:ok",10
+"test","research47","ULS","objective","common","native:ok x100:fail x0.01:ok",250
+"test","wolf","ULS","objective","common","native:ok x100:fail x0.01:ok",27
+"test","boomsma","WLS","objective","common","native:ok x100:fail x0.01:ok",857
+"test","chen","WLS","objective","common","native:ok x100:fail x0.01:ok",22
+"test","constrained","WLS","objective","common","native:ok x100:fail x0.01:ok",209
+"test","engineering15","WLS","objective","common","native:ok x100:fail x0.01:ok",104
+"control","ernst","WLS","objective","common","native:ok x100:fail x0.01:ok",119
+"test","research47","WLS","objective","common","native:ok x100:fail x0.01:ok",962
+"test","wolf","WLS","objective","common","native:ok x100:fail x0.01:ok",1118
+"test","chen","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:ok",23
+"test","engineering15","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:ok",1
+"test","research47","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:ok",56
+"test","wolf","ML2S_ADF","objective_downward","common","native:ok x100:fail x0.01:ok",3
+"test","boomsma","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",3
+"test","chen","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",19
+"test","engineering15","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",3
+"control","ernst","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",1
+"test","research47","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",58
+"test","wolf","WLS","objective_downward","common","native:ok x100:fail x0.01:ok",5
+"test","boomsma","DWLS","default","common","native:ok x100:ok x0.01:fail",1648
+"test","chen","DWLS","default","common","native:ok x100:ok x0.01:fail",344
+"test","constrained","DWLS","default","common","native:ok x100:ok x0.01:fail",1016
+"test","engineering15","DWLS","default","common","native:ok x100:ok x0.01:fail",139
+"control","ernst","DWLS","default","common","native:ok x100:ok x0.01:fail",123
+"test","research47","DWLS","default","common","native:ok x100:ok x0.01:fail",987
+"test","wolf","DWLS","default","common","native:ok x100:ok x0.01:fail",2422
+"test","boomsma","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",393
+"test","chen","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",65
+"test","constrained","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",523
+"test","engineering15","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",40
+"control","ernst","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",2
+"test","research47","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",503
+"test","wolf","ML2S_ADF","default","common","native:ok x100:ok x0.01:fail",427
+"test","boomsma","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",1646
+"test","chen","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",336
+"test","constrained","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",929
+"test","engineering15","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",128
+"control","ernst","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",119
+"test","research47","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",931
+"test","wolf","ML2S_DWLS","default","common","native:ok x100:ok x0.01:fail",1827
+"test","boomsma","ML2S_ULS","default","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","ML2S_ULS","default","common","native:ok x100:ok x0.01:fail",82
+"test","research47","ML2S_ULS","default","common","native:ok x100:ok x0.01:fail",2
+"test","wolf","ML2S_ULS","default","common","native:ok x100:ok x0.01:fail",150
+"test","wolf","ULS","default","common","native:ok x100:ok x0.01:fail",3
+"test","boomsma","WLS","default","common","native:ok x100:ok x0.01:fail",658
+"test","chen","WLS","default","common","native:ok x100:ok x0.01:fail",54
+"test","constrained","WLS","default","common","native:ok x100:ok x0.01:fail",376
+"test","engineering15","WLS","default","common","native:ok x100:ok x0.01:fail",104
+"control","ernst","WLS","default","common","native:ok x100:ok x0.01:fail",49
+"test","research47","WLS","default","common","native:ok x100:ok x0.01:fail",922
+"test","wolf","WLS","default","common","native:ok x100:ok x0.01:fail",520
+"test","constrained","DWLS","objective","common","native:ok x100:ok x0.01:fail",85
+"test","constrained","ML2S_ADF","objective","common","native:ok x100:ok x0.01:fail",51
+"test","wolf","ML2S_ADF","objective","common","native:ok x100:ok x0.01:fail",4
+"test","constrained","ML2S_DWLS","objective","common","native:ok x100:ok x0.01:fail",93
+"test","wolf","ML2S_DWLS","objective","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","ML2S_ULS","objective","common","native:ok x100:ok x0.01:fail",132
+"test","wolf","ML2S_ULS","objective","common","native:ok x100:ok x0.01:fail",1
+"test","constrained","ULS","objective","common","native:ok x100:ok x0.01:fail",114
+"test","constrained","WLS","objective","common","native:ok x100:ok x0.01:fail",42
+"test","boomsma","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",1697
+"test","chen","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",604
+"test","constrained","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",830
+"test","engineering15","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",114
+"control","ernst","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",22
+"test","research47","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",1012
+"test","wolf","DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",2773
+"test","boomsma","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",500
+"test","chen","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",48
+"test","constrained","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",558
+"test","engineering15","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",40
+"control","ernst","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",8
+"test","research47","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",624
+"test","wolf","ML2S_ADF","objective_downward","common","native:ok x100:ok x0.01:fail",433
+"test","boomsma","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",1572
+"test","chen","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",604
+"test","constrained","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",735
+"test","engineering15","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",105
+"control","ernst","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",24
+"test","research47","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",956
+"test","wolf","ML2S_DWLS","objective_downward","common","native:ok x100:ok x0.01:fail",2049
+"test","boomsma","ML2S_ULS","objective_downward","common","native:ok x100:ok x0.01:fail",389
+"test","constrained","ML2S_ULS","objective_downward","common","native:ok x100:ok x0.01:fail",787
+"test","research47","ML2S_ULS","objective_downward","common","native:ok x100:ok x0.01:fail",1170
+"test","wolf","ML2S_ULS","objective_downward","common","native:ok x100:ok x0.01:fail",536
+"test","boomsma","ULS","objective_downward","common","native:ok x100:ok x0.01:fail",436
+"test","constrained","ULS","objective_downward","common","native:ok x100:ok x0.01:fail",839
+"test","research47","ULS","objective_downward","common","native:ok x100:ok x0.01:fail",1246
+"test","wolf","ULS","objective_downward","common","native:ok x100:ok x0.01:fail",606
+"test","boomsma","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",783
+"test","chen","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",62
+"test","constrained","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",519
+"test","engineering15","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",100
+"control","ernst","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",37
+"test","research47","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",1000
+"test","wolf","WLS","objective_downward","common","native:ok x100:ok x0.01:fail",580
+"test","constrained","DWLS","default","common","objective differs, gap 1e-4 to 1e-3",2
+"test","boomsma","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",426
+"test","chen","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",171
+"test","constrained","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",270
+"test","engineering15","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",9
+"control","ernst","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",31
+"test","research47","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",245
+"test","wolf","ML2S_ADF","default","common","objective differs, gap 1e-4 to 1e-3",354
+"test","boomsma","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",244
+"test","chen","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",166
+"test","constrained","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",373
+"test","engineering15","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",37
+"control","ernst","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",26
+"test","research47","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",204
+"test","wolf","ML2S_DWLS","default","common","objective differs, gap 1e-4 to 1e-3",319
+"test","constrained","WLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","engineering15","WLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","research47","WLS","default","common","objective differs, gap 1e-4 to 1e-3",1
+"test","constrained","ML2S_ADF","objective","common","objective differs, gap 1e-4 to 1e-3",222
+"test","constrained","ML2S_DWLS","objective","common","objective differs, gap 1e-4 to 1e-3",318
+"test","constrained","DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",2
+"test","boomsma","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",357
+"test","chen","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",95
+"test","constrained","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",233
+"test","engineering15","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",11
+"control","ernst","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",30
+"test","research47","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",147
+"test","wolf","ML2S_ADF","objective_downward","common","objective differs, gap 1e-4 to 1e-3",335
+"test","boomsma","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",275
+"test","chen","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",75
+"test","constrained","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",479
+"test","engineering15","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",48
+"control","ernst","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",46
+"test","research47","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",228
+"test","wolf","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",209
+"test","constrained","WLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",1
+"test","wolf","WLS","objective_downward","common","objective differs, gap 1e-4 to 1e-3",2
+"test","boomsma","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",225
+"test","chen","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",59
+"test","constrained","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",69
+"test","engineering15","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",56
+"control","ernst","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",57
+"test","research47","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",391
+"test","wolf","ML2S_ADF","default","common","objective differs, gap 1e-5 to 1e-4",409
+"test","boomsma","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",208
+"test","chen","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",186
+"test","constrained","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",157
+"test","engineering15","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",67
+"control","ernst","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",27
+"test","research47","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",656
+"test","wolf","ML2S_DWLS","default","common","objective differs, gap 1e-5 to 1e-4",318
+"test","chen","WLS","default","common","objective differs, gap 1e-5 to 1e-4",1
+"test","constrained","ML2S_ADF","objective","common","objective differs, gap 1e-5 to 1e-4",58
+"test","constrained","ML2S_DWLS","objective","common","objective differs, gap 1e-5 to 1e-4",139
+"test","boomsma","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",192
+"test","chen","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",35
+"test","constrained","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",62
+"test","engineering15","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",54
+"control","ernst","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",53
+"test","research47","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",291
+"test","wolf","ML2S_ADF","objective_downward","common","objective differs, gap 1e-5 to 1e-4",392
+"test","boomsma","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",233
+"test","chen","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",69
+"test","constrained","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",214
+"test","engineering15","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",75
+"control","ernst","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",82
+"test","research47","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",626
+"test","wolf","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-5 to 1e-4",323
+"test","boomsma","DWLS","default","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","boomsma","WLS","default","separate","objective differs, gap 1e-5 to 1e-4",1
+"test","constrained","DWLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","engineering15","DWLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",40
+"test","chen","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",9
+"test","constrained","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",8
+"test","engineering15","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",15
+"control","ernst","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",8
+"test","research47","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",79
+"test","wolf","ML2S_ADF","default","common","objective differs, gap 1e-6 to 1e-5",92
+"test","boomsma","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",23
+"test","chen","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",34
+"test","constrained","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",11
+"test","engineering15","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",47
+"control","ernst","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",3
+"test","research47","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",371
+"test","wolf","ML2S_DWLS","default","common","objective differs, gap 1e-6 to 1e-5",213
+"test","boomsma","WLS","default","common","objective differs, gap 1e-6 to 1e-5",2
+"test","constrained","WLS","default","common","objective differs, gap 1e-6 to 1e-5",6
+"test","engineering15","WLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"control","ernst","WLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","WLS","default","common","objective differs, gap 1e-6 to 1e-5",1
+"test","wolf","WLS","default","common","objective differs, gap 1e-6 to 1e-5",6
+"test","constrained","ML2S_ADF","objective","common","objective differs, gap 1e-6 to 1e-5",7
+"test","constrained","ML2S_DWLS","objective","common","objective differs, gap 1e-6 to 1e-5",10
+"test","boomsma","DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",1
+"test","constrained","DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",3
+"test","wolf","DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",3
+"test","boomsma","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",38
+"test","chen","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",7
+"test","constrained","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",7
+"test","engineering15","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",14
+"control","ernst","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",7
+"test","research47","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",60
+"test","wolf","ML2S_ADF","objective_downward","common","objective differs, gap 1e-6 to 1e-5",93
+"test","boomsma","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",29
+"test","chen","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",14
+"test","constrained","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",18
+"test","engineering15","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",49
+"control","ernst","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",21
+"test","research47","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",362
+"test","wolf","ML2S_DWLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",145
+"test","wolf","WLS","objective_downward","common","objective differs, gap 1e-6 to 1e-5",2
+"test","wolf","DWLS","objective_downward","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","research47","WLS","objective_downward","separate","objective differs, gap 1e-6 to 1e-5",1
+"test","boomsma","DWLS","default","common","objective differs, gap over 1e-3",2
+"test","constrained","DWLS","default","common","objective differs, gap over 1e-3",45
+"test","wolf","DWLS","default","common","objective differs, gap over 1e-3",1
+"test","boomsma","ML2S_ADF","default","common","objective differs, gap over 1e-3",23
+"test","chen","ML2S_ADF","default","common","objective differs, gap over 1e-3",25
+"test","constrained","ML2S_ADF","default","common","objective differs, gap over 1e-3",56
+"test","research47","ML2S_ADF","default","common","objective differs, gap over 1e-3",44
+"test","wolf","ML2S_ADF","default","common","objective differs, gap over 1e-3",39
+"test","boomsma","ML2S_DWLS","default","common","objective differs, gap over 1e-3",37
+"test","chen","ML2S_DWLS","default","common","objective differs, gap over 1e-3",66
+"test","constrained","ML2S_DWLS","default","common","objective differs, gap over 1e-3",168
+"test","engineering15","ML2S_DWLS","default","common","objective differs, gap over 1e-3",4
+"control","ernst","ML2S_DWLS","default","common","objective differs, gap over 1e-3",4
+"test","research47","ML2S_DWLS","default","common","objective differs, gap over 1e-3",22
+"test","wolf","ML2S_DWLS","default","common","objective differs, gap over 1e-3",84
+"test","boomsma","WLS","default","common","objective differs, gap over 1e-3",26
+"test","chen","WLS","default","common","objective differs, gap over 1e-3",21
+"test","constrained","WLS","default","common","objective differs, gap over 1e-3",22
+"test","engineering15","WLS","default","common","objective differs, gap over 1e-3",7
+"control","ernst","WLS","default","common","objective differs, gap over 1e-3",1
+"test","research47","WLS","default","common","objective differs, gap over 1e-3",46
+"test","wolf","WLS","default","common","objective differs, gap over 1e-3",60
+"test","constrained","ML2S_ADF","objective","common","objective differs, gap over 1e-3",30
+"test","constrained","ML2S_DWLS","objective","common","objective differs, gap over 1e-3",114
+"test","constrained","ML2S_ULS","objective","common","objective differs, gap over 1e-3",518
+"test","constrained","ULS","objective","common","objective differs, gap over 1e-3",570
+"test","boomsma","DWLS","objective_downward","common","objective differs, gap over 1e-3",8
+"test","constrained","DWLS","objective_downward","common","objective differs, gap over 1e-3",34
+"control","ernst","DWLS","objective_downward","common","objective differs, gap over 1e-3",1
+"test","research47","DWLS","objective_downward","common","objective differs, gap over 1e-3",1
+"test","wolf","DWLS","objective_downward","common","objective differs, gap over 1e-3",1
+"test","boomsma","ML2S_ADF","objective_downward","common","objective differs, gap over 1e-3",20
+"test","chen","ML2S_ADF","objective_downward","common","objective differs, gap over 1e-3",21
+"test","constrained","ML2S_ADF","objective_downward","common","objective differs, gap over 1e-3",59
+"test","research47","ML2S_ADF","objective_downward","common","objective differs, gap over 1e-3",28
+"test","wolf","ML2S_ADF","objective_downward","common","objective differs, gap over 1e-3",49
+"test","boomsma","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",57
+"test","chen","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",34
+"test","constrained","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",191
+"test","engineering15","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",4
+"control","ernst","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",4
+"test","research47","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",30
+"test","wolf","ML2S_DWLS","objective_downward","common","objective differs, gap over 1e-3",47
+"test","boomsma","WLS","objective_downward","common","objective differs, gap over 1e-3",17
+"test","chen","WLS","objective_downward","common","objective differs, gap over 1e-3",20
+"test","constrained","WLS","objective_downward","common","objective differs, gap over 1e-3",29
+"test","engineering15","WLS","objective_downward","common","objective differs, gap over 1e-3",4
+"control","ernst","WLS","objective_downward","common","objective differs, gap over 1e-3",2
+"test","research47","WLS","objective_downward","common","objective differs, gap over 1e-3",22
+"test","wolf","WLS","objective_downward","common","objective differs, gap over 1e-3",62
+"test","boomsma","DWLS","default","separate","objective differs, gap over 1e-3",2
+"test","wolf","DWLS","default","separate","objective differs, gap over 1e-3",1
+"test","boomsma","WLS","default","separate","objective differs, gap over 1e-3",14
+"control","ernst","WLS","default","separate","objective differs, gap over 1e-3",2
+"test","research47","WLS","default","separate","objective differs, gap over 1e-3",22
+"test","wolf","WLS","default","separate","objective differs, gap over 1e-3",18
+"test","boomsma","DWLS","objective_downward","separate","objective differs, gap over 1e-3",2
+"control","ernst","DWLS","objective_downward","separate","objective differs, gap over 1e-3",1
+"test","wolf","DWLS","objective_downward","separate","objective differs, gap over 1e-3",2
+"test","boomsma","WLS","objective_downward","separate","objective differs, gap over 1e-3",4
+"control","ernst","WLS","objective_downward","separate","objective differs, gap over 1e-3",1
+"test","research47","WLS","objective_downward","separate","objective differs, gap over 1e-3",10
+"test","wolf","WLS","objective_downward","separate","objective differs, gap over 1e-3",36

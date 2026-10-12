@@ -65,3 +65,7 @@ normalization-revisit/paired/*
 # TASK-159 non-confirmatory smoke and pricing outputs remain local.
 ls-coordinates/smoke*/
 ls-coordinates/pilot*/
+
+# 2026-10-11 ls-coordinates: the full 16 MB loss table stays local; every loss is
+# tracked in the compact losses_<estimator>_<candidate>.csv files.
+ls-coordinates/2026-10-11/losses.csv

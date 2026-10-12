@@ -1,0 +1,277 @@
+"candidate","rule","scope","value","pass"
+"objective_downward","1 primary and 2 best known","boomsma DWLS","wins 385 losses 515; best wins 380 losses 516",FALSE
+"objective_downward","1 primary and 2 best known","boomsma ML2S_ADF","wins 65 losses 176; best wins 66 losses 181",FALSE
+"objective_downward","1 primary and 2 best known","boomsma ML2S_DWLS","wins 315 losses 227; best wins 316 losses 232",TRUE
+"objective_downward","1 primary and 2 best known","boomsma ML2S_ULS","wins 406 losses 18; best wins 407 losses 18",TRUE
+"objective_downward","1 primary and 2 best known","boomsma ULS","wins 452 losses 9; best wins 454 losses 9",TRUE
+"objective_downward","1 primary and 2 best known","boomsma WLS","wins 184 losses 703; best wins 216 losses 765",FALSE
+"objective_downward","1 primary and 2 best known","chen DWLS","wins 53 losses 314; best wins 53 losses 314",FALSE
+"objective_downward","1 primary and 2 best known","chen ML2S_ADF","wins 57 losses 308; best wins 67 losses 332",FALSE
+"objective_downward","1 primary and 2 best known","chen ML2S_DWLS","wins 35 losses 288; best wins 35 losses 288",FALSE
+"objective_downward","1 primary and 2 best known","chen ML2S_ULS","wins 5 losses 0; best wins 5 losses 0",TRUE
+"objective_downward","1 primary and 2 best known","chen ULS","wins 1 losses 0; best wins 1 losses 0",TRUE
+"objective_downward","1 primary and 2 best known","chen WLS","wins 53 losses 342; best wins 61 losses 372",FALSE
+"objective_downward","1 primary and 2 best known","constrained DWLS","wins 302 losses 126; best wins 305 losses 125",TRUE
+"objective_downward","1 primary and 2 best known","constrained ML2S_ADF","wins 35 losses 90; best wins 58 losses 117",FALSE
+"objective_downward","1 primary and 2 best known","constrained ML2S_DWLS","wins 307 losses 104; best wins 311 losses 102",TRUE
+"objective_downward","1 primary and 2 best known","constrained ML2S_ULS","wins 805 losses 84; best wins 806 losses 85",TRUE
+"objective_downward","1 primary and 2 best known","constrained ULS","wins 846 losses 3; best wins 846 losses 4",TRUE
+"objective_downward","1 primary and 2 best known","constrained WLS","wins 50 losses 185; best wins 61 losses 192",FALSE
+"objective_downward","1 primary and 2 best known","engineering15 DWLS","wins 65 losses 38; best wins 67 losses 38",TRUE
+"objective_downward","1 primary and 2 best known","engineering15 ML2S_ADF","wins 10 losses 10; best wins 10 losses 10",TRUE
+"objective_downward","1 primary and 2 best known","engineering15 ML2S_DWLS","wins 27 losses 13; best wins 28 losses 13",TRUE
+"objective_downward","1 primary and 2 best known","engineering15 ML2S_ULS","wins 6 losses 3; best wins 4 losses 2",TRUE
+"objective_downward","1 primary and 2 best known","engineering15 ULS","wins 4 losses 1; best wins 4 losses 1",TRUE
+"objective_downward","1 primary and 2 best known","engineering15 WLS","wins 48 losses 79; best wins 51 losses 91",FALSE
+"objective_downward","1 primary and 2 best known","research47 DWLS","wins 549 losses 456; best wins 549 losses 457",TRUE
+"objective_downward","1 primary and 2 best known","research47 ML2S_ADF","wins 95 losses 529; best wins 108 losses 561",FALSE
+"objective_downward","1 primary and 2 best known","research47 ML2S_DWLS","wins 256 losses 269; best wins 256 losses 270",FALSE
+"objective_downward","1 primary and 2 best known","research47 ML2S_ULS","wins 1174 losses 4; best wins 1174 losses 4",TRUE
+"objective_downward","1 primary and 2 best known","research47 ULS","wins 1248 losses 2; best wins 1248 losses 2",TRUE
+"objective_downward","1 primary and 2 best known","research47 WLS","wins 175 losses 1058; best wins 227 losses 1196",FALSE
+"objective_downward","1 primary and 2 best known","wolf DWLS","wins 397 losses 779; best wins 395 losses 780",FALSE
+"objective_downward","1 primary and 2 best known","wolf ML2S_ADF","wins 114 losses 167; best wins 131 losses 195",FALSE
+"objective_downward","1 primary and 2 best known","wolf ML2S_DWLS","wins 334 losses 544; best wins 337 losses 550",FALSE
+"objective_downward","1 primary and 2 best known","wolf ML2S_ULS","wins 547 losses 157; best wins 550 losses 159",TRUE
+"objective_downward","1 primary and 2 best known","wolf ULS","wins 619 losses 15; best wins 619 losses 13",TRUE
+"objective_downward","1 primary and 2 best known","wolf WLS","wins 193 losses 453; best wins 259 losses 549",FALSE
+"objective_downward","3 invariance","boomsma DWLS mixed","candidate drop 813 baseline drop 733",FALSE
+"objective_downward","3 invariance","boomsma DWLS x0.01","candidate drop 1690 baseline drop 1648",FALSE
+"objective_downward","3 invariance","boomsma DWLS x100","candidate drop -2 baseline drop -2",TRUE
+"objective_downward","3 invariance","boomsma ML2S_ADF mixed","candidate drop 1108 baseline drop 1111",TRUE
+"objective_downward","3 invariance","boomsma ML2S_ADF x0.01","candidate drop 499 baseline drop 393",FALSE
+"objective_downward","3 invariance","boomsma ML2S_ADF x100","candidate drop -3 baseline drop 1",TRUE
+"objective_downward","3 invariance","boomsma ML2S_DWLS mixed","candidate drop 2172 baseline drop 2170",FALSE
+"objective_downward","3 invariance","boomsma ML2S_DWLS x0.01","candidate drop 1566 baseline drop 1650",TRUE
+"objective_downward","3 invariance","boomsma ML2S_DWLS x100","candidate drop 1 baseline drop -1",FALSE
+"objective_downward","3 invariance","boomsma ML2S_ULS mixed","candidate drop 2155 baseline drop 2166",TRUE
+"objective_downward","3 invariance","boomsma ML2S_ULS x0.01","candidate drop 2155 baseline drop 2166",TRUE
+"objective_downward","3 invariance","boomsma ML2S_ULS x100","candidate drop 1755 baseline drop 2165",TRUE
+"objective_downward","3 invariance","boomsma ULS mixed","candidate drop 2194 baseline drop 2200",TRUE
+"objective_downward","3 invariance","boomsma ULS x0.01","candidate drop 2194 baseline drop 2200",TRUE
+"objective_downward","3 invariance","boomsma ULS x100","candidate drop 1745 baseline drop 2200",TRUE
+"objective_downward","3 invariance","boomsma WLS mixed","candidate drop 763 baseline drop 650",FALSE
+"objective_downward","3 invariance","boomsma WLS x0.01","candidate drop 803 baseline drop 652",FALSE
+"objective_downward","3 invariance","boomsma WLS x100","candidate drop -2 baseline drop -1",TRUE
+"objective_downward","3 invariance","chen DWLS mixed","candidate drop 776 baseline drop 762",FALSE
+"objective_downward","3 invariance","chen DWLS x0.01","candidate drop 604 baseline drop 344",FALSE
+"objective_downward","3 invariance","chen DWLS x100","candidate drop 0 baseline drop -3",FALSE
+"objective_downward","3 invariance","chen ML2S_ADF mixed","candidate drop 234 baseline drop 353",TRUE
+"objective_downward","3 invariance","chen ML2S_ADF x0.01","candidate drop -49 baseline drop 34",TRUE
+"objective_downward","3 invariance","chen ML2S_ADF x100","candidate drop -10 baseline drop 13",TRUE
+"objective_downward","3 invariance","chen ML2S_DWLS mixed","candidate drop 796 baseline drop 791",FALSE
+"objective_downward","3 invariance","chen ML2S_DWLS x0.01","candidate drop 604 baseline drop 336",FALSE
+"objective_downward","3 invariance","chen ML2S_DWLS x100","candidate drop 0 baseline drop 0",TRUE
+"objective_downward","3 invariance","chen ML2S_ULS mixed","candidate drop 794 baseline drop 789",FALSE
+"objective_downward","3 invariance","chen ML2S_ULS x0.01","candidate drop 794 baseline drop 789",FALSE
+"objective_downward","3 invariance","chen ML2S_ULS x100","candidate drop 794 baseline drop 789",FALSE
+"objective_downward","3 invariance","chen ULS mixed","candidate drop 800 baseline drop 799",FALSE
+"objective_downward","3 invariance","chen ULS x0.01","candidate drop 800 baseline drop 799",FALSE
+"objective_downward","3 invariance","chen ULS x100","candidate drop 800 baseline drop 799",FALSE
+"objective_downward","3 invariance","chen WLS mixed","candidate drop 225 baseline drop 350",TRUE
+"objective_downward","3 invariance","chen WLS x0.01","candidate drop -28 baseline drop 26",TRUE
+"objective_downward","3 invariance","chen WLS x100","candidate drop -15 baseline drop 17",TRUE
+"objective_downward","3 invariance","constrained DWLS x0.01","candidate drop 824 baseline drop 1011",TRUE
+"objective_downward","3 invariance","constrained DWLS x100","candidate drop 0 baseline drop 1",TRUE
+"objective_downward","3 invariance","constrained ML2S_ADF x0.01","candidate drop 565 baseline drop 523",FALSE
+"objective_downward","3 invariance","constrained ML2S_ADF x100","candidate drop 4 baseline drop -3",FALSE
+"objective_downward","3 invariance","constrained ML2S_DWLS x0.01","candidate drop 726 baseline drop 924",TRUE
+"objective_downward","3 invariance","constrained ML2S_DWLS x100","candidate drop -49 baseline drop -47",TRUE
+"objective_downward","3 invariance","constrained ML2S_ULS x0.01","candidate drop 1747 baseline drop 1736",FALSE
+"objective_downward","3 invariance","constrained ML2S_ULS x100","candidate drop 954 baseline drop 1653",TRUE
+"objective_downward","3 invariance","constrained ULS x0.01","candidate drop 1827 baseline drop 1827",TRUE
+"objective_downward","3 invariance","constrained ULS x100","candidate drop 984 baseline drop 1827",TRUE
+"objective_downward","3 invariance","constrained WLS x0.01","candidate drop 519 baseline drop 376",FALSE
+"objective_downward","3 invariance","constrained WLS x100","candidate drop 4 baseline drop 0",FALSE
+"objective_downward","3 invariance","engineering15 DWLS mixed","candidate drop 260 baseline drop 270",TRUE
+"objective_downward","3 invariance","engineering15 DWLS x0.01","candidate drop 114 baseline drop 140",TRUE
+"objective_downward","3 invariance","engineering15 DWLS x100","candidate drop 1 baseline drop 0",FALSE
+"objective_downward","3 invariance","engineering15 ML2S_ADF mixed","candidate drop 123 baseline drop 123",TRUE
+"objective_downward","3 invariance","engineering15 ML2S_ADF x0.01","candidate drop 33 baseline drop 35",TRUE
+"objective_downward","3 invariance","engineering15 ML2S_ADF x100","candidate drop 1 baseline drop -1",FALSE
+"objective_downward","3 invariance","engineering15 ML2S_DWLS mixed","candidate drop 288 baseline drop 291",TRUE
+"objective_downward","3 invariance","engineering15 ML2S_DWLS x0.01","candidate drop 105 baseline drop 129",TRUE
+"objective_downward","3 invariance","engineering15 ML2S_DWLS x100","candidate drop -2 baseline drop -3",FALSE
+"objective_downward","3 invariance","engineering15 ML2S_ULS mixed","candidate drop 286 baseline drop 283",FALSE
+"objective_downward","3 invariance","engineering15 ML2S_ULS x0.01","candidate drop 286 baseline drop 283",FALSE
+"objective_downward","3 invariance","engineering15 ML2S_ULS x100","candidate drop 286 baseline drop 283",FALSE
+"objective_downward","3 invariance","engineering15 ULS mixed","candidate drop 292 baseline drop 289",FALSE
+"objective_downward","3 invariance","engineering15 ULS x0.01","candidate drop 292 baseline drop 289",FALSE
+"objective_downward","3 invariance","engineering15 ULS x100","candidate drop 292 baseline drop 289",FALSE
+"objective_downward","3 invariance","engineering15 WLS mixed","candidate drop 211 baseline drop 213",TRUE
+"objective_downward","3 invariance","engineering15 WLS x0.01","candidate drop 105 baseline drop 89",FALSE
+"objective_downward","3 invariance","engineering15 WLS x100","candidate drop 12 baseline drop 3",FALSE
+"objective_downward","3 invariance","research47 DWLS mixed","candidate drop 1033 baseline drop 1145",TRUE
+"objective_downward","3 invariance","research47 DWLS x0.01","candidate drop 1010 baseline drop 987",FALSE
+"objective_downward","3 invariance","research47 DWLS x100","candidate drop 0 baseline drop 0",TRUE
+"objective_downward","3 invariance","research47 ML2S_ADF mixed","candidate drop 1529 baseline drop 1674",TRUE
+"objective_downward","3 invariance","research47 ML2S_ADF x0.01","candidate drop 439 baseline drop 439",TRUE
+"objective_downward","3 invariance","research47 ML2S_ADF x100","candidate drop 26 baseline drop 27",TRUE
+"objective_downward","3 invariance","research47 ML2S_DWLS mixed","candidate drop 2566 baseline drop 2565",FALSE
+"objective_downward","3 invariance","research47 ML2S_DWLS x0.01","candidate drop 952 baseline drop 933",FALSE
+"objective_downward","3 invariance","research47 ML2S_DWLS x100","candidate drop 0 baseline drop 3",TRUE
+"objective_downward","3 invariance","research47 ML2S_ULS mixed","candidate drop 2569 baseline drop 2568",FALSE
+"objective_downward","3 invariance","research47 ML2S_ULS x0.01","candidate drop 2569 baseline drop 2568",FALSE
+"objective_downward","3 invariance","research47 ML2S_ULS x100","candidate drop 1398 baseline drop 2566",TRUE
+"objective_downward","3 invariance","research47 ULS mixed","candidate drop 2581 baseline drop 2581",TRUE
+"objective_downward","3 invariance","research47 ULS x0.01","candidate drop 2581 baseline drop 2581",TRUE
+"objective_downward","3 invariance","research47 ULS x100","candidate drop 1335 baseline drop 2581",TRUE
+"objective_downward","3 invariance","research47 WLS mixed","candidate drop 1140 baseline drop 1208",TRUE
+"objective_downward","3 invariance","research47 WLS x0.01","candidate drop 938 baseline drop 914",FALSE
+"objective_downward","3 invariance","research47 WLS x100","candidate drop 3 baseline drop 48",TRUE
+"objective_downward","3 invariance","wolf DWLS mixed","candidate drop 567 baseline drop 544",FALSE
+"objective_downward","3 invariance","wolf DWLS x0.01","candidate drop 2773 baseline drop 2426",FALSE
+"objective_downward","3 invariance","wolf DWLS x100","candidate drop 3 baseline drop 3",TRUE
+"objective_downward","3 invariance","wolf ML2S_ADF mixed","candidate drop 1316 baseline drop 1336",TRUE
+"objective_downward","3 invariance","wolf ML2S_ADF x0.01","candidate drop 428 baseline drop 429",TRUE
+"objective_downward","3 invariance","wolf ML2S_ADF x100","candidate drop -5 baseline drop 1",TRUE
+"objective_downward","3 invariance","wolf ML2S_DWLS mixed","candidate drop 2809 baseline drop 2808",FALSE
+"objective_downward","3 invariance","wolf ML2S_DWLS x0.01","candidate drop 2049 baseline drop 1827",FALSE
+"objective_downward","3 invariance","wolf ML2S_DWLS x100","candidate drop -65 baseline drop -56",TRUE
+"objective_downward","3 invariance","wolf ML2S_ULS mixed","candidate drop 3191 baseline drop 3196",TRUE
+"objective_downward","3 invariance","wolf ML2S_ULS x0.01","candidate drop 3191 baseline drop 3196",TRUE
+"objective_downward","3 invariance","wolf ML2S_ULS x100","candidate drop 2644 baseline drop 3044",TRUE
+"objective_downward","3 invariance","wolf ULS mixed","candidate drop 3471 baseline drop 3479",TRUE
+"objective_downward","3 invariance","wolf ULS x0.01","candidate drop 3471 baseline drop 3479",TRUE
+"objective_downward","3 invariance","wolf ULS x100","candidate drop 2856 baseline drop 3476",TRUE
+"objective_downward","3 invariance","wolf WLS mixed","candidate drop 403 baseline drop 363",FALSE
+"objective_downward","3 invariance","wolf WLS x0.01","candidate drop 563 baseline drop 519",FALSE
+"objective_downward","3 invariance","wolf WLS x100","candidate drop -11 baseline drop 5",TRUE
+"objective","1 primary and 2 best known","boomsma DWLS","wins 1027 losses 3720; best wins 1028 losses 3725",FALSE
+"objective","1 primary and 2 best known","boomsma ML2S_ADF","wins 129 losses 1236; best wins 130 losses 1239",FALSE
+"objective","1 primary and 2 best known","boomsma ML2S_DWLS","wins 1002 losses 2226; best wins 1005 losses 2226",FALSE
+"objective","1 primary and 2 best known","boomsma ML2S_ULS","wins 29 losses 17; best wins 33 losses 22",TRUE
+"objective","1 primary and 2 best known","boomsma ULS","wins 24 losses 12; best wins 28 losses 12",TRUE
+"objective","1 primary and 2 best known","boomsma WLS","wins 200 losses 2771; best wins 219 losses 2795",FALSE
+"objective","1 primary and 2 best known","chen DWLS","wins 44 losses 1166; best wins 44 losses 1166",FALSE
+"objective","1 primary and 2 best known","chen ML2S_ADF","wins 57 losses 714; best wins 59 losses 715",FALSE
+"objective","1 primary and 2 best known","chen ML2S_DWLS","wins 42 losses 1128; best wins 42 losses 1128",FALSE
+"objective","1 primary and 2 best known","chen ML2S_ULS","wins 13 losses 107; best wins 13 losses 107",FALSE
+"objective","1 primary and 2 best known","chen ULS","wins 15 losses 90; best wins 15 losses 91",FALSE
+"objective","1 primary and 2 best known","chen WLS","wins 59 losses 694; best wins 62 losses 689",FALSE
+"objective","1 primary and 2 best known","constrained DWLS","wins 490 losses 1233; best wins 510 losses 1231",FALSE
+"objective","1 primary and 2 best known","constrained ML2S_ADF","wins 51 losses 668; best wins 64 losses 692",FALSE
+"objective","1 primary and 2 best known","constrained ML2S_DWLS","wins 465 losses 1112; best wins 481 losses 1104",FALSE
+"objective","1 primary and 2 best known","constrained ML2S_ULS","wins 1184 losses 91; best wins 1188 losses 96",TRUE
+"objective","1 primary and 2 best known","constrained ULS","wins 1261 losses 1; best wins 1262 losses 2",TRUE
+"objective","1 primary and 2 best known","constrained WLS","wins 96 losses 687; best wins 118 losses 708",FALSE
+"objective","1 primary and 2 best known","engineering15 DWLS","wins 41 losses 347; best wins 42 losses 346",FALSE
+"objective","1 primary and 2 best known","engineering15 ML2S_ADF","wins 18 losses 138; best wins 18 losses 140",FALSE
+"objective","1 primary and 2 best known","engineering15 ML2S_DWLS","wins 47 losses 305; best wins 50 losses 305",FALSE
+"objective","1 primary and 2 best known","engineering15 ML2S_ULS","wins 30 losses 6; best wins 31 losses 5",TRUE
+"objective","1 primary and 2 best known","engineering15 ULS","wins 49 losses 3; best wins 49 losses 3",TRUE
+"objective","1 primary and 2 best known","engineering15 WLS","wins 48 losses 268; best wins 50 losses 273",FALSE
+"objective","1 primary and 2 best known","research47 DWLS","wins 779 losses 4054; best wins 778 losses 4054",FALSE
+"objective","1 primary and 2 best known","research47 ML2S_ADF","wins 351 losses 2260; best wins 356 losses 2282",FALSE
+"objective","1 primary and 2 best known","research47 ML2S_DWLS","wins 727 losses 2632; best wins 727 losses 2632",FALSE
+"objective","1 primary and 2 best known","research47 ML2S_ULS","wins 274 losses 12; best wins 274 losses 12",TRUE
+"objective","1 primary and 2 best known","research47 ULS","wins 250 losses 10; best wins 250 losses 10",TRUE
+"objective","1 primary and 2 best known","research47 WLS","wins 419 losses 4017; best wins 446 losses 4079",FALSE
+"objective","1 primary and 2 best known","wolf DWLS","wins 1196 losses 6515; best wins 1199 losses 6517",FALSE
+"objective","1 primary and 2 best known","wolf ML2S_ADF","wins 108 losses 1503; best wins 121 losses 1525",FALSE
+"objective","1 primary and 2 best known","wolf ML2S_DWLS","wins 1164 losses 2965; best wins 1168 losses 2968",FALSE
+"objective","1 primary and 2 best known","wolf ML2S_ULS","wins 54 losses 167; best wins 59 losses 167",FALSE
+"objective","1 primary and 2 best known","wolf ULS","wins 43 losses 14; best wins 46 losses 15",TRUE
+"objective","1 primary and 2 best known","wolf WLS","wins 177 losses 3226; best wins 202 losses 3228",FALSE
+"objective","3 invariance","boomsma DWLS mixed","candidate drop 2209 baseline drop 733",FALSE
+"objective","3 invariance","boomsma DWLS x0.01","candidate drop 670 baseline drop 1648",TRUE
+"objective","3 invariance","boomsma DWLS x100","candidate drop 2209 baseline drop -2",FALSE
+"objective","3 invariance","boomsma ML2S_ADF mixed","candidate drop 1072 baseline drop 1111",TRUE
+"objective","3 invariance","boomsma ML2S_ADF x0.01","candidate drop 312 baseline drop 393",TRUE
+"objective","3 invariance","boomsma ML2S_ADF x100","candidate drop 1072 baseline drop 1",FALSE
+"objective","3 invariance","boomsma ML2S_DWLS mixed","candidate drop 2177 baseline drop 2170",FALSE
+"objective","3 invariance","boomsma ML2S_DWLS x0.01","candidate drop 717 baseline drop 1650",TRUE
+"objective","3 invariance","boomsma ML2S_DWLS x100","candidate drop 2177 baseline drop -1",FALSE
+"objective","3 invariance","boomsma ML2S_ULS mixed","candidate drop 2167 baseline drop 2166",FALSE
+"objective","3 invariance","boomsma ML2S_ULS x0.01","candidate drop 2155 baseline drop 2166",TRUE
+"objective","3 invariance","boomsma ML2S_ULS x100","candidate drop 2167 baseline drop 2165",FALSE
+"objective","3 invariance","boomsma ULS mixed","candidate drop 2203 baseline drop 2200",FALSE
+"objective","3 invariance","boomsma ULS x0.01","candidate drop 2194 baseline drop 2200",TRUE
+"objective","3 invariance","boomsma ULS x100","candidate drop 2203 baseline drop 2200",FALSE
+"objective","3 invariance","boomsma WLS mixed","candidate drop 1402 baseline drop 650",FALSE
+"objective","3 invariance","boomsma WLS x0.01","candidate drop 444 baseline drop 652",TRUE
+"objective","3 invariance","boomsma WLS x100","candidate drop 1402 baseline drop -1",FALSE
+"objective","3 invariance","chen DWLS mixed","candidate drop 739 baseline drop 762",TRUE
+"objective","3 invariance","chen DWLS x0.01","candidate drop 519 baseline drop 344",FALSE
+"objective","3 invariance","chen DWLS x100","candidate drop 739 baseline drop -3",FALSE
+"objective","3 invariance","chen ML2S_ADF mixed","candidate drop 19 baseline drop 353",TRUE
+"objective","3 invariance","chen ML2S_ADF x0.01","candidate drop -317 baseline drop 34",TRUE
+"objective","3 invariance","chen ML2S_ADF x100","candidate drop 19 baseline drop 13",FALSE
+"objective","3 invariance","chen ML2S_DWLS mixed","candidate drop 736 baseline drop 791",TRUE
+"objective","3 invariance","chen ML2S_DWLS x0.01","candidate drop 521 baseline drop 336",FALSE
+"objective","3 invariance","chen ML2S_DWLS x100","candidate drop 736 baseline drop 0",FALSE
+"objective","3 invariance","chen ML2S_ULS mixed","candidate drop 685 baseline drop 789",TRUE
+"objective","3 invariance","chen ML2S_ULS x0.01","candidate drop 675 baseline drop 789",TRUE
+"objective","3 invariance","chen ML2S_ULS x100","candidate drop 685 baseline drop 789",TRUE
+"objective","3 invariance","chen ULS mixed","candidate drop 709 baseline drop 799",TRUE
+"objective","3 invariance","chen ULS x0.01","candidate drop 694 baseline drop 799",TRUE
+"objective","3 invariance","chen ULS x100","candidate drop 709 baseline drop 799",TRUE
+"objective","3 invariance","chen WLS mixed","candidate drop 22 baseline drop 350",TRUE
+"objective","3 invariance","chen WLS x0.01","candidate drop -336 baseline drop 26",TRUE
+"objective","3 invariance","chen WLS x100","candidate drop 22 baseline drop 17",FALSE
+"objective","3 invariance","constrained DWLS x0.01","candidate drop 651 baseline drop 1011",TRUE
+"objective","3 invariance","constrained DWLS x100","candidate drop 1113 baseline drop 1",FALSE
+"objective","3 invariance","constrained ML2S_ADF x0.01","candidate drop 492 baseline drop 523",TRUE
+"objective","3 invariance","constrained ML2S_ADF x100","candidate drop 519 baseline drop -3",FALSE
+"objective","3 invariance","constrained ML2S_DWLS x0.01","candidate drop 676 baseline drop 924",TRUE
+"objective","3 invariance","constrained ML2S_DWLS x100","candidate drop 1025 baseline drop -47",FALSE
+"objective","3 invariance","constrained ML2S_ULS x0.01","candidate drop 1226 baseline drop 1736",TRUE
+"objective","3 invariance","constrained ML2S_ULS x100","candidate drop 1094 baseline drop 1653",TRUE
+"objective","3 invariance","constrained ULS x0.01","candidate drop 1261 baseline drop 1827",TRUE
+"objective","3 invariance","constrained ULS x100","candidate drop 1148 baseline drop 1827",TRUE
+"objective","3 invariance","constrained WLS x0.01","candidate drop 366 baseline drop 376",TRUE
+"objective","3 invariance","constrained WLS x100","candidate drop 544 baseline drop 0",FALSE
+"objective","3 invariance","engineering15 DWLS mixed","candidate drop 307 baseline drop 270",FALSE
+"objective","3 invariance","engineering15 DWLS x0.01","candidate drop 114 baseline drop 140",TRUE
+"objective","3 invariance","engineering15 DWLS x100","candidate drop 307 baseline drop 0",FALSE
+"objective","3 invariance","engineering15 ML2S_ADF mixed","candidate drop 125 baseline drop 123",FALSE
+"objective","3 invariance","engineering15 ML2S_ADF x0.01","candidate drop 35 baseline drop 35",TRUE
+"objective","3 invariance","engineering15 ML2S_ADF x100","candidate drop 125 baseline drop -1",FALSE
+"objective","3 invariance","engineering15 ML2S_DWLS mixed","candidate drop 296 baseline drop 291",FALSE
+"objective","3 invariance","engineering15 ML2S_DWLS x0.01","candidate drop 103 baseline drop 129",TRUE
+"objective","3 invariance","engineering15 ML2S_DWLS x100","candidate drop 296 baseline drop -3",FALSE
+"objective","3 invariance","engineering15 ML2S_ULS mixed","candidate drop 284 baseline drop 283",FALSE
+"objective","3 invariance","engineering15 ML2S_ULS x0.01","candidate drop 261 baseline drop 283",TRUE
+"objective","3 invariance","engineering15 ML2S_ULS x100","candidate drop 284 baseline drop 283",FALSE
+"objective","3 invariance","engineering15 ULS mixed","candidate drop 297 baseline drop 289",FALSE
+"objective","3 invariance","engineering15 ULS x0.01","candidate drop 259 baseline drop 289",TRUE
+"objective","3 invariance","engineering15 ULS x100","candidate drop 297 baseline drop 289",FALSE
+"objective","3 invariance","engineering15 WLS mixed","candidate drop 209 baseline drop 213",TRUE
+"objective","3 invariance","engineering15 WLS x0.01","candidate drop 87 baseline drop 89",TRUE
+"objective","3 invariance","engineering15 WLS x100","candidate drop 209 baseline drop 3",FALSE
+"objective","3 invariance","research47 DWLS mixed","candidate drop 2569 baseline drop 1145",FALSE
+"objective","3 invariance","research47 DWLS x0.01","candidate drop 237 baseline drop 987",TRUE
+"objective","3 invariance","research47 DWLS x100","candidate drop 2569 baseline drop 0",FALSE
+"objective","3 invariance","research47 ML2S_ADF mixed","candidate drop 1180 baseline drop 1674",TRUE
+"objective","3 invariance","research47 ML2S_ADF x0.01","candidate drop -287 baseline drop 439",TRUE
+"objective","3 invariance","research47 ML2S_ADF x100","candidate drop 1180 baseline drop 27",FALSE
+"objective","3 invariance","research47 ML2S_DWLS mixed","candidate drop 2557 baseline drop 2565",TRUE
+"objective","3 invariance","research47 ML2S_DWLS x0.01","candidate drop 260 baseline drop 933",TRUE
+"objective","3 invariance","research47 ML2S_DWLS x100","candidate drop 2557 baseline drop 3",FALSE
+"objective","3 invariance","research47 ML2S_ULS mixed","candidate drop 2560 baseline drop 2568",TRUE
+"objective","3 invariance","research47 ML2S_ULS x0.01","candidate drop 2288 baseline drop 2568",TRUE
+"objective","3 invariance","research47 ML2S_ULS x100","candidate drop 2560 baseline drop 2566",TRUE
+"objective","3 invariance","research47 ULS mixed","candidate drop 2571 baseline drop 2581",TRUE
+"objective","3 invariance","research47 ULS x0.01","candidate drop 2321 baseline drop 2581",TRUE
+"objective","3 invariance","research47 ULS x100","candidate drop 2571 baseline drop 2581",TRUE
+"objective","3 invariance","research47 WLS mixed","candidate drop 1557 baseline drop 1208",FALSE
+"objective","3 invariance","research47 WLS x0.01","candidate drop 46 baseline drop 914",TRUE
+"objective","3 invariance","research47 WLS x100","candidate drop 1557 baseline drop 48",FALSE
+"objective","3 invariance","wolf DWLS mixed","candidate drop 3477 baseline drop 544",FALSE
+"objective","3 invariance","wolf DWLS x0.01","candidate drop 1358 baseline drop 2426",TRUE
+"objective","3 invariance","wolf DWLS x100","candidate drop 3477 baseline drop 3",FALSE
+"objective","3 invariance","wolf ML2S_ADF mixed","candidate drop 1266 baseline drop 1336",TRUE
+"objective","3 invariance","wolf ML2S_ADF x0.01","candidate drop 353 baseline drop 429",TRUE
+"objective","3 invariance","wolf ML2S_ADF x100","candidate drop 1262 baseline drop 1",FALSE
+"objective","3 invariance","wolf ML2S_DWLS mixed","candidate drop 3012 baseline drop 2808",FALSE
+"objective","3 invariance","wolf ML2S_DWLS x0.01","candidate drop 1173 baseline drop 1827",TRUE
+"objective","3 invariance","wolf ML2S_DWLS x100","candidate drop 3011 baseline drop -56",FALSE
+"objective","3 invariance","wolf ML2S_ULS mixed","candidate drop 3203 baseline drop 3196",FALSE
+"objective","3 invariance","wolf ML2S_ULS x0.01","candidate drop 3172 baseline drop 3196",TRUE
+"objective","3 invariance","wolf ML2S_ULS x100","candidate drop 3202 baseline drop 3044",FALSE
+"objective","3 invariance","wolf ULS mixed","candidate drop 3484 baseline drop 3479",FALSE
+"objective","3 invariance","wolf ULS x0.01","candidate drop 3457 baseline drop 3479",TRUE
+"objective","3 invariance","wolf ULS x100","candidate drop 3484 baseline drop 3476",FALSE
+"objective","3 invariance","wolf WLS mixed","candidate drop 1549 baseline drop 363",FALSE
+"objective","3 invariance","wolf WLS x0.01","candidate drop 346 baseline drop 519",TRUE
+"objective","3 invariance","wolf WLS x100","candidate drop 1549 baseline drop 5",FALSE
