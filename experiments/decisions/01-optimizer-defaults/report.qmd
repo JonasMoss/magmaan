@@ -82,7 +82,7 @@ For the latest normalization comparison, see the [executive summary](executive-s
 results (`a8d657cd`) apply the rule separately to every test family and
 estimator. Pooled counts do not decide eligibility: `objective_downward`
 certifies more ULS test fits (14,318 versus 11,178) and ML2S-ULS test fits
-(13,653 versus 10,976), with only 31 and 267 losses against the default,
+(13,653 versus 10,976), with only 30 and 266 losses against the default,
 respectively, yet fails the per-family invariance rule. Two-sided `objective`
 is clearly worse for the weighted estimators. For these held-out problems,
 the answer to whether enlarging units is safe is **no**.
@@ -165,10 +165,9 @@ Every loss is recorded in the local full `losses.csv`. The compact draw
 inventories `losses_<estimator>_<candidate>.csv` identify population, sample
 size, replication, transform and Newton status; the full attribution table
 stays local. The paired loss counts above come from the frozen `paired.csv`,
-which is the rule's counting source. Compact inventories may omit rows:
-for example, the ULS and ML2S-ULS downward inventories contain 30 and 266
-rows, respectively, versus 31 and 267 paired test losses. They should not
-be used to replace the paired counts.
+which is the rule's counting source; the compact inventories list exactly
+those losses (for example 30 and 266 rows for the ULS and ML2S-ULS downward
+candidates).
 
 This settles the tested continuous fixed-weight LS and ML2S Stage-2 choices;
 it does not establish a default for ordinal/mixed routes, ML, GLS or FIML.
