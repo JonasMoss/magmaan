@@ -33,6 +33,13 @@ Rcpp::List evaluate_mixed_ordinal_at_impl(Rcpp::List fit) {
 
 namespace {
 
+magmaan::estimate::frontier::PsdFactor psd_factor_from_string(const std::string& value) {
+  using Factor = magmaan::estimate::frontier::PsdFactor;
+  if (value == "triangular") return Factor::Triangular;
+  if (value == "square") return Factor::Square;
+  Rcpp::stop("psd_factor must be triangular or square");
+}
+
 std::string ordinal_stage2_label(const std::string& s);
 magmaan::data::PolychoricHScoreKind h_score_kind_from(std::string kind);
 magmaan::data::PairwiseOrdinalHWeightedStatsOptions
@@ -791,7 +798,8 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   const std::string parameterization_name =
       ordinal_parameterization_attr(partable);
   const auto parameterization =
@@ -822,6 +830,7 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
           ? magmaan::estimate::Backend::NloptSlsqp
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
   auto fit_or = magmaan::estimate::frontier::fit_ordinal_psd(
@@ -888,7 +897,8 @@ Rcpp::List fit_ml_ordinal_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   const std::string parameterization_name =
       ordinal_parameterization_attr(partable);
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
@@ -921,6 +931,7 @@ Rcpp::List fit_ml_ordinal_impl(
                  : magmaan::estimate::Backend::NloptLbfgs)
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
   auto fit_or = psd
@@ -1169,7 +1180,8 @@ Rcpp::List frontier_fit_mixed_ordinal_psd_impl(
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   const std::string parameterization_name =
       ordinal_parameterization_attr(partable);
   const auto parameterization =
@@ -1203,6 +1215,7 @@ Rcpp::List frontier_fit_mixed_ordinal_psd_impl(
           ? magmaan::estimate::Backend::NloptSlsqp
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
   auto fit_or = magmaan::estimate::frontier::fit_mixed_ordinal_psd(

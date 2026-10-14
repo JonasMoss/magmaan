@@ -14,6 +14,7 @@
 # Not a stable default estimator — currently used as a research
 # comparator in experiments / the pairwise-robust-sem paper.
 
+#' @param psd_factor Covariance factor: triangular (default) or square.
 estimate_two_stage_em_impl <- function(partable, raw_data,
                                        kind = c("ml", "gls"),
                                        h_step = 1e-4,
@@ -27,7 +28,9 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        covariance_policy = c("ordinary", "psd", "barrier"),
                                        barrier = NULL,
                                        start_eigen_floor = 1e-6,
-                                       feasibility_tol = 1e-6) {
+                                       feasibility_tol = 1e-6,
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   kind <- match.arg(kind)
   covariance_policy <- match.arg(covariance_policy)
   stage2_weight <- match.arg(stage2_weight,
@@ -93,17 +96,17 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   } else if (identical(covariance_policy, "psd") && weighted_stage2) {
     frontier_fit_wls_psd_impl(
       partable, sample_stats, W = W, optimizer = optimizer, control = control,
-      start_eigen_floor = start_eigen_floor,
+      psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol)
   } else if (identical(covariance_policy, "psd") && identical(kind, "ml")) {
     frontier_fit_ml_psd_impl(
       partable, sample_stats, optimizer = optimizer, control = control,
-      start_eigen_floor = start_eigen_floor,
+      psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol)
   } else if (identical(covariance_policy, "psd") && identical(kind, "gls")) {
     frontier_fit_gls_psd_impl(
       partable, sample_stats, optimizer = optimizer, control = control,
-      start_eigen_floor = start_eigen_floor,
+      psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol)
   } else if (weighted_stage2) {
     fit_wls_impl(partable, sample_stats, W = W, optimizer = optimizer,

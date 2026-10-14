@@ -4,13 +4,13 @@
 \description{Fits in sphere coordinates with an explicit metric and pinning penalty, then optionally polishes in ordinary parameter coordinates. Inference remains a separate operation.}
 \usage{
 frontier_fit_sphere(model, data, estimator = "ML", groups = NULL, ..., cluster = NULL, ordered = NULL,
-    parameterization = "delta", psd = FALSE, missing = c("listwise", "error"), W = NULL,
-    optimizer = NULL, control = NULL, bounds = NULL, metric = c("unit_free", "raw"),
-    pin_weight = 1, pole_tol = 1e-06, polish = TRUE, start = c("canonical", "user"),
-    start_eigen_floor = 1e-06, feasibility_tol = 1e-06, preconditioning = c("none",
-        "diagonal"))
+    parameterization = "delta", psd = FALSE, missing = c("listwise", "error"), W = NULL, optimizer = NULL,
+    control = NULL, bounds = NULL, metric = c("unit_free", "raw"), pin_weight = 1, pole_tol = 1e-06,
+    polish = TRUE, start = c("canonical", "user"), start_eigen_floor = 1e-06, feasibility_tol = 1e-06,
+    preconditioning = c("none", "diagonal"), psd_factor = c("triangular", "square"))
 }
 \arguments{
+\item{psd_factor}{Covariance factor: triangular (default) or square.}
 \item{model}{Model syntax or a model specification; prepared objects are accepted only by their corresponding interfaces.}
 \item{data}{Observed data frame, named matrix or sample-moment list compatible with the model. FIML requires raw observations.}
 \item{estimator}{Estimation objective. Supported objectives depend on the data kind and fitting route.}

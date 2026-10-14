@@ -1448,13 +1448,16 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
 
 # Frontier ML over PSD primitive LISREL covariance matrices.
 # The returned fit retains the ordinary partable parameterization; the
-# Cholesky factors used by the optimizer are intentionally not exposed as
+# Covariance factors used by the optimizer are intentionally not exposed as
 # model parameters.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_ml_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
     missing = c("listwise", "error"),
-    preconditioning = c("diagonal", "none")) {
+    preconditioning = c("diagonal", "none"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   preconditioning <- match.arg(preconditioning)
   if (is.character(model) && length(model) == 1L) {
@@ -1465,14 +1468,14 @@ frontier_fit_ml_psd <- function(
     fit <- .retain_deletion(fit_ml_ordinal_impl(
       augment_ordinal_partable(model, data), data, psd = TRUE,
       optimizer = optimizer, control = control,
-      start_eigen_floor = start_eigen_floor, feasibility_tol = feasibility_tol), data)
+      psd_factor = psd_factor, start_eigen_floor = start_eigen_floor, feasibility_tol = feasibility_tol), data)
     return(.finish_frontier_fit(fit, model, "ML", "frontier_fit_ml_psd",
                                .route_args(environment(), sys.function()), missing))
   }
   fit <- frontier_fit_ml_psd_impl(
     partable_arg(model), sample_stats_arg(data),
     optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol,
     diagonal_preconditioning = identical(preconditioning, "diagonal")
   )
@@ -1483,11 +1486,14 @@ frontier_fit_ml_psd <- function(
 # Explicit ordinary-first PSD recovery; selection and warm-start policy live in C++.
 # fit is NULL unless an attempt passes both accuracy and admissibility checks.
 # Both attempts retain their fit or structured error, even when recovery fails.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_ml_psd_fallback <- function(
     model, data, ordinary_optimizer = "nlopt-lbfgs",
     psd_optimizer = "nlopt-slsqp", ordinary_control = NULL, psd_control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error"), preconditioning = c("diagonal", "none")) {
+    missing = c("listwise", "error"), preconditioning = c("diagonal", "none"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   preconditioning <- match.arg(preconditioning)
   if (is.character(model) && length(model) == 1L) model <- model_spec(model)
@@ -1495,7 +1501,7 @@ frontier_fit_ml_psd_fallback <- function(
   out <- frontier_fit_ml_psd_fallback_impl(
     partable_arg(model), sample_stats_arg(data), ordinary_optimizer, psd_optimizer,
     ordinary_control, psd_control, start_eigen_floor, feasibility_tol,
-    identical(preconditioning, "diagonal"))
+    identical(preconditioning, "diagonal"), psd_factor = psd_factor)
   args <- .route_args(environment(), sys.function())
   # Each attempt is a first-class fit; the returned fit refits through the
   # whole fallback, since the route that produced it depends on the data.
@@ -1581,6 +1587,7 @@ frontier_fit_ml_multiinfo <- function(
 # `control$verified_newton = TRUE` selects construction-aware native terminal
 # assessment for covariance-only, unboxed ULS/ML. Missing bounds give NA.
 # The gauge retains the compatibility assessment and original objective checks.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 ..., cluster = NULL, ordered = NULL,
                                 parameterization = "delta", psd = FALSE,
@@ -1593,7 +1600,9 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
                                 start = c("canonical", "user"),
                                 start_eigen_floor = 1e-6,
                                 feasibility_tol = 1e-6,
-                                preconditioning = c("none", "diagonal")) {
+                                preconditioning = c("none", "diagonal"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   metric <- match.arg(metric)
   start <- match.arg(start)
@@ -1654,7 +1663,7 @@ frontier_fit_sphere <- function(model, data, estimator = "ML", groups = NULL,
       partable_arg(spec), sample_stats_arg(data), estimator = estimator,
       psd = isTRUE(psd), W = W, optimizer = optimizer, control = control,
       bounds = b, metric = metric, pin_weight = pin_weight,
-      pole_tol = pole_tol, start_eigen_floor = start_eigen_floor,
+      pole_tol = pole_tol, psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
       feasibility_tol = feasibility_tol,
       diagonal_preconditioning = identical(preconditioning, "diagonal"),
       polish = isTRUE(polish), start = start)
@@ -1745,10 +1754,13 @@ frontier_reidentify <- function(fit, model, ..., pole_tol = 1e-6) {
 }
 
 # Frontier continuous ULS over PSD primitive LISREL covariance matrices.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_uls_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error")) {
+    missing = c("listwise", "error"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model)
@@ -1757,7 +1769,7 @@ frontier_fit_uls_psd <- function(
   fit <- frontier_fit_uls_psd_impl(
     partable_arg(model), sample_stats_arg(data),
     optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   fit <- attach_complete_raw_data(fit, data)
@@ -1765,10 +1777,13 @@ frontier_fit_uls_psd <- function(
 }
 
 # Frontier normal-theory GLS over PSD primitive LISREL covariance matrices.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_gls_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error")) {
+    missing = c("listwise", "error"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model)
@@ -1777,7 +1792,7 @@ frontier_fit_gls_psd <- function(
   fit <- frontier_fit_gls_psd_impl(
     partable_arg(model), sample_stats_arg(data),
     optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   fit <- attach_complete_raw_data(fit, data)
@@ -1785,10 +1800,13 @@ frontier_fit_gls_psd <- function(
 }
 
 # Frontier caller-fixed WLS/ADF over PSD primitive LISREL covariance matrices.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_wls_psd <- function(
     model, data, W, optimizer = "nlopt-slsqp", control = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
-    missing = c("listwise", "error")) {
+    missing = c("listwise", "error"),
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   missing <- match.arg(missing)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model)
@@ -1797,7 +1815,7 @@ frontier_fit_wls_psd <- function(
   fit <- frontier_fit_wls_psd_impl(
     partable_arg(model), sample_stats_arg(data), W = W,
     optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   fit <- attach_complete_raw_data(fit, data)
@@ -1970,9 +1988,12 @@ fit_fiml <- function(model, data,
 # Frontier raw-data FIML over PSD primitive LISREL covariance matrices.
 # Inference for boundary solutions is intentionally outside this estimator's
 # current validation contract.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_fiml_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model, meanstructure = TRUE)
   } else if (inherits(model, "magmaan_model_spec") &&
@@ -1986,7 +2007,7 @@ frontier_fit_fiml_psd <- function(
   fit <- frontier_fit_fiml_psd_impl(
     partable_arg(model), fiml_data_arg(data),
     optimizer = optimizer, control = control,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   .finish_frontier_fit(.retain_deletion(fit, data), model, "FIML", "frontier_fit_fiml_psd", .route_args(environment(), sys.function()))
@@ -2036,11 +2057,14 @@ fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
 # Frontier ML2S point estimation with PSD primitive LISREL covariance blocks.
 # Stage-1 saturated EM moments and any caller-supplied regularization are
 # retained exactly. Boundary-aware inference is intentionally not automatic.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_ml2s_psd <- function(
     model, data, optimizer = "nlopt-slsqp", control = NULL,
     h_step = 1e-4, stage1 = NULL, stage1_regularization = NULL,
     stage2_weight = "nt", dls_a = 0.5,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   if (is.character(model) && length(model) == 1L) {
     model <- model_spec(model, meanstructure = TRUE)
   } else if (inherits(model, "magmaan_model_spec") &&
@@ -2056,7 +2080,7 @@ frontier_fit_ml2s_psd <- function(
     optimizer = optimizer, control = control, stage1 = stage1,
     stage1_regularization = stage1_regularization,
     stage2_weight = stage2_weight, dls_a = dls_a,
-    covariance_policy = "psd", start_eigen_floor = start_eigen_floor,
+    covariance_policy = "psd", psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
   .finish_frontier_fit(.retain_deletion(fit, data), model, "ML2S", "frontier_fit_ml2s_psd", .route_args(environment(), sys.function()))
@@ -2390,10 +2414,13 @@ fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 # Frontier all-ordinal ULS/DWLS/WLS over PSD primitive LISREL covariance
 # matrices. The supplied polychorics and ordinal weights are retained exactly;
 # the PSD policy applies only to the fitted model covariance blocks.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_ordinal_psd <- function(
     model, data, estimator = c("DWLS", "WLS", "ULS"),
     optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   estimator <- match.arg(toupper(as.character(estimator)[1L]),
                          c("DWLS", "WLS", "ULS"))
   pt <- augment_ordinal_partable(model, data)
@@ -2401,7 +2428,7 @@ frontier_fit_ordinal_psd <- function(
   fit <- frontier_fit_ordinal_psd_impl(
     pt, data, estimator = estimator, optimizer = optimizer,
     control = control, bounds = b,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   .finish_frontier_fit(.retain_deletion(fit, data), if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_ordinal_psd", .route_args(environment(), sys.function()))
@@ -2468,10 +2495,13 @@ fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 # Frontier mixed continuous/ordinal ULS/DWLS/WLS over PSD primitive LISREL
 # covariance matrices. The supplied thresholds, continuous moments,
 # polyserial/polychoric associations, and fixed weights are retained exactly.
+#' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_mixed_ordinal_psd <- function(
     model, data, estimator = c("DWLS", "WLS", "ULS"),
     optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
-    start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
+    start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
+    psd_factor = c("triangular", "square")) {
+  psd_factor <- match.arg(psd_factor)
   estimator <- match.arg(toupper(as.character(estimator)[1L]),
                          c("DWLS", "WLS", "ULS"))
   pt <- augment_mixed_ordinal_partable(model, data)
@@ -2479,7 +2509,7 @@ frontier_fit_mixed_ordinal_psd <- function(
   fit <- frontier_fit_mixed_ordinal_psd_impl(
     pt, data, estimator = estimator, optimizer = optimizer,
     control = control, bounds = b,
-    start_eigen_floor = start_eigen_floor,
+    psd_factor = psd_factor, start_eigen_floor = start_eigen_floor,
     feasibility_tol = feasibility_tol
   )
   .finish_frontier_fit(.retain_deletion(fit, data), if (inherits(model, "magmaan_model_spec")) model else NULL, estimator, "frontier_fit_mixed_ordinal_psd", .route_args(environment(), sys.function()))

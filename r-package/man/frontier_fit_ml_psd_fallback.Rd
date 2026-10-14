@@ -7,15 +7,12 @@ both the common fit verdict and covariance admissibility pass. Otherwise
 tries PSD-constrained ML once. The selection policy is implemented in C++.
 }
 \usage{
-frontier_fit_ml_psd_fallback(
-  model, data, ordinary_optimizer = "nlopt-lbfgs",
-  psd_optimizer = "nlopt-slsqp", ordinary_control = NULL,
-  psd_control = NULL, start_eigen_floor = 1e-6,
-  feasibility_tol = 1e-6, missing = c("listwise", "error"),
-  preconditioning = c("diagonal", "none")
-)
+frontier_fit_ml_psd_fallback(model, data, ordinary_optimizer = "nlopt-lbfgs", psd_optimizer = "nlopt-slsqp", ordinary_control = NULL,
+    psd_control = NULL, start_eigen_floor = 1e-06, feasibility_tol = 1e-06, missing = c("listwise",
+        "error"), preconditioning = c("diagonal", "none"), psd_factor = c("triangular", "square"))
 }
 \arguments{
+\item{psd_factor}{Covariance factor: triangular (default) or square.}
   \item{model}{A model specification or model syntax string.}
   \item{data}{Sample statistics or a raw data frame.}
   \item{ordinary_optimizer}{Ordinary ML optimizer; defaults to NLopt L-BFGS.}

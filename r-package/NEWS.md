@@ -1,5 +1,9 @@
 # magmaanlab (development)
 
+- Frontier PSD fitters accept `psd_factor = "square"` for full square covariance
+  factors. Triangular factors remain the default; projected start covariances
+  and endpoint audit rules are unchanged.
+
 - Complete-data endpoint audits now support simple equality-constrained std.lv
   charts, including loading and latent-mean ties across factors or groups.
   Released marker ties preserve the constrained model dimension. Automatic

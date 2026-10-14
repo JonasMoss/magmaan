@@ -432,8 +432,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_ml_psd_impl
-Rcpp::List frontier_fit_ml_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning);
-RcppExport SEXP _magmaanlab_frontier_fit_ml_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP) {
+Rcpp::List frontier_fit_ml_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_ml_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -444,13 +444,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
     Rcpp::traits::input_parameter< bool >::type diagonal_preconditioning(diagonal_preconditioningSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
 // frontier_fit_ml_psd_fallback_impl
-Rcpp::List frontier_fit_ml_psd_fallback_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> ordinary_optimizer, Rcpp::Nullable<Rcpp::String> psd_optimizer, Rcpp::Nullable<Rcpp::List> ordinary_control, Rcpp::Nullable<Rcpp::List> psd_control, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning);
-RcppExport SEXP _magmaanlab_frontier_fit_ml_psd_fallback_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ordinary_optimizerSEXP, SEXP psd_optimizerSEXP, SEXP ordinary_controlSEXP, SEXP psd_controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP) {
+Rcpp::List frontier_fit_ml_psd_fallback_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> ordinary_optimizer, Rcpp::Nullable<Rcpp::String> psd_optimizer, Rcpp::Nullable<Rcpp::List> ordinary_control, Rcpp::Nullable<Rcpp::List> psd_control, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_ml_psd_fallback_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ordinary_optimizerSEXP, SEXP psd_optimizerSEXP, SEXP ordinary_controlSEXP, SEXP psd_controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -463,13 +464,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
     Rcpp::traits::input_parameter< bool >::type diagonal_preconditioning(diagonal_preconditioningSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_fallback_impl(partable, sample_stats, ordinary_optimizer, psd_optimizer, ordinary_control, psd_control, start_eigen_floor, feasibility_tol, diagonal_preconditioning));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_psd_fallback_impl(partable, sample_stats, ordinary_optimizer, psd_optimizer, ordinary_control, psd_control, start_eigen_floor, feasibility_tol, diagonal_preconditioning, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
 // frontier_fit_sphere_impl
-Rcpp::List frontier_fit_sphere_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, bool psd, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string metric, double pin_weight, double pole_tol, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, bool polish, std::string start);
-RcppExport SEXP _magmaanlab_frontier_fit_sphere_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP psdSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP polishSEXP, SEXP startSEXP) {
+Rcpp::List frontier_fit_sphere_impl(SEXP partable, Rcpp::List sample_stats, std::string estimator, bool psd, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, std::string metric, double pin_weight, double pole_tol, double start_eigen_floor, double feasibility_tol, bool diagonal_preconditioning, bool polish, std::string start, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_sphere_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP estimatorSEXP, SEXP psdSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP metricSEXP, SEXP pin_weightSEXP, SEXP pole_tolSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP diagonal_preconditioningSEXP, SEXP polishSEXP, SEXP startSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -489,7 +491,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type diagonal_preconditioning(diagonal_preconditioningSEXP);
     Rcpp::traits::input_parameter< bool >::type polish(polishSEXP);
     Rcpp::traits::input_parameter< std::string >::type start(startSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_sphere_impl(partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_sphere_impl(partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -544,8 +547,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_uls_psd_impl
-Rcpp::List frontier_fit_uls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_uls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_uls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_uls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -555,13 +558,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_uls_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_uls_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
 // frontier_fit_gls_psd_impl
-Rcpp::List frontier_fit_gls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_gls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_gls_psd_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_gls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -571,13 +575,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_gls_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_gls_psd_impl(partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
 // frontier_fit_wls_psd_impl
-Rcpp::List frontier_fit_wls_psd_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_wls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_wls_psd_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_wls_psd_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -588,7 +593,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_wls_psd_impl(partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_wls_psd_impl(partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1309,8 +1315,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_fiml_psd_impl
-Rcpp::List frontier_fit_fiml_psd_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_fiml_psd_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_fiml_psd_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_fiml_psd_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1320,7 +1326,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_psd_impl(partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_fiml_psd_impl(partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1979,8 +1986,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_ordinal_psd_impl
-Rcpp::List frontier_fit_ordinal_psd_impl(SEXP partable, Rcpp::List ordinal_stats, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_ordinal_psd_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_ordinal_psd_impl(SEXP partable, Rcpp::List ordinal_stats, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_ordinal_psd_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1992,7 +1999,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_ordinal_psd_impl(partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ordinal_psd_impl(partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2014,8 +2022,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_ml_ordinal_impl
-Rcpp::List fit_ml_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, bool psd, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_fit_ml_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP psdSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List fit_ml_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, bool psd, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_fit_ml_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP psdSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2026,7 +2034,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_ml_ordinal_impl(partable, ordinal_stats, psd, optimizer, control, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ml_ordinal_impl(partable, ordinal_stats, psd, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2095,8 +2104,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // frontier_fit_mixed_ordinal_psd_impl
-Rcpp::List frontier_fit_mixed_ordinal_psd_impl(SEXP partable, Rcpp::List mixed_stats, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double start_eigen_floor, double feasibility_tol);
-RcppExport SEXP _magmaanlab_frontier_fit_mixed_ordinal_psd_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP) {
+Rcpp::List frontier_fit_mixed_ordinal_psd_impl(SEXP partable, Rcpp::List mixed_stats, std::string estimator, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, double start_eigen_floor, double feasibility_tol, std::string psd_factor);
+RcppExport SEXP _magmaanlab_frontier_fit_mixed_ordinal_psd_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP estimatorSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP start_eigen_floorSEXP, SEXP feasibility_tolSEXP, SEXP psd_factorSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2108,7 +2117,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
     Rcpp::traits::input_parameter< double >::type start_eigen_floor(start_eigen_floorSEXP);
     Rcpp::traits::input_parameter< double >::type feasibility_tol(feasibility_tolSEXP);
-    rcpp_result_gen = Rcpp::wrap(frontier_fit_mixed_ordinal_psd_impl(partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol));
+    Rcpp::traits::input_parameter< std::string >::type psd_factor(psd_factorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_mixed_ordinal_psd_impl(partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol, psd_factor));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4794,15 +4804,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_wls_snlls_impl", (DL_FUNC) &_magmaanlab_fit_wls_snlls_impl, 6},
     {"_magmaanlab_fit_start_values", (DL_FUNC) &_magmaanlab_fit_start_values, 4},
     {"_magmaanlab_fit_coordinate_map", (DL_FUNC) &_magmaanlab_fit_coordinate_map, 5},
-    {"_magmaanlab_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_psd_impl, 7},
-    {"_magmaanlab_frontier_fit_ml_psd_fallback_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_psd_fallback_impl, 9},
-    {"_magmaanlab_frontier_fit_sphere_impl", (DL_FUNC) &_magmaanlab_frontier_fit_sphere_impl, 16},
+    {"_magmaanlab_frontier_fit_ml_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_psd_impl, 8},
+    {"_magmaanlab_frontier_fit_ml_psd_fallback_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_psd_fallback_impl, 10},
+    {"_magmaanlab_frontier_fit_sphere_impl", (DL_FUNC) &_magmaanlab_frontier_fit_sphere_impl, 17},
     {"_magmaanlab_frontier_fit_fiml_sphere_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_sphere_impl, 9},
     {"_magmaanlab_frontier_reidentify_impl", (DL_FUNC) &_magmaanlab_frontier_reidentify_impl, 3},
     {"_magmaanlab_frontier_fit_ml_multiinfo_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ml_multiinfo_impl, 8},
-    {"_magmaanlab_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_uls_psd_impl, 6},
-    {"_magmaanlab_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_gls_psd_impl, 6},
-    {"_magmaanlab_frontier_fit_wls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_wls_psd_impl, 7},
+    {"_magmaanlab_frontier_fit_uls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_uls_psd_impl, 7},
+    {"_magmaanlab_frontier_fit_gls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_gls_psd_impl, 7},
+    {"_magmaanlab_frontier_fit_wls_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_wls_psd_impl, 8},
     {"_magmaanlab_frontier_sam_impl", (DL_FUNC) &_magmaanlab_frontier_sam_impl, 13},
     {"_magmaanlab_frontier_rbm_impl", (DL_FUNC) &_magmaanlab_frontier_rbm_impl, 10},
     {"_magmaanlab_fcsem_model_spec_impl", (DL_FUNC) &_magmaanlab_fcsem_model_spec_impl, 1},
@@ -4856,7 +4866,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_measures_factor_scores", (DL_FUNC) &_magmaanlab_measures_factor_scores, 3},
     {"_magmaanlab_measures_factor_score_precision", (DL_FUNC) &_magmaanlab_measures_factor_score_precision, 2},
     {"_magmaanlab_fit_fiml_impl", (DL_FUNC) &_magmaanlab_fit_fiml_impl, 4},
-    {"_magmaanlab_frontier_fit_fiml_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_psd_impl, 6},
+    {"_magmaanlab_frontier_fit_fiml_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_psd_impl, 7},
     {"_magmaanlab_frontier_fit_fiml_multiinfo_impl", (DL_FUNC) &_magmaanlab_frontier_fit_fiml_multiinfo_impl, 8},
     {"_magmaanlab_saturated_em_moments_impl", (DL_FUNC) &_magmaanlab_saturated_em_moments_impl, 3},
     {"_magmaanlab_regularize_saturated_stage1_impl", (DL_FUNC) &_magmaanlab_regularize_saturated_stage1_impl, 2},
@@ -4902,14 +4912,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_dwls_ordinal_impl, 5},
     {"_magmaanlab_fit_uls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_uls_ordinal_impl, 5},
     {"_magmaanlab_fit_wls_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_ordinal_impl, 5},
-    {"_magmaanlab_frontier_fit_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ordinal_psd_impl, 8},
+    {"_magmaanlab_frontier_fit_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_ordinal_psd_impl, 9},
     {"_magmaanlab_fit_ordinal_barrier_impl", (DL_FUNC) &_magmaanlab_fit_ordinal_barrier_impl, 7},
-    {"_magmaanlab_fit_ml_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_ml_ordinal_impl, 7},
+    {"_magmaanlab_fit_ml_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_ml_ordinal_impl, 8},
     {"_magmaanlab_fit_ordinal_stage2_impl", (DL_FUNC) &_magmaanlab_fit_ordinal_stage2_impl, 7},
     {"_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaanlab_frontier_pairwise_ordinal_composite_nested_impl, 7},
     {"_magmaanlab_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_dwls_mixed_ordinal_impl, 5},
     {"_magmaanlab_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaanlab_fit_wls_mixed_ordinal_impl, 5},
-    {"_magmaanlab_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_mixed_ordinal_psd_impl, 8},
+    {"_magmaanlab_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_mixed_ordinal_psd_impl, 9},
     {"_magmaanlab_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaanlab_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaanlab_frontier_ordinal_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ordinal_newton_audit_impl, 2},
     {"_magmaanlab_policy_modification_indices_impl", (DL_FUNC) &_magmaanlab_policy_modification_indices_impl, 4},

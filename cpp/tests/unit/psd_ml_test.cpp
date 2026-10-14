@@ -218,33 +218,39 @@ void check_psd_terminal(const magmaan::estimate::Estimates& fit) {
 
 TEST_CASE("PSD ordinal delta and theta Jacobians match central finite "
           "differences") {
-  auto pt = ordinal_one_factor();
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  Eigen::Matrix3d correlation;
-  correlation << 1.0, 0.56, 0.48,
-                 0.56, 1.0, 0.336,
-                 0.48, 0.336, 1.0;
-  const auto stats = ordinal_stats(correlation);
-  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
-  REQUIRE(start.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto pt = ordinal_one_factor();
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    Eigen::Matrix3d correlation;
+    correlation << 1.0, 0.56, 0.48,
+                   0.56, 1.0, 0.336,
+                   0.48, 0.336, 1.0;
+    const auto stats = ordinal_stats(correlation);
+    auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+    REQUIRE(start.has_value());
 
-  for (const auto parameterization : {
-           magmaan::estimate::OrdinalParameterization::Delta,
-           magmaan::estimate::OrdinalParameterization::Theta}) {
-    auto probe = magmaan::estimate::psd_test::psd_ordinal_derivative_probe(
-        pt, *rep, stats, *start,
-        magmaan::estimate::OrdinalWeightKind::DWLS, parameterization);
-    REQUIRE_MESSAGE(probe.has_value(),
-        "PSD ordinal derivative probe failed: "
-            << (probe.has_value() ? std::string{} : probe.error().detail));
-    REQUIRE(probe->n_lift > 0);
-    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
-              .cwiseAbs().maxCoeff() < 5e-6);
-    CHECK((probe->analytic_constraint_jacobian -
-           probe->finite_difference_constraint_jacobian)
-              .cwiseAbs().maxCoeff() < 3e-7);
-  }
+    for (const auto parameterization : {
+             magmaan::estimate::OrdinalParameterization::Delta,
+             magmaan::estimate::OrdinalParameterization::Theta}) {
+      auto probe = magmaan::estimate::psd_test::psd_ordinal_derivative_probe(
+          pt, *rep, stats, *start,
+          magmaan::estimate::OrdinalWeightKind::DWLS, parameterization, 1e-6, factor_options);
+      REQUIRE_MESSAGE(probe.has_value(),
+          "PSD ordinal derivative probe failed: "
+              << (probe.has_value() ? std::string{} : probe.error().detail));
+      REQUIRE(probe->n_lift > 0);
+      CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+                .cwiseAbs().maxCoeff() < 5e-6);
+      CHECK((probe->analytic_constraint_jacobian -
+             probe->finite_difference_constraint_jacobian)
+                .cwiseAbs().maxCoeff() < 3e-7);
+    }
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ordinal ULS DWLS and WLS consume polychorics unchanged") {
@@ -324,42 +330,48 @@ TEST_CASE("PSD ordinal ULS accepts an indefinite estimated polychoric matrix") {
 
 TEST_CASE("PSD catML derivatives agree with central differences and the "
           "interior ordinary fit") {
-  auto pt = ordinal_one_factor();
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  Eigen::Matrix3d correlation;
-  correlation << 1.0, 0.56, 0.48,
-                 0.56, 1.0, 0.336,
-                 0.48, 0.336, 1.0;
-  auto stats = ordinal_stats(correlation);
-  const Eigen::MatrixXd original_R = stats.R[0];
-  auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
-  REQUIRE(start.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto pt = ordinal_one_factor();
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    Eigen::Matrix3d correlation;
+    correlation << 1.0, 0.56, 0.48,
+                   0.56, 1.0, 0.336,
+                   0.48, 0.336, 1.0;
+    auto stats = ordinal_stats(correlation);
+    const Eigen::MatrixXd original_R = stats.R[0];
+    auto start = magmaan::estimate::ordinal_start_values(pt, *rep, stats, {});
+    REQUIRE(start.has_value());
 
-  auto probe = magmaan::estimate::psd_test::psd_catml_derivative_probe(
-      pt, *rep, stats, *start);
-  REQUIRE_MESSAGE(probe.has_value(), "PSD catML derivative probe failed: "
-      << (probe.has_value() ? std::string{} : probe.error().detail));
-  CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
-            .cwiseAbs().maxCoeff() < 4e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    auto probe = magmaan::estimate::psd_test::psd_catml_derivative_probe(
+        pt, *rep, stats, *start, 1e-6, factor_options);
+    REQUIRE_MESSAGE(probe.has_value(), "PSD catML derivative probe failed: "
+        << (probe.has_value() ? std::string{} : probe.error().detail));
+    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+              .cwiseAbs().maxCoeff() < 4e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
 
-  auto ordinary = magmaan::estimate::frontier::fit_ml(
-      pt, *rep, stats, *start, Backend::NloptLbfgs, strict_options());
-  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary catML fit failed: "
-      << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
-  auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, stats, ordinary->theta, Backend::NloptSlsqp,
-      strict_options());
-  REQUIRE_MESSAGE(fit.has_value(), "PSD catML fit failed: "
-      << (fit.has_value() ? std::string{} : fit.error().detail));
-  if (!fit.has_value()) return;
-  check_psd_terminal(*fit);
-  CHECK(std::abs(fit->fmin - ordinary->fmin) < 1e-8);
-  CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-4);
-  CHECK(stats.R[0].isApprox(original_R, 0.0));
+    auto ordinary = magmaan::estimate::frontier::fit_ml(
+        pt, *rep, stats, *start, Backend::NloptLbfgs, strict_options());
+    REQUIRE_MESSAGE(ordinary.has_value(), "ordinary catML fit failed: "
+        << (ordinary.has_value() ? std::string{} : ordinary.error().detail));
+    auto fit = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, stats, ordinary->theta, Backend::NloptSlsqp,
+        strict_options(), factor_options);
+    REQUIRE_MESSAGE(fit.has_value(), "PSD catML fit failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    if (!fit.has_value()) return;
+    check_psd_terminal(*fit);
+    CHECK(std::abs(fit->fmin - ordinary->fmin) < 1e-8);
+    CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-4);
+    CHECK(stats.R[0].isApprox(original_R, 0.0));
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD catML rejects a non-PD polychoric matrix without repairing it") {
@@ -392,32 +404,38 @@ TEST_CASE("PSD catML rejects a non-PD polychoric matrix without repairing it") {
 
 TEST_CASE("PSD mixed ordinal delta and theta Jacobians match central finite "
           "differences") {
-  auto pt = mixed_ordinal_one_factor();
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  const auto stats = mixed_ordinal_stats();
-  auto start = magmaan::estimate::mixed_ordinal_start_values(
-      pt, *rep, stats, {});
-  REQUIRE(start.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto pt = mixed_ordinal_one_factor();
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    const auto stats = mixed_ordinal_stats();
+    auto start = magmaan::estimate::mixed_ordinal_start_values(
+        pt, *rep, stats, {});
+    REQUIRE(start.has_value());
 
-  for (const auto parameterization : {
-           magmaan::estimate::OrdinalParameterization::Delta,
-           magmaan::estimate::OrdinalParameterization::Theta}) {
-    auto probe =
-        magmaan::estimate::psd_test::psd_mixed_ordinal_derivative_probe(
-            pt, *rep, stats, *start,
-            magmaan::estimate::OrdinalWeightKind::DWLS,
-            parameterization);
-    REQUIRE_MESSAGE(probe.has_value(),
-        "PSD mixed ordinal derivative probe failed: "
-            << (probe.has_value() ? std::string{} : probe.error().detail));
-    REQUIRE(probe->n_lift > 0);
-    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
-              .cwiseAbs().maxCoeff() < 8e-6);
-    CHECK((probe->analytic_constraint_jacobian -
-           probe->finite_difference_constraint_jacobian)
-              .cwiseAbs().maxCoeff() < 3e-7);
-  }
+    for (const auto parameterization : {
+             magmaan::estimate::OrdinalParameterization::Delta,
+             magmaan::estimate::OrdinalParameterization::Theta}) {
+      auto probe =
+          magmaan::estimate::psd_test::psd_mixed_ordinal_derivative_probe(
+              pt, *rep, stats, *start,
+              magmaan::estimate::OrdinalWeightKind::DWLS,
+              parameterization, 1e-6, factor_options);
+      REQUIRE_MESSAGE(probe.has_value(),
+          "PSD mixed ordinal derivative probe failed: "
+              << (probe.has_value() ? std::string{} : probe.error().detail));
+      REQUIRE(probe->n_lift > 0);
+      CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+                .cwiseAbs().maxCoeff() < 8e-6);
+      CHECK((probe->analytic_constraint_jacobian -
+             probe->finite_difference_constraint_jacobian)
+                .cwiseAbs().maxCoeff() < 3e-7);
+    }
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD mixed ordinal ULS DWLS and WLS agree at an interior fit") {
@@ -588,246 +606,273 @@ TEST_CASE("PSD mixed ordinal ULS repairs an improper continuous residual") {
 
 TEST_CASE("PSD ML lifted objective and equality Jacobian match central "
           "finite differences") {
-  magmaan::estimate::frontier::PsdFitOptions psd_options;
-  SUBCASE("unscaled") {}
-  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
-  BuildOptions options;
-  options.meanstructure = true;
-  auto pt = lavaanify(
-      "f =~ 1*x1 + a*x2 + b*x3\n"
-      "x1 ~~ v*x1\n"
-      "x2 ~~ v*x2\n"
-      "x1 ~~ c*x2\n"
-      "a + b == 1.6\n"
-      "a == b^2",
-      options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    magmaan::estimate::frontier::PsdFitOptions psd_options;
+    psd_options.factor = psd_factor;
+    SUBCASE("unscaled") {}
+    SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
+    BuildOptions options;
+    options.meanstructure = true;
+    auto pt = lavaanify(
+        "f =~ 1*x1 + a*x2 + b*x3\n"
+        "x1 ~~ v*x1\n"
+        "x2 ~~ v*x2\n"
+        "x1 ~~ c*x2\n"
+        "a + b == 1.6\n"
+        "a == b^2",
+        options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Matrix3d covariance;
-  covariance << 1.8, 0.72, 0.55,
-                0.72, 1.5, 0.46,
-                0.55, 0.46, 1.3;
-  auto samp = sample_stats(covariance, 300);
-  Eigen::Vector3d mean;
-  mean << 0.4, -0.2, 0.7;
-  samp.mean.push_back(mean);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.8, 0.72, 0.55,
+                  0.72, 1.5, 0.46,
+                  0.55, 0.46, 1.3;
+    auto samp = sample_stats(covariance, 300);
+    Eigen::Vector3d mean;
+    mean << 0.4, -0.2, 0.7;
+    samp.mean.push_back(mean);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start, 1e-6, psd_options);
-  REQUIRE_MESSAGE(probe.has_value(), "PSD derivative probe failed: "
-      << (probe.has_value() ? std::string{} : probe.error().detail));
-  if (psd_options.diagonal_preconditioning) {
-    REQUIRE(probe->coordinate_scale.size() == probe->x.size());
-    CHECK(probe->coordinate_scale.allFinite());
-    CHECK(probe->coordinate_scale.minCoeff() > 0.0);
-    CHECK((probe->coordinate_scale.array() - 1.0).abs().maxCoeff() > 0.1);
-    auto unscaled = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-        pt, *rep, samp, *start);
-    REQUIRE(unscaled.has_value());
-    CHECK(probe->x.cwiseProduct(probe->coordinate_scale).isApprox(unscaled->x, 1e-12));
-    CHECK(probe->objective == doctest::Approx(unscaled->objective).epsilon(1e-12));
-    CHECK(probe->analytic_gradient.isApprox(
-        unscaled->analytic_gradient.cwiseProduct(probe->coordinate_scale), 1e-11));
-    CHECK(probe->analytic_constraint_jacobian.isApprox(
-        unscaled->analytic_constraint_jacobian * probe->coordinate_scale.asDiagonal(), 1e-11));
-  }
-  REQUIRE(probe->n_alpha > 0);
-  REQUIRE(probe->n_lift > 0);
-  REQUIRE(probe->constraints.size() > 0);
-  REQUIRE(probe->analytic_gradient.size() == probe->x.size());
-  REQUIRE(probe->analytic_constraint_jacobian.rows() ==
-          probe->constraints.size());
-  REQUIRE(probe->analytic_constraint_jacobian.cols() == probe->x.size());
+    auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, samp, *start, 1e-6, psd_options);
+    REQUIRE_MESSAGE(probe.has_value(), "PSD derivative probe failed: "
+        << (probe.has_value() ? std::string{} : probe.error().detail));
+    if (psd_options.diagonal_preconditioning) {
+      REQUIRE(probe->coordinate_scale.size() == probe->x.size());
+      CHECK(probe->coordinate_scale.allFinite());
+      CHECK(probe->coordinate_scale.minCoeff() > 0.0);
+      CHECK((probe->coordinate_scale.array() - 1.0).abs().maxCoeff() > 0.1);
+      auto unscaled = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+          pt, *rep, samp, *start, 1e-6, factor_options);
+      REQUIRE(unscaled.has_value());
+      CHECK(probe->x.cwiseProduct(probe->coordinate_scale).isApprox(unscaled->x, 1e-12));
+      CHECK(probe->objective == doctest::Approx(unscaled->objective).epsilon(1e-12));
+      CHECK(probe->analytic_gradient.isApprox(
+          unscaled->analytic_gradient.cwiseProduct(probe->coordinate_scale), 1e-11));
+      CHECK(probe->analytic_constraint_jacobian.isApprox(
+          unscaled->analytic_constraint_jacobian * probe->coordinate_scale.asDiagonal(), 1e-11));
+    }
+    REQUIRE(probe->n_alpha > 0);
+    REQUIRE(probe->n_lift > 0);
+    REQUIRE(probe->constraints.size() > 0);
+    REQUIRE(probe->analytic_gradient.size() == probe->x.size());
+    REQUIRE(probe->analytic_constraint_jacobian.rows() ==
+            probe->constraints.size());
+    REQUIRE(probe->analytic_constraint_jacobian.cols() == probe->x.size());
 
-  CHECK((probe->analytic_gradient -
-         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    CHECK((probe->analytic_gradient -
+           probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML honors shared covariances and a general linear equality") {
-  magmaan::estimate::frontier::PsdFitOptions psd_options;
-  SUBCASE("unscaled") {}
-  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
-  auto pt = lavaanify(
-      "f =~ 1*x1 + a*x2 + b*x3 + d*x4\n"
-      "x1 ~~ c*x2\n"
-      "x3 ~~ c*x4\n"
-      "a + b == 1.5");
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions psd_options;
+    psd_options.factor = psd_factor;
+    SUBCASE("unscaled") {}
+    SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
+    auto pt = lavaanify(
+        "f =~ 1*x1 + a*x2 + b*x3 + d*x4\n"
+        "x1 ~~ c*x2\n"
+        "x3 ~~ c*x4\n"
+        "a + b == 1.5");
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Vector4d loadings;
-  loadings << 1.0, 0.8, 0.7, 0.9;
-  Eigen::Vector4d residuals;
-  residuals << 0.6, 0.7, 0.5, 0.8;
-  Eigen::Matrix4d covariance =
-      one_factor_covariance(loadings, residuals, 1.2);
-  covariance(0, 1) += 0.1;
-  covariance(1, 0) += 0.1;
-  covariance(2, 3) += 0.1;
-  covariance(3, 2) += 0.1;
-  auto samp = sample_stats(covariance, 500);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector4d loadings;
+    loadings << 1.0, 0.8, 0.7, 0.9;
+    Eigen::Vector4d residuals;
+    residuals << 0.6, 0.7, 0.5, 0.8;
+    Eigen::Matrix4d covariance =
+        one_factor_covariance(loadings, residuals, 1.2);
+    covariance(0, 1) += 0.1;
+    covariance(1, 0) += 0.1;
+    covariance(2, 3) += 0.1;
+    covariance(3, 2) += 0.1;
+    auto samp = sample_stats(covariance, 500);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start, 1e-6, psd_options);
-  REQUIRE_MESSAGE(probe.has_value(),
-      "shared/general-linear PSD derivative probe failed: "
-          << (probe.has_value() ? std::string{} : probe.error().detail));
-  CHECK((probe->analytic_gradient -
-         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, samp, *start, 1e-6, psd_options);
+    REQUIRE_MESSAGE(probe.has_value(),
+        "shared/general-linear PSD derivative probe failed: "
+            << (probe.has_value() ? std::string{} : probe.error().detail));
+    CHECK((probe->analytic_gradient -
+           probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
 
-  auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
-  REQUIRE_MESSAGE(fit.has_value(), "shared/general-linear PSD fit failed: "
-      << (fit.has_value() ? std::string{} : fit.error().detail));
-  check_psd_terminal(*fit);
+    auto fit = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
+    REQUIRE_MESSAGE(fit.has_value(), "shared/general-linear PSD fit failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    check_psd_terminal(*fit);
 
-  const auto con = build_eq_constraints(
-      pt, /*allow_nonlinear=*/true);
-  REQUIRE(con.has_value());
-  REQUIRE(con->active());
-  CHECK((con->A_eq * fit->theta - con->b_eq)
-            .cwiseAbs().maxCoeff() < 1e-9);
+    const auto con = build_eq_constraints(
+        pt, /*allow_nonlinear=*/true);
+    REQUIRE(con.has_value());
+    REQUIRE(con->active());
+    CHECK((con->A_eq * fit->theta - con->b_eq)
+              .cwiseAbs().maxCoeff() < 1e-9);
 
-  std::vector<Eigen::Index> covariance_parameters;
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    const auto& cell = rep->cell_for_row[i];
-    if (cell.used && cell.mat == MatId::Theta &&
-        cell.row != cell.col && pt.free[i] > 0) {
-      covariance_parameters.push_back(pt.free[i] - 1);
+    std::vector<Eigen::Index> covariance_parameters;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      const auto& cell = rep->cell_for_row[i];
+      if (cell.used && cell.mat == MatId::Theta &&
+          cell.row != cell.col && pt.free[i] > 0) {
+        covariance_parameters.push_back(pt.free[i] - 1);
+      }
     }
-  }
-  REQUIRE(covariance_parameters.size() == 2);
-  CHECK(fit->theta(covariance_parameters[0]) ==
-        doctest::Approx(fit->theta(covariance_parameters[1])).epsilon(1e-10));
-  CHECK(fit->fmin < 1e-8);
+    REQUIRE(covariance_parameters.size() == 2);
+    CHECK(fit->theta(covariance_parameters[0]) ==
+          doctest::Approx(fit->theta(covariance_parameters[1])).epsilon(1e-10));
+    CHECK(fit->fmin < 1e-8);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML honors a nonlinear equality") {
-  magmaan::estimate::frontier::PsdFitOptions psd_options;
-  SUBCASE("unscaled") {}
-  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
-  auto pt = lavaanify(
-      "f =~ 1*x1 + a*x2 + b*x3\n"
-      "a == b^2");
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions psd_options;
+    psd_options.factor = psd_factor;
+    SUBCASE("unscaled") {}
+    SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
+    auto pt = lavaanify(
+        "f =~ 1*x1 + a*x2 + b*x3\n"
+        "a == b^2");
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Vector3d loadings;
-  loadings << 1.0, 0.64, 0.8;
-  Eigen::Vector3d residuals;
-  residuals << 0.5, 0.6, 0.7;
-  auto samp = sample_stats(
-      one_factor_covariance(loadings, residuals, 1.2), 500);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector3d loadings;
+    loadings << 1.0, 0.64, 0.8;
+    Eigen::Vector3d residuals;
+    residuals << 0.5, 0.6, 0.7;
+    auto samp = sample_stats(
+        one_factor_covariance(loadings, residuals, 1.2), 500);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
-  REQUIRE_MESSAGE(fit.has_value(), "nonlinear-equality PSD fit failed: "
-      << (fit.has_value() ? std::string{} : fit.error().detail));
-  check_psd_terminal(*fit);
+    auto fit = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
+    REQUIRE_MESSAGE(fit.has_value(), "nonlinear-equality PSD fit failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    check_psd_terminal(*fit);
 
-  const auto nonlinear = build_nl_constraints(pt);
-  REQUIRE(nonlinear.active());
-  CHECK(nonlinear.h(fit->theta).cwiseAbs().maxCoeff() < 1e-7);
-  CHECK(fit->fmin < 1e-8);
+    const auto nonlinear = build_nl_constraints(pt);
+    REQUIRE(nonlinear.active());
+    CHECK(nonlinear.h(fit->theta).cwiseAbs().maxCoeff() < 1e-7);
+    CHECK(fit->fmin < 1e-8);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML handles independent multi-group covariance blocks") {
-  magmaan::estimate::frontier::PsdFitOptions psd_options;
-  SUBCASE("unscaled") {}
-  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
-  BuildOptions options;
-  options.n_groups = 2;
-  auto pt = lavaanify("f =~ x1 + x2 + x3", options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  REQUIRE(rep->dims.size() == 2);
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions psd_options;
+    psd_options.factor = psd_factor;
+    SUBCASE("unscaled") {}
+    SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
+    BuildOptions options;
+    options.n_groups = 2;
+    auto pt = lavaanify("f =~ x1 + x2 + x3", options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    REQUIRE(rep->dims.size() == 2);
 
-  Eigen::Vector3d loadings_1;
-  loadings_1 << 1.0, 0.8, 0.65;
-  Eigen::Vector3d residuals_1;
-  residuals_1 << 0.5, 0.6, 0.7;
-  Eigen::Vector3d loadings_2;
-  loadings_2 << 1.0, 0.75, 0.7;
-  Eigen::Vector3d residuals_2;
-  residuals_2 << 0.4, 0.7, 0.6;
-  SampleStats samp;
-  samp.S = {
-      one_factor_covariance(loadings_1, residuals_1, 1.2),
-      one_factor_covariance(loadings_2, residuals_2, 1.5)};
-  samp.n_obs = {240, 180};
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector3d loadings_1;
+    loadings_1 << 1.0, 0.8, 0.65;
+    Eigen::Vector3d residuals_1;
+    residuals_1 << 0.5, 0.6, 0.7;
+    Eigen::Vector3d loadings_2;
+    loadings_2 << 1.0, 0.75, 0.7;
+    Eigen::Vector3d residuals_2;
+    residuals_2 << 0.4, 0.7, 0.6;
+    SampleStats samp;
+    samp.S = {
+        one_factor_covariance(loadings_1, residuals_1, 1.2),
+        one_factor_covariance(loadings_2, residuals_2, 1.5)};
+    samp.n_obs = {240, 180};
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start, 1e-6, psd_options);
-  REQUIRE_MESSAGE(probe.has_value(), "multi-group PSD derivative probe failed: "
-      << (probe.has_value() ? std::string{} : probe.error().detail));
-  CHECK((probe->analytic_gradient -
-         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    auto probe = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, samp, *start, 1e-6, psd_options);
+    REQUIRE_MESSAGE(probe.has_value(), "multi-group PSD derivative probe failed: "
+        << (probe.has_value() ? std::string{} : probe.error().detail));
+    CHECK((probe->analytic_gradient -
+           probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
 
-  auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
-  REQUIRE_MESSAGE(fit.has_value(), "multi-group PSD fit failed: "
-      << (fit.has_value() ? std::string{} : fit.error().detail));
-  check_psd_terminal(*fit);
-  CHECK(fit->fmin < 1e-8);
-  REQUIRE(fit->diagnostics.admissibility.theta_blocks.size() == 2);
-  REQUIRE(fit->diagnostics.admissibility.psi_blocks.size() == 2);
+    auto fit = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), psd_options);
+    REQUIRE_MESSAGE(fit.has_value(), "multi-group PSD fit failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    check_psd_terminal(*fit);
+    CHECK(fit->fmin < 1e-8);
+    REQUIRE(fit->diagnostics.admissibility.theta_blocks.size() == 2);
+    REQUIRE(fit->diagnostics.admissibility.psi_blocks.size() == 2);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML mean-structure fit agrees with ordinary interior ML") {
-  magmaan::estimate::frontier::PsdFitOptions psd_options;
-  SUBCASE("unscaled") {}
-  SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
-  BuildOptions options;
-  options.meanstructure = true;
-  auto pt = lavaanify("f =~ x1 + x2 + x3", options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions psd_options;
+    psd_options.factor = psd_factor;
+    SUBCASE("unscaled") {}
+    SUBCASE("diagonal preconditioning") { psd_options.diagonal_preconditioning = true; }
+    BuildOptions options;
+    options.meanstructure = true;
+    auto pt = lavaanify("f =~ x1 + x2 + x3", options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Vector3d loadings;
-  loadings << 1.0, 0.8, 0.65;
-  Eigen::Vector3d residuals;
-  residuals << 0.5, 0.6, 0.7;
-  auto samp = sample_stats(
-      one_factor_covariance(loadings, residuals, 1.2), 400);
-  Eigen::Vector3d mean;
-  mean << 1.2, -0.4, 0.8;
-  samp.mean.push_back(mean);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector3d loadings;
+    loadings << 1.0, 0.8, 0.65;
+    Eigen::Vector3d residuals;
+    residuals << 0.5, 0.6, 0.7;
+    auto samp = sample_stats(
+        one_factor_covariance(loadings, residuals, 1.2), 400);
+    Eigen::Vector3d mean;
+    mean << 1.2, -0.4, 0.8;
+    samp.mean.push_back(mean);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto ordinary = magmaan::estimate::fit_ml(
-      pt, *rep, samp, *start, {}, Backend::NloptLbfgs, strict_options());
-  REQUIRE_MESSAGE(ordinary.has_value(), "ordinary mean ML fit failed: "
-      << (ordinary.has_value() ? std::string{}
-                               : ordinary.error().detail));
-  REQUIRE(ordinary->diagnostics.admissibility.admissible);
+    auto ordinary = magmaan::estimate::fit_ml(
+        pt, *rep, samp, *start, {}, Backend::NloptLbfgs, strict_options());
+    REQUIRE_MESSAGE(ordinary.has_value(), "ordinary mean ML fit failed: "
+        << (ordinary.has_value() ? std::string{}
+                                 : ordinary.error().detail));
+    REQUIRE(ordinary->diagnostics.admissibility.admissible);
 
-  auto fit = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, ordinary->theta,
-      Backend::NloptSlsqp, strict_options(), psd_options);
-  REQUIRE_MESSAGE(fit.has_value(), "mean-structure PSD fit failed: "
-      << (fit.has_value() ? std::string{} : fit.error().detail));
-  check_psd_terminal(*fit);
-  CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
-  CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+    auto fit = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, ordinary->theta,
+        Backend::NloptSlsqp, strict_options(), psd_options);
+    REQUIRE_MESSAGE(fit.has_value(), "mean-structure PSD fit failed: "
+        << (fit.has_value() ? std::string{} : fit.error().detail));
+    check_psd_terminal(*fit);
+    CHECK(fit->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+    CHECK((fit->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML2S composes unchanged EM moments with every Stage-2 weight") {
@@ -955,53 +1000,61 @@ TEST_CASE("PSD ML2S repairs an improper Stage-2 solution without changing "
 }
 
 TEST_CASE("PSD FIML derivatives and all-observed reduction agree with ML") {
-  BuildOptions options;
-  options.meanstructure = true;
-  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4", options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto factor_ml_options = magmaan::estimate::frontier::ml_psd_options();
+    factor_ml_options.factor = psd_factor;
+    BuildOptions options;
+    options.meanstructure = true;
+    auto pt = lavaanify("f =~ x1 + x2 + x3 + x4", options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Vector4d loadings;
-  loadings << 1.0, 0.8, 0.65, 0.9;
-  Eigen::Vector4d residuals;
-  residuals << 0.5, 0.6, 0.7, 0.55;
-  const Eigen::Matrix4d covariance =
-      one_factor_covariance(loadings, residuals, 1.2);
-  Eigen::Vector4d mean;
-  mean << 0.4, -0.2, 0.7, 1.1;
-  auto raw = raw_with_covariance(covariance, mean, 300, false);
-  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
-  REQUIRE(pack.has_value());
-  auto start = simple_start_values(pt, *rep, pack->start_stats, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector4d loadings;
+    loadings << 1.0, 0.8, 0.65, 0.9;
+    Eigen::Vector4d residuals;
+    residuals << 0.5, 0.6, 0.7, 0.55;
+    const Eigen::Matrix4d covariance =
+        one_factor_covariance(loadings, residuals, 1.2);
+    Eigen::Vector4d mean;
+    mean << 0.4, -0.2, 0.7, 1.1;
+    auto raw = raw_with_covariance(covariance, mean, 300, false);
+    auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+    REQUIRE(pack.has_value());
+    auto start = simple_start_values(pt, *rep, pack->start_stats, {});
+    REQUIRE(start.has_value());
 
-  auto probe = magmaan::estimate::psd_test::psd_fiml_derivative_probe(
-      pt, *rep, raw, *pack, *start);
-  REQUIRE_MESSAGE(probe.has_value(), "PSD FIML derivative probe failed: "
-      << (probe.has_value() ? std::string{} : probe.error().detail));
-  CHECK((probe->analytic_gradient -
-         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 4e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    auto probe = magmaan::estimate::psd_test::psd_fiml_derivative_probe(
+        pt, *rep, raw, *pack, *start, 1e-6, factor_options);
+    REQUIRE_MESSAGE(probe.has_value(), "PSD FIML derivative probe failed: "
+        << (probe.has_value() ? std::string{} : probe.error().detail));
+    CHECK((probe->analytic_gradient -
+           probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 4e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
 
-  auto ml = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, pack->start_stats, *start, Backend::NloptSlsqp,
-      strict_options());
-  REQUIRE(ml.has_value());
-  auto ordinary_fiml = magmaan::estimate::fit_fiml(
-      pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
-      strict_options());
-  REQUIRE(ordinary_fiml.has_value());
-  auto fiml = magmaan::estimate::fiml::frontier::fit_fiml_psd(
-      pt, *rep, raw, *start, magmaan::estimate::fiml::FIML{},
-      Backend::NloptSlsqp, strict_options());
-  REQUIRE_MESSAGE(fiml.has_value(), "all-observed PSD FIML failed: "
-      << (fiml.has_value() ? std::string{} : fiml.error().detail));
-  check_psd_terminal(*fiml);
-  CHECK(fiml->fmin == doctest::Approx(ordinary_fiml->fmin).epsilon(1e-8));
-  CHECK((fiml->theta - ordinary_fiml->theta).cwiseAbs().maxCoeff() < 2e-5);
-  CHECK((fiml->theta - ml->theta).cwiseAbs().maxCoeff() < 2e-5);
+    auto ml = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, pack->start_stats, *start, Backend::NloptSlsqp,
+        strict_options(), factor_ml_options);
+    REQUIRE(ml.has_value());
+    auto ordinary_fiml = magmaan::estimate::fit_fiml(
+        pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
+        strict_options());
+    REQUIRE(ordinary_fiml.has_value());
+    auto fiml = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+        pt, *rep, raw, *start, magmaan::estimate::fiml::FIML{},
+        Backend::NloptSlsqp, strict_options(), factor_options);
+    REQUIRE_MESSAGE(fiml.has_value(), "all-observed PSD FIML failed: "
+        << (fiml.has_value() ? std::string{} : fiml.error().detail));
+    check_psd_terminal(*fiml);
+    CHECK(fiml->fmin == doctest::Approx(ordinary_fiml->fmin).epsilon(1e-8));
+    CHECK((fiml->theta - ordinary_fiml->theta).cwiseAbs().maxCoeff() < 2e-5);
+    CHECK((fiml->theta - ml->theta).cwiseAbs().maxCoeff() < 2e-5);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD FIML agrees with an interior missing-data fit") {
@@ -1047,143 +1100,161 @@ TEST_CASE("PSD FIML agrees with an interior missing-data fit") {
 }
 
 TEST_CASE("PSD FIML repairs a missing-data negative-residual solution") {
-  BuildOptions options;
-  options.meanstructure = true;
-  auto pt = lavaanify("f =~ x1 + x2 + x3", options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    BuildOptions options;
+    options.meanstructure = true;
+    auto pt = lavaanify("f =~ x1 + x2 + x3", options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Matrix3d covariance;
-  covariance << 1.0, 0.7, 0.7,
-                0.7, 1.0, 0.3,
-                0.7, 0.3, 1.0;
-  auto raw = raw_with_covariance(
-      covariance, Eigen::Vector3d::Zero(), 600, false);
-  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask =
-      Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
-          raw.X[0].rows(), raw.X[0].cols());
-  mask(0, 0) = 0;
-  raw.X[0](0, 0) = std::numeric_limits<double>::quiet_NaN();
-  raw.mask.push_back(std::move(mask));
-  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
-  REQUIRE(pack.has_value());
-  auto start = simple_start_values(pt, *rep, pack->start_stats, {});
-  REQUIRE(start.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.0, 0.7, 0.7,
+                  0.7, 1.0, 0.3,
+                  0.7, 0.3, 1.0;
+    auto raw = raw_with_covariance(
+        covariance, Eigen::Vector3d::Zero(), 600, false);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> mask =
+        Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
+            raw.X[0].rows(), raw.X[0].cols());
+    mask(0, 0) = 0;
+    raw.X[0](0, 0) = std::numeric_limits<double>::quiet_NaN();
+    raw.mask.push_back(std::move(mask));
+    auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+    REQUIRE(pack.has_value());
+    auto start = simple_start_values(pt, *rep, pack->start_stats, {});
+    REQUIRE(start.has_value());
 
-  auto ordinary = magmaan::estimate::fit_fiml(
-      pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
-      strict_options());
-  REQUIRE(ordinary.has_value());
-  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+    auto ordinary = magmaan::estimate::fit_fiml(
+        pt, *rep, raw, *start, *pack, Backend::NloptLbfgsSlsqpFallback,
+        strict_options());
+    REQUIRE(ordinary.has_value());
+    REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
 
-  auto psd = magmaan::estimate::fiml::frontier::fit_fiml_psd(
-      pt, *rep, raw, ordinary->theta, *pack, Backend::NloptSlsqp,
-      strict_options());
-  REQUIRE_MESSAGE(psd.has_value(), "PSD FIML repair failed: "
-      << (psd.has_value() ? std::string{} : psd.error().detail));
-  check_psd_terminal(*psd);
-  CHECK(psd->fmin > ordinary->fmin + 1e-7);
+    auto psd = magmaan::estimate::fiml::frontier::fit_fiml_psd(
+        pt, *rep, raw, ordinary->theta, *pack, Backend::NloptSlsqp,
+        strict_options(), factor_options);
+    REQUIRE_MESSAGE(psd.has_value(), "PSD FIML repair failed: "
+        << (psd.has_value() ? std::string{} : psd.error().detail));
+    check_psd_terminal(*psd);
+    CHECK(psd->fmin > ordinary->fmin + 1e-7);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD fixed-weight GMM objective and equality Jacobian match central "
           "finite differences") {
-  BuildOptions options;
-  options.meanstructure = true;
-  auto pt = lavaanify(
-      "f =~ 1*x1 + a*x2 + b*x3\n"
-      "x1 ~~ v*x1\n"
-      "x2 ~~ v*x2\n"
-      "a + b == 1.6\n"
-      "a == b^2",
-      options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    BuildOptions options;
+    options.meanstructure = true;
+    auto pt = lavaanify(
+        "f =~ 1*x1 + a*x2 + b*x3\n"
+        "x1 ~~ v*x1\n"
+        "x2 ~~ v*x2\n"
+        "a + b == 1.6\n"
+        "a == b^2",
+        options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Matrix3d covariance;
-  covariance << 1.8, 0.72, 0.55,
-                0.72, 1.5, 0.46,
-                0.55, 0.46, 1.3;
-  auto samp = sample_stats(covariance, 300);
-  Eigen::Vector3d mean;
-  mean << 0.4, -0.2, 0.7;
-  samp.mean.push_back(mean);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.8, 0.72, 0.55,
+                  0.72, 1.5, 0.46,
+                  0.55, 0.46, 1.3;
+    auto samp = sample_stats(covariance, 300);
+    Eigen::Vector3d mean;
+    mean << 0.4, -0.2, 0.7;
+    samp.mean.push_back(mean);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  magmaan::estimate::gmm::Weight weight;
-  Eigen::VectorXd diagonal(9);
-  diagonal << 0.7, 1.1, 1.4, 0.8, 1.2, 1.6, 0.9, 1.3, 1.7;
-  weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
-  auto probe = magmaan::estimate::psd_test::psd_gmm_derivative_probe(
-      pt, *rep, samp, *start, weight);
-  REQUIRE_MESSAGE(probe.has_value(), "PSD GMM derivative probe failed: "
-      << (probe.has_value() ? std::string{} : probe.error().detail));
-  CHECK((probe->analytic_gradient -
-         probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
-  CHECK((probe->analytic_constraint_jacobian -
-         probe->finite_difference_constraint_jacobian)
-            .cwiseAbs().maxCoeff() < 3e-7);
+    magmaan::estimate::gmm::Weight weight;
+    Eigen::VectorXd diagonal(9);
+    diagonal << 0.7, 1.1, 1.4, 0.8, 1.2, 1.6, 0.9, 1.3, 1.7;
+    weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
+    auto probe = magmaan::estimate::psd_test::psd_gmm_derivative_probe(
+        pt, *rep, samp, *start, weight, 1e-6, factor_options);
+    REQUIRE_MESSAGE(probe.has_value(), "PSD GMM derivative probe failed: "
+        << (probe.has_value() ? std::string{} : probe.error().detail));
+    CHECK((probe->analytic_gradient -
+           probe->finite_difference_gradient).cwiseAbs().maxCoeff() < 3e-6);
+    CHECK((probe->analytic_constraint_jacobian -
+           probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ULS GLS and fixed WLS agree with ordinary interior fits") {
-  auto pt = lavaanify("f =~ x1 + x2 + x3 + x4");
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto pt = lavaanify("f =~ x1 + x2 + x3 + x4");
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Vector4d loadings;
-  loadings << 1.0, 0.8, 0.65, 0.9;
-  Eigen::Vector4d residuals;
-  residuals << 0.5, 0.6, 0.7, 0.55;
-  auto samp = sample_stats(
-      one_factor_covariance(loadings, residuals, 1.2), 500);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Vector4d loadings;
+    loadings << 1.0, 0.8, 0.65, 0.9;
+    Eigen::Vector4d residuals;
+    residuals << 0.5, 0.6, 0.7, 0.55;
+    auto samp = sample_stats(
+        one_factor_covariance(loadings, residuals, 1.2), 500);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  magmaan::estimate::gmm::Weight weight;
-  SUBCASE("ULS") {
-    auto ordinary = magmaan::estimate::fit_gmm(
-        pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
-        strict_options());
-    REQUIRE(ordinary.has_value());
-    auto psd = magmaan::estimate::frontier::fit_gmm_psd(
-        pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
-        strict_options());
-    REQUIRE_MESSAGE(psd.has_value(), "PSD ULS failed: "
-        << (psd.has_value() ? std::string{} : psd.error().detail));
-    check_psd_terminal(*psd);
-    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
-    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
-  }
-  SUBCASE("GLS") {
-    auto ordinary = magmaan::estimate::fit_gls(
-        pt, *rep, samp, *start, {}, Backend::NloptLbfgs,
-        strict_options());
-    REQUIRE(ordinary.has_value());
-    auto psd = magmaan::estimate::frontier::fit_gls_psd(
-        pt, *rep, samp, ordinary->theta, Backend::NloptSlsqp,
-        strict_options());
-    REQUIRE_MESSAGE(psd.has_value(), "PSD GLS failed: "
-        << (psd.has_value() ? std::string{} : psd.error().detail));
-    check_psd_terminal(*psd);
-    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
-    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
-  }
-  SUBCASE("fixed WLS") {
-    Eigen::VectorXd diagonal = Eigen::VectorXd::LinSpaced(10, 0.6, 1.8);
-    weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
-    auto ordinary = magmaan::estimate::fit_gmm(
-        pt, *rep, samp, *start, weight, {}, Backend::NloptLbfgs,
-        strict_options());
-    REQUIRE(ordinary.has_value());
-    auto psd = magmaan::estimate::frontier::fit_gmm_psd(
-        pt, *rep, samp, ordinary->theta, weight, Backend::NloptSlsqp,
-        strict_options());
-    REQUIRE_MESSAGE(psd.has_value(), "PSD fixed WLS failed: "
-        << (psd.has_value() ? std::string{} : psd.error().detail));
-    check_psd_terminal(*psd);
-    CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
-    CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
-  }
+    magmaan::estimate::gmm::Weight weight;
+    SUBCASE("ULS") {
+      auto ordinary = magmaan::estimate::fit_gmm(
+          pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
+          strict_options());
+      REQUIRE(ordinary.has_value());
+      auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+          pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
+          strict_options(), factor_options);
+      REQUIRE_MESSAGE(psd.has_value(), "PSD ULS failed: "
+          << (psd.has_value() ? std::string{} : psd.error().detail));
+      check_psd_terminal(*psd);
+      CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+      CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+    }
+    SUBCASE("GLS") {
+      auto ordinary = magmaan::estimate::fit_gls(
+          pt, *rep, samp, *start, {}, Backend::NloptLbfgs,
+          strict_options());
+      REQUIRE(ordinary.has_value());
+      auto psd = magmaan::estimate::frontier::fit_gls_psd(
+          pt, *rep, samp, ordinary->theta, Backend::NloptSlsqp,
+          strict_options(), factor_options);
+      REQUIRE_MESSAGE(psd.has_value(), "PSD GLS failed: "
+          << (psd.has_value() ? std::string{} : psd.error().detail));
+      check_psd_terminal(*psd);
+      CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+      CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+    }
+    SUBCASE("fixed WLS") {
+      Eigen::VectorXd diagonal = Eigen::VectorXd::LinSpaced(10, 0.6, 1.8);
+      weight.push_back(magmaan::estimate::gmm::BlockWeight::diagonal(diagonal));
+      auto ordinary = magmaan::estimate::fit_gmm(
+          pt, *rep, samp, *start, weight, {}, Backend::NloptLbfgs,
+          strict_options());
+      REQUIRE(ordinary.has_value());
+      auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+          pt, *rep, samp, ordinary->theta, weight, Backend::NloptSlsqp,
+          strict_options(), factor_options);
+      REQUIRE_MESSAGE(psd.has_value(), "PSD fixed WLS failed: "
+          << (psd.has_value() ? std::string{} : psd.error().detail));
+      check_psd_terminal(*psd);
+      CHECK(psd->fmin == doctest::Approx(ordinary->fmin).epsilon(1e-8));
+      CHECK((psd->theta - ordinary->theta).cwiseAbs().maxCoeff() < 2e-5);
+    }
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD GLS returns partable coordinates consistent with the lifted "
@@ -1245,146 +1316,164 @@ TEST_CASE("PSD GLS returns partable coordinates consistent with the lifted "
 }
 
 TEST_CASE("PSD ULS replaces an exact-fit negative-residual solution") {
-  auto pt = lavaanify("f =~ x1 + x2 + x3");
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    magmaan::estimate::frontier::PsdFitOptions factor_options;
+    factor_options.factor = psd_factor;
+    auto pt = lavaanify("f =~ x1 + x2 + x3");
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
 
-  Eigen::Matrix3d covariance;
-  covariance << 1.0, 0.7, 0.7,
-                0.7, 1.0, 0.3,
-                0.7, 0.3, 1.0;
-  auto samp = sample_stats(covariance, 8);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.0, 0.7, 0.7,
+                  0.7, 1.0, 0.3,
+                  0.7, 0.3, 1.0;
+    auto samp = sample_stats(covariance, 8);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
 
-  auto ordinary = magmaan::estimate::fit_gmm(
-      pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
-      strict_options());
-  REQUIRE(ordinary.has_value());
-  REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
-  CHECK(ordinary->fmin < 1e-12);
+    auto ordinary = magmaan::estimate::fit_gmm(
+        pt, *rep, samp, *start, {}, {}, Backend::NloptLbfgs,
+        strict_options());
+    REQUIRE(ordinary.has_value());
+    REQUIRE_FALSE(ordinary->diagnostics.admissibility.admissible);
+    CHECK(ordinary->fmin < 1e-12);
 
-  auto psd = magmaan::estimate::frontier::fit_gmm_psd(
-      pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
-      strict_options());
-  REQUIRE_MESSAGE(psd.has_value(), "PSD ULS repair failed: "
-      << (psd.has_value() ? std::string{} : psd.error().detail));
-  check_psd_terminal(*psd);
-  CHECK(psd->fmin > ordinary->fmin + 1e-6);
+    auto psd = magmaan::estimate::frontier::fit_gmm_psd(
+        pt, *rep, samp, ordinary->theta, {}, Backend::NloptSlsqp,
+        strict_options(), factor_options);
+    REQUIRE_MESSAGE(psd.has_value(), "PSD ULS repair failed: "
+        << (psd.has_value() ? std::string{} : psd.error().detail));
+    check_psd_terminal(*psd);
+    CHECK(psd->fmin > ordinary->fmin + 1e-6);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML diagonal preconditioning preserves the cone boundary solution") {
-  auto pt = lavaanify("f =~ x1 + x2 + x3");
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  Eigen::Matrix3d covariance;
-  covariance << 1.0, 0.7, 0.7, 0.7, 1.0, 0.3, 0.7, 0.3, 1.0;
-  auto samp = sample_stats(covariance, 80);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
-  auto unscaled = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
-  REQUIRE(unscaled.has_value());
-  magmaan::estimate::frontier::PsdFitOptions options;
-  options.diagonal_preconditioning = true;
-  auto scaled = magmaan::estimate::frontier::fit_ml_psd(
-      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), options);
-  REQUIRE_MESSAGE(scaled.has_value(), (scaled.has_value() ? "" : scaled.error().detail));
-  check_psd_terminal(*unscaled);
-  check_psd_terminal(*scaled);
-  CHECK(scaled->diagnostics.geometric_stationarity.covariance_nullity > 0);
-  CHECK(std::abs(scaled->fmin - unscaled->fmin) < 1e-8);
-  auto ev = magmaan::model::ModelEvaluator::build(pt, *rep);
-  REQUIRE(ev.has_value());
-  auto a = ev->evaluate(unscaled->theta, false, false);
-  auto b = ev->evaluate(scaled->theta, false, false);
-  REQUIRE(a.has_value());
-  REQUIRE(b.has_value());
-  CHECK(a->moments.sigma[0].isApprox(b->moments.sigma[0], 1e-5));
-  auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
-  REQUIRE(units.has_value());
-  for (double factor : {0.01, 100.0}) {
-    CAPTURE(factor);
-    auto other_sample = sample_stats(covariance * (factor * factor), 80);
-    auto other_units = magmaan::estimate::parameter_units(pt, *rep, other_sample);
-    REQUIRE(other_units.has_value());
-    Eigen::VectorXd transported = start->cwiseProduct(other_units->cwiseQuotient(*units));
-    auto other = magmaan::estimate::frontier::fit_ml_psd(
-        pt, *rep, other_sample, transported, Backend::NloptSlsqp, strict_options(), options);
-    REQUIRE_MESSAGE(other.has_value(), (other.has_value() ? "" : other.error().detail));
-    check_psd_terminal(*other);
-    CHECK(std::abs(other->fmin - scaled->fmin) < 1e-8);
-    auto implied = ev->evaluate(other->theta, false, false);
-    REQUIRE(implied.has_value());
-    CHECK((implied->moments.sigma[0] / (factor * factor)).isApprox(b->moments.sigma[0], 1e-5));
-  }
-  auto unsupported = magmaan::estimate::frontier::fit_gmm_psd(
-      pt, *rep, samp, *start, {}, Backend::NloptSlsqp, strict_options(), options);
-  REQUIRE_FALSE(unsupported.has_value());
-  CHECK(unsupported.error().detail.find("only for complete-data ML") != std::string::npos);
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    auto factor_ml_options = magmaan::estimate::frontier::ml_psd_options();
+    factor_ml_options.factor = psd_factor;
+    auto pt = lavaanify("f =~ x1 + x2 + x3");
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.0, 0.7, 0.7, 0.7, 1.0, 0.3, 0.7, 0.3, 1.0;
+    auto samp = sample_stats(covariance, 80);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
+    auto unscaled = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), factor_ml_options);
+    REQUIRE(unscaled.has_value());
+    magmaan::estimate::frontier::PsdFitOptions options;
+    options.factor = psd_factor;
+    options.diagonal_preconditioning = true;
+    auto scaled = magmaan::estimate::frontier::fit_ml_psd(
+        pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), options);
+    REQUIRE_MESSAGE(scaled.has_value(), (scaled.has_value() ? "" : scaled.error().detail));
+    check_psd_terminal(*unscaled);
+    check_psd_terminal(*scaled);
+    CHECK(scaled->diagnostics.geometric_stationarity.covariance_nullity > 0);
+    CHECK(std::abs(scaled->fmin - unscaled->fmin) < 1e-8);
+    auto ev = magmaan::model::ModelEvaluator::build(pt, *rep);
+    REQUIRE(ev.has_value());
+    auto a = ev->evaluate(unscaled->theta, false, false);
+    auto b = ev->evaluate(scaled->theta, false, false);
+    REQUIRE(a.has_value());
+    REQUIRE(b.has_value());
+    CHECK(a->moments.sigma[0].isApprox(b->moments.sigma[0], 1e-5));
+    auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
+    REQUIRE(units.has_value());
+    for (double factor : {0.01, 100.0}) {
+      CAPTURE(factor);
+      auto other_sample = sample_stats(covariance * (factor * factor), 80);
+      auto other_units = magmaan::estimate::parameter_units(pt, *rep, other_sample);
+      REQUIRE(other_units.has_value());
+      Eigen::VectorXd transported = start->cwiseProduct(other_units->cwiseQuotient(*units));
+      auto other = magmaan::estimate::frontier::fit_ml_psd(
+          pt, *rep, other_sample, transported, Backend::NloptSlsqp, strict_options(), options);
+      REQUIRE_MESSAGE(other.has_value(), (other.has_value() ? "" : other.error().detail));
+      check_psd_terminal(*other);
+      CHECK(std::abs(other->fmin - scaled->fmin) < 1e-8);
+      auto implied = ev->evaluate(other->theta, false, false);
+      REQUIRE(implied.has_value());
+      CHECK((implied->moments.sigma[0] / (factor * factor)).isApprox(b->moments.sigma[0], 1e-5));
+    }
+    auto unsupported = magmaan::estimate::frontier::fit_gmm_psd(
+        pt, *rep, samp, *start, {}, Backend::NloptSlsqp, strict_options(), options);
+    REQUIRE_FALSE(unsupported.has_value());
+    CHECK(unsupported.error().detail.find("only for complete-data ML") != std::string::npos);
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("PSD ML coordinate scales follow observed units") {
-  BuildOptions build_options;
-  std::string syntax = "f =~ x1 + x2 + x3";
-  bool zero_loadings = false;
-  SUBCASE("marker") {}
-  SUBCASE("std.lv and zero-information loadings") {
-    build_options.std_lv = true;
-    zero_loadings = true;
-  }
-  SUBCASE("correlated residual Cholesky rows and equal variances") {
-    syntax += "\nx1 ~~ x2\nx1 ~~ v*x1\nx2 ~~ v*x2";
-  }
-  auto pt = lavaanify(syntax, build_options);
-  auto rep = build_matrix_rep(pt);
-  REQUIRE(rep.has_value());
-  Eigen::Matrix3d covariance;
-  covariance << 1.8, 0.72, 0.55, 0.72, 1.5, 0.46, 0.55, 0.46, 1.3;
-  auto samp = sample_stats(covariance);
-  auto start = simple_start_values(pt, *rep, samp, {});
-  REQUIRE(start.has_value());
-  if (zero_loadings)
-    for (std::size_t i = 0; i < pt.size(); ++i)
-      if (rep->cell_for_row[i].used && rep->cell_for_row[i].mat == MatId::Lambda && pt.free[i] > 0)
-        (*start)(pt.free[i] - 1) = 0.0;
-  magmaan::estimate::frontier::PsdFitOptions options;
-  options.diagonal_preconditioning = true;
-  options.start_eigen_floor = 1e-12; // Keep projection inactive at every tested unit.
-  auto base = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-      pt, *rep, samp, *start, 1e-6, options);
-  REQUIRE(base.has_value());
-  auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
-  REQUIRE(units.has_value());
-  std::vector<Eigen::Vector3d> transforms;
-  for (double factor : {0.001, 0.01, 100.0, 1000.0})
-    transforms.push_back(Eigen::Vector3d::Constant(factor));
-  if (syntax == "f =~ x1 + x2 + x3")
-    transforms.emplace_back(0.01, 100.0, 2.0);
-  for (const auto& factors : transforms) {
-    CAPTURE(factors.transpose());
-    auto rescaled = sample_stats(factors.asDiagonal() * covariance * factors.asDiagonal());
-    auto other_units = magmaan::estimate::parameter_units(pt, *rep, rescaled);
-    REQUIRE(other_units.has_value());
-    Eigen::VectorXd other_start = start->cwiseProduct(other_units->cwiseQuotient(*units));
-    auto other = magmaan::estimate::psd_test::psd_ml_derivative_probe(
-        pt, *rep, rescaled, other_start, 1e-6, options);
-    REQUIRE(other.has_value());
-    CHECK(other->objective == doctest::Approx(base->objective).epsilon(1e-10));
-    CHECK(other->x.isApprox(base->x, 1e-10));
-    CHECK(other->analytic_gradient.isApprox(base->analytic_gradient, 1e-9));
-    if (zero_loadings) {
-      // Zero loadings hide their scale in x and the gradient; check their
-      // zero-information fallback directly against the transported units.
-      for (std::size_t i = 0; i < pt.size(); ++i) {
-        if (!rep->cell_for_row[i].used || rep->cell_for_row[i].mat != MatId::Lambda || pt.free[i] <= 0)
-          continue;
-        const Eigen::Index k = pt.free[i] - 1;
-        CHECK(other->coordinate_scale(k) / base->coordinate_scale(k) ==
-              doctest::Approx((*other_units)(k) / (*units)(k)).epsilon(1e-10));
+  auto run = [&](magmaan::estimate::frontier::PsdFactor psd_factor) {
+    BuildOptions build_options;
+    std::string syntax = "f =~ x1 + x2 + x3";
+    bool zero_loadings = false;
+    SUBCASE("marker") {}
+    SUBCASE("std.lv and zero-information loadings") {
+      build_options.std_lv = true;
+      zero_loadings = true;
+    }
+    SUBCASE("correlated residual Cholesky rows and equal variances") {
+      syntax += "\nx1 ~~ x2\nx1 ~~ v*x1\nx2 ~~ v*x2";
+    }
+    auto pt = lavaanify(syntax, build_options);
+    auto rep = build_matrix_rep(pt);
+    REQUIRE(rep.has_value());
+    Eigen::Matrix3d covariance;
+    covariance << 1.8, 0.72, 0.55, 0.72, 1.5, 0.46, 0.55, 0.46, 1.3;
+    auto samp = sample_stats(covariance);
+    auto start = simple_start_values(pt, *rep, samp, {});
+    REQUIRE(start.has_value());
+    if (zero_loadings)
+      for (std::size_t i = 0; i < pt.size(); ++i)
+        if (rep->cell_for_row[i].used && rep->cell_for_row[i].mat == MatId::Lambda && pt.free[i] > 0)
+          (*start)(pt.free[i] - 1) = 0.0;
+    magmaan::estimate::frontier::PsdFitOptions options;
+    options.factor = psd_factor;
+    options.diagonal_preconditioning = true;
+    options.start_eigen_floor = 1e-12; // Keep projection inactive at every tested unit.
+    auto base = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+        pt, *rep, samp, *start, 1e-6, options);
+    REQUIRE(base.has_value());
+    auto units = magmaan::estimate::parameter_units(pt, *rep, samp);
+    REQUIRE(units.has_value());
+    std::vector<Eigen::Vector3d> transforms;
+    for (double factor : {0.001, 0.01, 100.0, 1000.0})
+      transforms.push_back(Eigen::Vector3d::Constant(factor));
+    if (syntax == "f =~ x1 + x2 + x3")
+      transforms.emplace_back(0.01, 100.0, 2.0);
+    for (const auto& factors : transforms) {
+      CAPTURE(factors.transpose());
+      auto rescaled = sample_stats(factors.asDiagonal() * covariance * factors.asDiagonal());
+      auto other_units = magmaan::estimate::parameter_units(pt, *rep, rescaled);
+      REQUIRE(other_units.has_value());
+      Eigen::VectorXd other_start = start->cwiseProduct(other_units->cwiseQuotient(*units));
+      auto other = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+          pt, *rep, rescaled, other_start, 1e-6, options);
+      REQUIRE(other.has_value());
+      CHECK(other->objective == doctest::Approx(base->objective).epsilon(1e-10));
+      CHECK(other->x.isApprox(base->x, 1e-10));
+      CHECK(other->analytic_gradient.isApprox(base->analytic_gradient, 1e-9));
+      if (zero_loadings) {
+        // Zero loadings hide their scale in x and the gradient; check their
+        // zero-information fallback directly against the transported units.
+        for (std::size_t i = 0; i < pt.size(); ++i) {
+          if (!rep->cell_for_row[i].used || rep->cell_for_row[i].mat != MatId::Lambda || pt.free[i] <= 0)
+            continue;
+          const Eigen::Index k = pt.free[i] - 1;
+          CHECK(other->coordinate_scale(k) / base->coordinate_scale(k) ==
+                doctest::Approx((*other_units)(k) / (*units)(k)).epsilon(1e-10));
+        }
       }
     }
-  }
+  };
+  SUBCASE("triangular factor") { run(magmaan::estimate::frontier::PsdFactor::Triangular); }
+  SUBCASE("square factor") { run(magmaan::estimate::frontier::PsdFactor::Square); }
 }
 
 TEST_CASE("ordinal association ML freezes saturated thresholds and reports active rank") {
@@ -1507,4 +1596,144 @@ TEST_CASE("ordinal association ML rejects inactive constraints and unidentified 
   auto evaluator = magmaan::model::ModelEvaluator::build(loose, *loose_rep);
   REQUIRE(evaluator.has_value());
   CHECK_FALSE(magmaan::estimate::ordinal_association_info(*evaluator, *layout, layout->theta));
+}
+
+TEST_CASE("PSD square three-factor layout and projected start match triangular") {
+  auto pt = lavaanify("f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto samp = sample_stats(Eigen::MatrixXd::Identity(9, 9));
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+  double covariance_start = 0.4;
+  SUBCASE("positive definite start") {}
+  SUBCASE("indefinite start") { covariance_start = 1.4; }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& cell = rep->cell_for_row[i];
+    if (cell.used && cell.mat == MatId::Psi && pt.free[i] > 0)
+      (*start)(pt.free[i] - 1) = cell.row == cell.col ? 1.0 : covariance_start;
+  }
+  magmaan::estimate::frontier::PsdFitOptions square;
+  square.factor = magmaan::estimate::frontier::PsdFactor::Square;
+  auto triangular = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+      pt, *rep, samp, *start);
+  auto full = magmaan::estimate::psd_test::psd_ml_derivative_probe(
+      pt, *rep, samp, *start, 1e-6, square);
+  REQUIRE(triangular.has_value());
+  REQUIRE(full.has_value());
+  CHECK(triangular->n_lift == 6 + 9);
+  CHECK(full->n_lift == 9 + 9);
+  Eigen::Matrix3d L = Eigen::Matrix3d::Zero();
+  Eigen::Index k = triangular->x.size() - 6;
+  for (Eigen::Index c = 0; c < 3; ++c)
+    for (Eigen::Index r = c; r < 3; ++r) L(r, c) = triangular->x(k++);
+  Eigen::Matrix3d B = Eigen::Map<const Eigen::Matrix3d>(full->x.tail(9).data());
+  CHECK((B - B.transpose()).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((B * B.transpose() - L * L.transpose()).cwiseAbs().maxCoeff() < 1e-12);
+}
+
+TEST_CASE("PSD scalar lift blocks give identical fits for both factors") {
+  auto pt = lavaanify("f =~ x1 + x2 + x3");
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  Eigen::Vector3d loadings(1.0, 0.8, 0.65), residuals(0.5, 0.6, 0.7);
+  auto samp = sample_stats(one_factor_covariance(loadings, residuals, 1.2));
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+  auto square = magmaan::estimate::frontier::ml_psd_options();
+  square.factor = magmaan::estimate::frontier::PsdFactor::Square;
+  auto triangular = magmaan::estimate::frontier::fit_ml_psd(
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options());
+  auto full = magmaan::estimate::frontier::fit_ml_psd(
+      pt, *rep, samp, *start, Backend::NloptSlsqp, strict_options(), square);
+  REQUIRE(triangular.has_value());
+  REQUIRE(full.has_value());
+  CHECK((triangular->theta - full->theta).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK(std::abs(triangular->fmin - full->fmin) < 1e-10);
+}
+
+TEST_CASE("PSD square correlated latent block derivatives cover every objective") {
+  const std::string measurement = "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6";
+  Eigen::MatrixXd Lambda = Eigen::MatrixXd::Zero(6, 2);
+  Lambda.col(0).head(3) << .8, .7, .6;
+  Lambda.col(1).tail(3) << .8, .7, .6;
+  Eigen::Matrix2d Psi;
+  Psi << 1.0, .35, .35, 1.0;
+  Eigen::MatrixXd covariance = Lambda * Psi * Lambda.transpose();
+  covariance.diagonal().setOnes();
+  magmaan::estimate::frontier::PsdFitOptions square;
+  square.factor = magmaan::estimate::frontier::PsdFactor::Square;
+  auto correlate_start = [](const auto& pt, const auto& rep, Eigen::VectorXd& start) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      const auto& cell = rep.cell_for_row[i];
+      if (cell.used && cell.mat == MatId::Psi && cell.row != cell.col && pt.free[i] > 0)
+        start(pt.free[i] - 1) = 0.2;
+    }
+  };
+  auto check = [](const auto& probe, double tolerance) {
+    REQUIRE_MESSAGE(probe.has_value(), (probe.has_value() ? "" : probe.error().detail));
+    CHECK((probe->analytic_gradient - probe->finite_difference_gradient)
+              .cwiseAbs().maxCoeff() < tolerance);
+    CHECK((probe->analytic_constraint_jacobian - probe->finite_difference_constraint_jacobian)
+              .cwiseAbs().maxCoeff() < 3e-7);
+  };
+  BuildOptions build;
+  build.meanstructure = true;
+  auto pt = lavaanify(measurement, build);
+  auto rep = build_matrix_rep(pt);
+  REQUIRE(rep.has_value());
+  auto samp = sample_stats(covariance);
+  samp.mean.push_back(Eigen::VectorXd::Zero(6));
+  auto start = simple_start_values(pt, *rep, samp, {});
+  REQUIRE(start.has_value());
+  correlate_start(pt, *rep, *start);
+  check(magmaan::estimate::psd_test::psd_ml_derivative_probe(
+      pt, *rep, samp, *start, 1e-6, square), 3e-6);
+  check(magmaan::estimate::psd_test::psd_gmm_derivative_probe(
+      pt, *rep, samp, *start, {}, 1e-6, square), 3e-6);
+  auto raw = raw_with_covariance(covariance, Eigen::VectorXd::Zero(6), 400, true);
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  check(magmaan::estimate::psd_test::psd_fiml_derivative_probe(
+      pt, *rep, raw, *pack, *start, 1e-6, square), 4e-6);
+
+  std::string thresholds;
+  for (int j = 1; j <= 6; ++j)
+    thresholds += "\nx" + std::to_string(j) + " | t" + std::to_string(j) + "1 + t" + std::to_string(j) + "2";
+  auto ordinal_pt = lavaanify(measurement + thresholds);
+  auto ordinal_rep = build_matrix_rep(ordinal_pt);
+  REQUIRE(ordinal_rep.has_value());
+  auto ordinal = association_stats({covariance});
+  ordinal.NACOV.push_back(Eigen::MatrixXd::Identity(27, 27));
+  ordinal.W_dwls.push_back(Eigen::MatrixXd::Identity(27, 27));
+  ordinal.W_wls.push_back(Eigen::MatrixXd::Identity(27, 27));
+  auto ordinal_start = magmaan::estimate::ordinal_start_values(ordinal_pt, *ordinal_rep, ordinal, {});
+  REQUIRE(ordinal_start.has_value());
+  correlate_start(ordinal_pt, *ordinal_rep, *ordinal_start);
+  check(magmaan::estimate::psd_test::psd_catml_derivative_probe(
+      ordinal_pt, *ordinal_rep, ordinal, *ordinal_start, 1e-6, square), 4e-6);
+  for (auto parameterization : {magmaan::estimate::OrdinalParameterization::Delta,
+                               magmaan::estimate::OrdinalParameterization::Theta}) {
+    check(magmaan::estimate::psd_test::psd_ordinal_derivative_probe(
+        ordinal_pt, *ordinal_rep, ordinal, *ordinal_start,
+        magmaan::estimate::OrdinalWeightKind::DWLS, parameterization, 1e-6, square), 5e-6);
+  }
+  auto X = raw_with_covariance(covariance, Eigen::VectorXd::Zero(6), 480, false).X[0];
+  for (Eigen::Index i = 0; i < X.rows(); ++i)
+    for (Eigen::Index j = 0; j < 2; ++j)
+      X(i, j) = 1.0 + (X(i, j) > -.5) + (X(i, j) > .5);
+  auto mixed = magmaan::data::mixed_ordinal_stats_from_data({X}, {{1, 1, 0, 0, 0, 0}});
+  REQUIRE(mixed.has_value());
+  auto mixed_pt = lavaanify(measurement + "\nx1 | t11 + t12\nx2 | t21 + t22\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2", build);
+  auto mixed_rep = build_matrix_rep(mixed_pt);
+  REQUIRE(mixed_rep.has_value());
+  auto mixed_start = magmaan::estimate::mixed_ordinal_start_values(mixed_pt, *mixed_rep, *mixed, {});
+  REQUIRE(mixed_start.has_value());
+  correlate_start(mixed_pt, *mixed_rep, *mixed_start);
+  for (auto parameterization : {magmaan::estimate::OrdinalParameterization::Delta,
+                               magmaan::estimate::OrdinalParameterization::Theta}) {
+    check(magmaan::estimate::psd_test::psd_mixed_ordinal_derivative_probe(
+        mixed_pt, *mixed_rep, *mixed, *mixed_start,
+        magmaan::estimate::OrdinalWeightKind::DWLS, parameterization, 1e-6, square), 8e-6);
+  }
 }

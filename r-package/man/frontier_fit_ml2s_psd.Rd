@@ -3,11 +3,12 @@
 \title{Experimental fitting route: frontier_fit_ml2s_psd}
 \description{Fits the named objective through an explicit experimental covariance-domain route. PSD variants constrain covariance blocks; multiinfo variants apply the selected barrier target. Inference remains a separate operation.}
 \usage{
-frontier_fit_ml2s_psd(model, data, optimizer = "nlopt-slsqp", control = NULL, h_step = 1e-04,
-    stage1 = NULL, stage1_regularization = NULL, stage2_weight = "nt", dls_a = 0.5,
-    start_eigen_floor = 1e-06, feasibility_tol = 1e-06)
+frontier_fit_ml2s_psd(model, data, optimizer = "nlopt-slsqp", control = NULL, h_step = 1e-04, stage1 = NULL,
+    stage1_regularization = NULL, stage2_weight = "nt", dls_a = 0.5, start_eigen_floor = 1e-06,
+    feasibility_tol = 1e-06, psd_factor = c("triangular", "square"))
 }
 \arguments{
+\item{psd_factor}{Covariance factor: triangular (default) or square.}
 \item{model}{Model syntax or a model specification; prepared objects are accepted only by their corresponding interfaces.}
 \item{data}{Observed data frame, named matrix or sample-moment list compatible with the model. FIML requires raw observations.}
 \item{optimizer}{Native optimizer name; NULL uses the route default.}

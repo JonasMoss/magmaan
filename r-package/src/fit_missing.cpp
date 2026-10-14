@@ -7,6 +7,13 @@ using namespace magmaanr::fitglue;
 
 namespace {
 
+magmaan::estimate::frontier::PsdFactor psd_factor_from_string(const std::string& value) {
+  using Factor = magmaan::estimate::frontier::PsdFactor;
+  if (value == "triangular") return Factor::Triangular;
+  if (value == "square") return Factor::Square;
+  Rcpp::stop("psd_factor must be triangular or square");
+}
+
 magmaan::estimate::fiml::Stage1RegularizationTarget
 stage1_regularization_target_from_string(const std::string& target);
 magmaan::estimate::fiml::Stage1RegularizationOptions
@@ -295,7 +302,8 @@ Rcpp::List frontier_fit_fiml_psd_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_fiml_psd");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -327,6 +335,7 @@ Rcpp::List frontier_fit_fiml_psd_impl(
           ? magmaan::estimate::Backend::NloptSlsqp
           : fiml_backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
   auto e_or = magmaan::estimate::fiml::frontier::fit_fiml_psd(

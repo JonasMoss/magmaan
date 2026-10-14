@@ -20,3 +20,19 @@ test_that("fit_model(psd = TRUE) refuses conflicting options", {
   expect_error(fit_model(cfa, d, psd = TRUE, bounds = "standard"),
                "replaces `bounds`")
 })
+
+test_that("frontier PSD square factor agrees with triangular on three-factor CFA", {
+  skip_if_not_installed("lavaan")
+  model <- "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9"
+  d <- lavaan::HolzingerSwineford1939
+  triangular <- frontier_fit_ml_psd(model, d, psd_factor = "triangular")
+  square <- frontier_fit_ml_psd(model, d, psd_factor = "square")
+  expect_lt(max(abs(square$theta - triangular$theta)), 1e-5)
+  expect_lte(abs(square$fmin - triangular$fmin),
+             1e-8 * max(abs(square$fmin), abs(triangular$fmin)))
+  expect_error(frontier_fit_ml_psd(model, d, psd_factor = "unknown"),
+               "triangular.*square")
+  expect_error(frontier_fit_ml_psd_impl(partable_arg(model_spec(model)),
+               list(S = cov(d[paste0("x", 1:9)]), nobs = nrow(d)),
+               psd_factor = "unknown"), "triangular or square")
+})

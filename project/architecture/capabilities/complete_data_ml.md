@@ -52,6 +52,14 @@
   sign each free loading by its indicator's covariance with the factor's
   marker, and terminal audit records projected-gradient stationarity at the
   returned iterate so soft optimizer failures can be classified by geometry.
+- Frontier PSD fitting supports `PsdFitOptions::factor = PsdFactor::Square`
+  (lab wrappers: `psd_factor = "square"`), using a full square factor in each
+  connected primitive covariance component. Its symmetric square-root start
+  represents the same projected covariance as the triangular start. For the
+  PSD lift, square factors preserve local minima at singular covariances
+  (Levin, Kileel and Boumal 2025; Ding and Wright 2025); triangular factors
+  remain the default. Default adoption is reserved for TASK-33.14.
+
 - Frontier profile-LR scalar infrastructure for complete-data ML and
   moment-quadratic fits:
   `estimate::frontier::fit_ml_constrained()` appends caller-supplied nonlinear

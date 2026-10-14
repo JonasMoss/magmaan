@@ -1716,6 +1716,12 @@ separate final decision for each explicitly covered scope.
 
 ### PSD and remaining normalization
 
+- [x] **TASK-33.13 — opt-in square PSD covariance factors.** Core and lab
+  frontier routes accept full square factors with symmetric square-root
+  starts; triangular defaults and prepared fitting remain unchanged.
+  Default adoption belongs to the separate TASK-33.14 decision study.
+
+
 - [ ] **M — make caller-unit covariance audits scale robust.** Include standalone
   audits and normalization-disabled fits. **Check:** heterogeneous units,
   equalities, means and improper witnesses, retaining the distinction between

@@ -180,12 +180,16 @@ struct ExtraNonlinearEqConstraints {
 };
 
 // Controls for the frontier covariance-honest parameterization. The
-// optimizer drives internal Cholesky factors for every covariance-connected
+// optimizer drives internal covariance factors for every covariance-connected
 // component of Θ and Ψ and links them exactly to the ordinary partable
 // parameters.
 // `start_eigen_floor` is used only to construct a valid objective start; it is
 // not a lower bound at the solution, where PSD boundary points remain allowed.
+enum class PsdFactor { Triangular, Square };
+
 struct PsdFitOptions {
+  // Opt-in full square covariance factor; triangular remains the default.
+  PsdFactor factor = PsdFactor::Triangular;
   double start_eigen_floor = 1e-6;
   double feasibility_tol = 1e-6;
   // Complete-data ML only. Freeze blockwise diagonal expected-information

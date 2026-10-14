@@ -4,9 +4,11 @@
 \description{Fits the named objective through an explicit experimental covariance-domain route. PSD variants constrain covariance blocks; multiinfo variants apply the selected barrier target. Inference remains a separate operation.}
 \usage{
 frontier_fit_uls_psd(model, data, optimizer = "nlopt-slsqp", control = NULL, start_eigen_floor = 1e-06,
-    feasibility_tol = 1e-06, missing = c("listwise", "error"))
+    feasibility_tol = 1e-06, missing = c("listwise", "error"), psd_factor = c("triangular",
+        "square"))
 }
 \arguments{
+\item{psd_factor}{Covariance factor: triangular (default) or square.}
 \item{model}{Model syntax or a model specification; prepared objects are accepted only by their corresponding interfaces.}
 \item{data}{Observed data frame, named matrix or sample-moment list compatible with the model. FIML requires raw observations.}
 \item{optimizer}{Native optimizer name; NULL uses the route default.}

@@ -3,10 +3,12 @@
 \title{Experimental fitting route: frontier_fit_mixed_ordinal_psd}
 \description{Fits the named objective through an explicit experimental covariance-domain route. PSD variants constrain covariance blocks; multiinfo variants apply the selected barrier target. Inference remains a separate operation.}
 \usage{
-frontier_fit_mixed_ordinal_psd(model, data, estimator = c("DWLS", "WLS", "ULS"), optimizer = "nlopt-slsqp",
-    control = NULL, bounds = NULL, start_eigen_floor = 1e-06, feasibility_tol = 1e-06)
+frontier_fit_mixed_ordinal_psd(model, data, estimator = c("DWLS", "WLS", "ULS"), optimizer = "nlopt-slsqp", control = NULL,
+    bounds = NULL, start_eigen_floor = 1e-06, feasibility_tol = 1e-06, psd_factor = c("triangular",
+        "square"))
 }
 \arguments{
+\item{psd_factor}{Covariance factor: triangular (default) or square.}
 \item{model}{Model syntax or a model specification; prepared objects are accepted only by their corresponding interfaces.}
 \item{data}{Observed data frame, named matrix or sample-moment list compatible with the model. FIML requires raw observations.}
 \item{estimator}{Estimation objective. Supported objectives depend on the data kind and fitting route.}

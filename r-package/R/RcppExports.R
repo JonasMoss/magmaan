@@ -117,16 +117,16 @@ fit_coordinate_map <- function(partable, sample_stats, start, scaling = "sample_
     .Call(`_magmaanlab_fit_coordinate_map`, partable, sample_stats, start, scaling, center_locations)
 }
 
-frontier_fit_ml_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = TRUE) {
-    .Call(`_magmaanlab_frontier_fit_ml_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning)
+frontier_fit_ml_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = TRUE, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_ml_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, diagonal_preconditioning, psd_factor)
 }
 
-frontier_fit_ml_psd_fallback_impl <- function(partable, sample_stats, ordinary_optimizer = NULL, psd_optimizer = NULL, ordinary_control = NULL, psd_control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = TRUE) {
-    .Call(`_magmaanlab_frontier_fit_ml_psd_fallback_impl`, partable, sample_stats, ordinary_optimizer, psd_optimizer, ordinary_control, psd_control, start_eigen_floor, feasibility_tol, diagonal_preconditioning)
+frontier_fit_ml_psd_fallback_impl <- function(partable, sample_stats, ordinary_optimizer = NULL, psd_optimizer = NULL, ordinary_control = NULL, psd_control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = TRUE, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_ml_psd_fallback_impl`, partable, sample_stats, ordinary_optimizer, psd_optimizer, ordinary_control, psd_control, start_eigen_floor, feasibility_tol, diagonal_preconditioning, psd_factor)
 }
 
-frontier_fit_sphere_impl <- function(partable, sample_stats, estimator = "ML", psd = FALSE, W = NULL, optimizer = NULL, control = NULL, bounds = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = FALSE, polish = TRUE, start = "canonical") {
-    .Call(`_magmaanlab_frontier_fit_sphere_impl`, partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start)
+frontier_fit_sphere_impl <- function(partable, sample_stats, estimator = "ML", psd = FALSE, W = NULL, optimizer = NULL, control = NULL, bounds = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, diagonal_preconditioning = FALSE, polish = TRUE, start = "canonical", psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_sphere_impl`, partable, sample_stats, estimator, psd, W, optimizer, control, bounds, metric, pin_weight, pole_tol, start_eigen_floor, feasibility_tol, diagonal_preconditioning, polish, start, psd_factor)
 }
 
 frontier_fit_fiml_sphere_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, metric = "unit_free", pin_weight = 1.0, pole_tol = 1e-6, polish = TRUE, start = "canonical") {
@@ -141,16 +141,16 @@ frontier_fit_ml_multiinfo_impl <- function(partable, sample_stats, eta = 1.25, w
     .Call(`_magmaanlab_frontier_fit_ml_multiinfo_impl`, partable, sample_stats, eta, weight, optimizer, control, bounds, target)
 }
 
-frontier_fit_uls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_uls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol)
+frontier_fit_uls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_uls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
-frontier_fit_gls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_gls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol)
+frontier_fit_gls_psd_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_gls_psd_impl`, partable, sample_stats, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
-frontier_fit_wls_psd_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_wls_psd_impl`, partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol)
+frontier_fit_wls_psd_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_wls_psd_impl`, partable, sample_stats, W, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
 frontier_sam_impl <- function(partable, sample_stats, raw_data = NULL, method = "local", mapping = "ml", se = "twostep", lambda_correction = TRUE, alpha_correction = 0L, meanstructure = FALSE, mm_optimizer = NULL, struc_optimizer = NULL, mm_control = NULL, struc_control = NULL) {
@@ -365,8 +365,8 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaanlab_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
-frontier_fit_fiml_psd_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_fiml_psd_impl`, partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol)
+frontier_fit_fiml_psd_impl <- function(partable, raw_data, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_fiml_psd_impl`, partable, raw_data, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
 frontier_fit_fiml_multiinfo_impl <- function(partable, raw_data, eta = 1.25, weight = NULL, optimizer = NULL, control = NULL, bounds = NULL, target = "joint") {
@@ -549,16 +549,16 @@ fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, cont
     .Call(`_magmaanlab_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
-frontier_fit_ordinal_psd_impl <- function(partable, ordinal_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_ordinal_psd_impl`, partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
+frontier_fit_ordinal_psd_impl <- function(partable, ordinal_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_ordinal_psd_impl`, partable, ordinal_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
 fit_ordinal_barrier_impl <- function(partable, ordinal_stats, estimator = "ML", target = "joint", weight = 0.25, optimizer = NULL, control = NULL) {
     .Call(`_magmaanlab_fit_ordinal_barrier_impl`, partable, ordinal_stats, estimator, target, weight, optimizer, control)
 }
 
-fit_ml_ordinal_impl <- function(partable, ordinal_stats, psd = FALSE, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_fit_ml_ordinal_impl`, partable, ordinal_stats, psd, optimizer, control, start_eigen_floor, feasibility_tol)
+fit_ml_ordinal_impl <- function(partable, ordinal_stats, psd = FALSE, optimizer = NULL, control = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_fit_ml_ordinal_impl`, partable, ordinal_stats, psd, optimizer, control, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
 fit_ordinal_stage2_impl <- function(partable, ordinal_stats, stage2_weight = "dwls", dls_a = 0.5, optimizer = NULL, control = NULL, bounds = NULL) {
@@ -577,8 +577,8 @@ fit_wls_mixed_ordinal_impl <- function(partable, mixed_stats, optimizer = NULL, 
     .Call(`_magmaanlab_fit_wls_mixed_ordinal_impl`, partable, mixed_stats, optimizer, control, bounds)
 }
 
-frontier_fit_mixed_ordinal_psd_impl <- function(partable, mixed_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6) {
-    .Call(`_magmaanlab_frontier_fit_mixed_ordinal_psd_impl`, partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol)
+frontier_fit_mixed_ordinal_psd_impl <- function(partable, mixed_stats, estimator = "DWLS", optimizer = NULL, control = NULL, bounds = NULL, start_eigen_floor = 1e-6, feasibility_tol = 1e-6, psd_factor = "triangular") {
+    .Call(`_magmaanlab_frontier_fit_mixed_ordinal_psd_impl`, partable, mixed_stats, estimator, optimizer, control, bounds, start_eigen_floor, feasibility_tol, psd_factor)
 }
 
 ordinal_catml_dwls_rmsea_impl <- function(fit, ordinal_stats = NULL) {

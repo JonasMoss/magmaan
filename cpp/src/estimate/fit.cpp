@@ -284,6 +284,16 @@ struct LiftLink {
 };
 
 struct LiftBlock {
+  frontier::PsdFactor factor = frontier::PsdFactor::Triangular;
+
+  Eigen::Index first_row(Eigen::Index col) const noexcept {
+    return factor == frontier::PsdFactor::Square ? 0 : col;
+  }
+  Eigen::Index factor_index(Eigen::Index q, Eigen::Index row,
+                            Eigen::Index col) const noexcept {
+    return factor == frontier::PsdFactor::Square ? col * q + row
+        : detail::vech_index(q, row, col);
+  }
   std::size_t block = 0;
   LiftCovarianceKind kind = LiftCovarianceKind::Theta;
   Eigen::Index dim = 0;
@@ -298,7 +308,7 @@ struct LiftBlock {
   }
   Eigen::Index n_lift() const noexcept {
     const Eigen::Index q = active_dim();
-    return detail::vech_len(q);
+    return factor == frontier::PsdFactor::Square ? q * q : detail::vech_len(q);
   }
 };
 
@@ -310,11 +320,12 @@ struct PsdLiftLayout {
 };
 
 Eigen::MatrixXd lower_from_x(const Eigen::VectorXd& x, Eigen::Index offset,
-                             Eigen::Index q) {
+                             Eigen::Index q, frontier::PsdFactor factor) {
   Eigen::MatrixXd L = Eigen::MatrixXd::Zero(q, q);
   Eigen::Index k = offset;
   for (Eigen::Index c = 0; c < q; ++c) {
-    for (Eigen::Index r = c; r < q; ++r) {
+    for (Eigen::Index r = factor == frontier::PsdFactor::Square ? 0 : c;
+         r < q; ++r) {
       L(r, c) = x(k++);
     }
   }
@@ -323,6 +334,7 @@ Eigen::MatrixXd lower_from_x(const Eigen::VectorXd& x, Eigen::Index offset,
 
 LiftBlock component_shell(const LiftBlock& covariance) {
   LiftBlock out;
+  out.factor = covariance.factor;
   out.block = covariance.block;
   out.kind = covariance.kind;
   out.dim = covariance.dim;
@@ -348,7 +360,7 @@ void compact_link_affine_map(LiftBlock& block,
 fit_expected<PsdLiftLayout>
 build_psd_lift_layout(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
-                      const EqConstraints& con) {
+                      const EqConstraints& con, frontier::PsdFactor factor) {
   constexpr double structural_tol = 1e-12;
   PsdLiftLayout out;
   out.n_alpha = con.n_alpha;
@@ -366,6 +378,7 @@ build_psd_lift_layout(const spec::LatentStructure& pt,
               : rep.dims[b].n_latent;
       if (dim == 0) continue;
       LiftBlock block;
+      block.factor = factor;
       block.block = b;
       block.kind = kind;
       block.dim = dim;
@@ -547,7 +560,7 @@ covariance_overrides_from_x(const model::MatrixRep& rep,
   for (const auto& block : layout.blocks) {
     const Eigen::Index q = block.active_dim();
     const Eigen::MatrixXd L = lower_from_x(
-        x, layout.n_alpha + block.lift_offset, q);
+        x, layout.n_alpha + block.lift_offset, q, block.factor);
     const Eigen::MatrixXd C = L * L.transpose();
     Eigen::MatrixXd& target =
         block.kind == LiftCovarianceKind::Theta
@@ -580,7 +593,7 @@ project_alpha_to_psd_links(const PsdLiftLayout& layout,
   for (const auto& block : layout.blocks) {
     const Eigen::Index q = block.active_dim();
     const Eigen::MatrixXd L = lower_from_x(
-        x, layout.n_alpha + block.lift_offset, q);
+        x, layout.n_alpha + block.lift_offset, q, block.factor);
     const Eigen::MatrixXd LLt = L * L.transpose();
     for (Eigen::Index k = 0;
          k < static_cast<Eigen::Index>(block.links.size()); ++k) {
@@ -655,10 +668,14 @@ psd_lift_start(const PsdLiftLayout& layout,
           "PSD lift: Cholesky factorization failed after projecting the "
           "covariance start"));
     }
-    const Eigen::MatrixXd L = llt.matrixL();
+    Eigen::MatrixXd L = llt.matrixL();
+    if (block.factor == frontier::PsdFactor::Square) {
+      L = eig.eigenvectors() * values.array().sqrt().matrix().asDiagonal() *
+          eig.eigenvectors().transpose();
+    }
     Eigen::Index k = layout.n_alpha + block.lift_offset;
     for (Eigen::Index col = 0; col < q; ++col) {
-      for (Eigen::Index row = col; row < q; ++row) {
+      for (Eigen::Index row = block.first_row(col); row < q; ++row) {
         x(k++) = L(row, col);
       }
     }
@@ -738,10 +755,10 @@ psd_lifted_evaluation(
       const Eigen::Index q = block.active_dim();
       if (q == 0) continue;
       const Eigen::MatrixXd L = lower_from_x(
-          x, layout.n_alpha + block.lift_offset, q);
+          x, layout.n_alpha + block.lift_offset, q, block.factor);
       Eigen::Index local_col = 0;
       for (Eigen::Index lc = 0; lc < q; ++lc) {
-        for (Eigen::Index lr = lc; lr < q; ++lr, ++local_col) {
+        for (Eigen::Index lr = block.first_row(lc); lr < q; ++lr, ++local_col) {
           Eigen::MatrixXd dSigma;
           if (block.kind == LiftCovarianceKind::Theta) {
             dSigma = Eigen::MatrixXd::Zero(
@@ -960,7 +977,7 @@ psd_constraint_callbacks(const EqConstraints& con,
       const Eigen::VectorXd c = block.c0 + block.D * alpha;
       const Eigen::Index q = block.active_dim();
       const Eigen::MatrixXd L = lower_from_x(
-          x, layout.n_alpha + block.lift_offset, q);
+          x, layout.n_alpha + block.lift_offset, q, block.factor);
       const Eigen::MatrixXd LLt = L * L.transpose();
       for (Eigen::Index k = 0;
            k < static_cast<Eigen::Index>(block.links.size()); ++k) {
@@ -985,7 +1002,7 @@ psd_constraint_callbacks(const EqConstraints& con,
     for (const auto& block : layout.blocks) {
       const Eigen::Index q = block.active_dim();
       const Eigen::MatrixXd L = lower_from_x(
-          x, layout.n_alpha + block.lift_offset, q);
+          x, layout.n_alpha + block.lift_offset, q, block.factor);
       for (Eigen::Index k = 0;
            k < static_cast<Eigen::Index>(block.links.size()); ++k) {
         const auto& link = block.links[static_cast<std::size_t>(k)];
@@ -995,14 +1012,15 @@ psd_constraint_callbacks(const EqConstraints& con,
         }
         if (link.lifted()) {
           const Eigen::Index max_lc =
-              std::min(link.active_row, link.active_col);
+              block.factor == frontier::PsdFactor::Square ? q - 1
+                  : std::min(link.active_row, link.active_col);
           for (Eigen::Index lc = 0; lc <= max_lc; ++lc) {
             const Eigen::Index row_col = layout.n_alpha +
                 block.lift_offset +
-                detail::vech_index(q, link.active_row, lc);
+                block.factor_index(q, link.active_row, lc);
             const Eigen::Index col_col = layout.n_alpha +
                 block.lift_offset +
-                detail::vech_index(q, link.active_col, lc);
+                block.factor_index(q, link.active_col, lc);
             J(out_row, row_col) -= L(link.active_col, lc);
             J(out_row, col_col) -= L(link.active_row, lc);
           }
@@ -1107,10 +1125,10 @@ psd_ml_coordinate_scale(const spec::LatentStructure& pt,
     const auto& rows = block.kind == LiftCovarianceKind::Theta
         ? variables->observed[block.block] : variables->latent[block.block];
     Eigen::Index k = layout.n_alpha + block.lift_offset;
-    // C -> D C D implies L -> D L: every lower-triangular entry has
+    // C -> D C D implies B -> D B: every factor entry has
     // its row variable's unit, including off-diagonal entries.
     for (Eigen::Index c = 0; c < block.active_dim(); ++c)
-      for (Eigen::Index r = c; r < block.active_dim(); ++r)
+      for (Eigen::Index r = block.first_row(c); r < block.active_dim(); ++r)
         units(k++) = rows(block.active[static_cast<std::size_t>(r)]);
   }
   if (!units.allFinite() || (units.array() <= 0.0).any())
@@ -1522,7 +1540,7 @@ psd_ml_derivative_probe(spec::LatentStructure pt,
   auto pre = prelude(pt, rep, samp, theta_start,
                      "psd_ml_derivative_probe");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
@@ -1564,7 +1582,7 @@ psd_gmm_derivative_probe(spec::LatentStructure pt,
   auto pre = prelude(pt, rep, samp, theta_start,
                      "psd_gmm_derivative_probe");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
@@ -1596,7 +1614,7 @@ psd_fiml_derivative_probe(spec::LatentStructure pt,
   auto pre = prelude(pt, rep, pack.start_stats, theta_start,
                      "psd_fiml_derivative_probe");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
@@ -1633,7 +1651,7 @@ psd_ordinal_derivative_probe(
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, theta_start, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
@@ -1671,7 +1689,7 @@ psd_catml_derivative_probe(
   auto association = ordinal_association_layout(pt, rep, stats, theta_start);
   if (!association) return std::unexpected(association.error());
   pre->con = association->constraints;
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, association->theta, options.start_eigen_floor);
@@ -1711,7 +1729,7 @@ psd_mixed_ordinal_derivative_probe(
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, theta_start, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, options.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, theta_start, options.start_eigen_floor);
@@ -2446,7 +2464,7 @@ fit_fiml_psd_impl(spec::LatentStructure pt,
       !ok.has_value()) return std::unexpected(ok.error());
   auto pre = prelude(pt, rep, pack.start_stats, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);
@@ -3333,7 +3351,7 @@ fit_ml_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_psd");
   if (!pre.has_value()) return std::unexpected(pre.error());
 
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);
@@ -3375,7 +3393,7 @@ fit_gmm_psd(spec::LatentStructure pt, const model::MatrixRep& rep,
       !ok.has_value()) return std::unexpected(ok.error());
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm_psd");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);
@@ -3442,7 +3460,7 @@ fit_ordinal_psd(spec::LatentStructure pt,
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);
@@ -3586,7 +3604,7 @@ fit_ml_psd(spec::LatentStructure pt,
   auto association = ordinal_association_layout(pt, rep, stats, x0);
   if (!association) return std::unexpected(association.error());
   pre->con = association->constraints;
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, association->theta, psd_opts.start_eigen_floor);
@@ -3663,7 +3681,7 @@ fit_mixed_ordinal_psd(
   sample.n_obs = stats.n_obs;
   auto pre = prelude(pt, rep, sample, x0, who);
   if (!pre.has_value()) return std::unexpected(pre.error());
-  auto layout = build_psd_lift_layout(pt, rep, pre->con);
+  auto layout = build_psd_lift_layout(pt, rep, pre->con, psd_opts.factor);
   if (!layout.has_value()) return std::unexpected(layout.error());
   auto start = psd_lift_start(
       *layout, pre->con, x0, psd_opts.start_eigen_floor);

@@ -7,6 +7,13 @@ using namespace magmaanr::fitglue;
 
 namespace {
 
+magmaan::estimate::frontier::PsdFactor psd_factor_from_string(const std::string& value) {
+  using Factor = magmaan::estimate::frontier::PsdFactor;
+  if (value == "triangular") return Factor::Triangular;
+  if (value == "square") return Factor::Square;
+  Rcpp::stop("psd_factor must be triangular or square");
+}
+
 struct FcSemCtx {
   magmaan::spec::LatentStructure pt;
   magmaan::spec::LatentNames names;
@@ -58,7 +65,8 @@ Rcpp::List frontier_fit_gmm_psd_common(
     Rcpp::Nullable<Rcpp::String> optimizer,
     Rcpp::Nullable<Rcpp::List> control,
     double start_eigen_floor, double feasibility_tol,
-    PsdGmmKind kind, const char* call, const char* estimator);
+    PsdGmmKind kind, const char* call, const char* estimator,
+    const std::string& psd_factor);
 magmaan::estimate::frontier::SamMethod
 sam_method_from_string(std::string x);
 magmaan::estimate::frontier::SamMapping
@@ -531,7 +539,6 @@ Rcpp::List gauge_report_to_r(const Ctx& ctx,
         Rcpp::_["spheres"]=mapped_units);
   }
 
-
   return Rcpp::List::create(
       Rcpp::_["chart"] = "sphere",
       Rcpp::_["metric"] = metric,
@@ -562,7 +569,8 @@ Rcpp::List frontier_fit_gmm_psd_common(
     Rcpp::Nullable<Rcpp::String> optimizer,
     Rcpp::Nullable<Rcpp::List> control,
     double start_eigen_floor, double feasibility_tol,
-    PsdGmmKind kind, const char* call, const char* estimator) {
+    PsdGmmKind kind, const char* call, const char* estimator,
+    const std::string& psd_factor) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, call);
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -574,6 +582,7 @@ Rcpp::List frontier_fit_gmm_psd_common(
           ? magmaan::estimate::Backend::NloptSlsqp
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
 
@@ -848,7 +857,8 @@ Rcpp::List frontier_fit_ml_psd_impl(
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
     double feasibility_tol = 1e-6,
-    bool diagonal_preconditioning = true) {
+    bool diagonal_preconditioning = true,
+    std::string psd_factor = "triangular") {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_ml_psd");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -864,6 +874,7 @@ Rcpp::List frontier_fit_ml_psd_impl(
           ? magmaan::estimate::Backend::NloptSlsqp
           : backend_from_optimizer_arg(optimizer);
   magmaan::estimate::frontier::PsdFitOptions psd_opts;
+  psd_opts.factor = psd_factor_from_string(psd_factor);
   psd_opts.start_eigen_floor = start_eigen_floor;
   psd_opts.feasibility_tol = feasibility_tol;
   psd_opts.diagonal_preconditioning = diagonal_preconditioning;
@@ -887,7 +898,8 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
     Rcpp::Nullable<Rcpp::List> ordinary_control = R_NilValue,
     Rcpp::Nullable<Rcpp::List> psd_control = R_NilValue,
     double start_eigen_floor = 1e-6, double feasibility_tol = 1e-6,
-    bool diagonal_preconditioning = true) {
+    bool diagonal_preconditioning = true,
+    std::string psd_factor = "triangular") {
   namespace ef = magmaan::estimate::frontier;
   auto parsed = partable_from_arg(partable, "frontier_fit_ml_psd_fallback");
   auto starts = std::move(parsed.starts);
@@ -908,6 +920,7 @@ Rcpp::List frontier_fit_ml_psd_fallback_impl(
     options.psd_backend = backend_from_optimizer_arg(psd_optimizer);
   options.ordinary = optim_opts_from(ordinary_control, options.ordinary);
   options.psd = optim_opts_from(psd_control, options.psd);
+  options.covariance.factor = psd_factor_from_string(psd_factor);
   options.covariance.start_eigen_floor = start_eigen_floor;
   options.covariance.feasibility_tol = feasibility_tol;
   options.covariance.diagonal_preconditioning = diagonal_preconditioning;
@@ -982,7 +995,8 @@ Rcpp::List frontier_fit_sphere_impl(
     std::string metric = "unit_free", double pin_weight = 1.0,
     double pole_tol = 1e-6, double start_eigen_floor = 1e-6,
     double feasibility_tol = 1e-6, bool diagonal_preconditioning = false,
-    bool polish = true, std::string start = "canonical") {
+    bool polish = true, std::string start = "canonical",
+    std::string psd_factor = "triangular") {
   namespace fr = magmaan::estimate::frontier;
   magmaan::compat::lavaan::ParsedLavaanParTable parsed =
       partable_from_arg(partable, "frontier_fit_sphere");
@@ -1019,6 +1033,7 @@ Rcpp::List frontier_fit_sphere_impl(
         optimizer.isNull() ? magmaan::estimate::Backend::NloptSlsqp
                            : backend_from_optimizer_arg(optimizer);
     fr::PsdFitOptions psd_opts;
+    psd_opts.factor = psd_factor_from_string(psd_factor);
     psd_opts.start_eigen_floor = start_eigen_floor;
     psd_opts.feasibility_tol = feasibility_tol;
     psd_opts.diagonal_preconditioning = diagonal_preconditioning;
@@ -1210,11 +1225,12 @@ Rcpp::List frontier_fit_uls_psd_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   return frontier_fit_gmm_psd_common(
       partable, sample_stats, R_NilValue, optimizer, control,
       start_eigen_floor, feasibility_tol, PsdGmmKind::Uls,
-      "frontier_fit_uls_psd", "ULS");
+      "frontier_fit_uls_psd", "ULS", psd_factor);
 }
 
 // Normal-theory GLS over PSD primitive LISREL covariance matrices.
@@ -1225,11 +1241,12 @@ Rcpp::List frontier_fit_gls_psd_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   return frontier_fit_gmm_psd_common(
       partable, sample_stats, R_NilValue, optimizer, control,
       start_eigen_floor, feasibility_tol, PsdGmmKind::Gls,
-      "frontier_fit_gls_psd", "GLS");
+      "frontier_fit_gls_psd", "GLS", psd_factor);
 }
 
 // Caller-fixed WLS/ADF over PSD primitive LISREL covariance matrices.
@@ -1240,11 +1257,12 @@ Rcpp::List frontier_fit_wls_psd_impl(
     Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
     Rcpp::Nullable<Rcpp::List> control = R_NilValue,
     double start_eigen_floor = 1e-6,
-    double feasibility_tol = 1e-6) {
+    double feasibility_tol = 1e-6,
+    std::string psd_factor = "triangular") {
   return frontier_fit_gmm_psd_common(
       partable, sample_stats, W, optimizer, control,
       start_eigen_floor, feasibility_tol, PsdGmmKind::Wls,
-      "frontier_fit_wls_psd", "WLS");
+      "frontier_fit_wls_psd", "WLS", psd_factor);
 }
 
 // [[Rcpp::export]]
