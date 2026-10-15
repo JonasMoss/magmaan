@@ -12,28 +12,13 @@ x<-do.call(rbind,cells)
 meta<-read.csv(file.path(out,"metadata.csv"),colClasses="character")
 stopifnot(length(paths)==as.integer(meta$value[meta$key=="expected_cells"]),
  nrow(x)==as.integer(meta$value[meta$key=="expected_rows"]))
-key<-function(d,cols)do.call(paste,c(d[cols],sep="|"))
-x$key<-key(x,c("family","population","model","estimator","N","replication","seed"))
-stopifnot(!anyDuplicated(paste(x$key,x$arm)))
-x$best<-FALSE
-for(ids in split(seq_len(nrow(x)),x$key)) {
- d<-x[ids,];stopifnot(setequal(d$arm,c("triangular","square")))
- success<-d$converged & is.finite(d$fmin)
- if(any(success)) {best<-min(d$fmin[success]);x$best[ids]<-success & d$fmin<=best+1e-6*(1+abs(best))}
-}
+source(file.path(root,"R/psd_factor_pairing.R"))
+x<-psd_factor_best(x)
 by<-c("family","role","estimator")
 summary<-do.call(rbind,lapply(split(x,key(x,c(by,"arm"))),function(d)cbind(d[1,c(by,"arm")],
  data.frame(fits=nrow(d),successes=sum(d$converged),best_known=sum(d$best),errors=sum(nzchar(d$error)),
  total_seconds=sum(d$seconds),median_seconds=median(d$seconds)))))
-a<-x[x$arm=="square",]; b<-x[x$arm=="triangular",]
-p<-merge(a,b,by="key",suffixes=c("_square","_triangular"))
-for(k in by)p[[k]]<-p[[paste0(k,"_square")]]
-p$success_win<-p$converged_square & !p$converged_triangular
-p$success_loss<-!p$converged_square & p$converged_triangular
-p$best_win<-p$best_square & !p$best_triangular
-p$best_loss<-!p$best_square & p$best_triangular
-p$win<-p$success_win | (p$converged_square & p$converged_triangular & p$best_win)
-p$loss<-p$success_loss | (p$converged_square & p$converged_triangular & p$best_loss)
+p<-psd_factor_pair(x)
 paired<-do.call(rbind,lapply(split(p,key(p,by)),function(d)cbind(d[1,by],data.frame(draws=nrow(d),
  success_wins=sum(d$success_win),success_losses=sum(d$success_loss),best_wins=sum(d$best_win),best_losses=sum(d$best_loss),
  wins=sum(d$win),losses=sum(d$loss),triangular_seconds=sum(d$seconds_triangular),square_seconds=sum(d$seconds_square)))))
