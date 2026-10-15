@@ -59,6 +59,9 @@
   PSD lift, square factors preserve local minima at singular covariances
   (Levin, Kileel and Boumal 2025; Ding and Wright 2025); triangular factors
   remain the default. Default adoption is reserved for TASK-33.14.
+  The symmetric-factor decision harness (TASK-33.14.5) compares triangular,
+  symmetric and square fits, composes rescue, and checks separate-unit F5
+  consistency; its two-replication smoke is not adoption evidence.
   Correlated-block derivative probes prepare ordinal and mixed parameter
   layouts before constructing starts and guard start writes in optimized builds.
 

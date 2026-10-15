@@ -1720,6 +1720,9 @@ separate final decision for each explicitly covered scope.
   frontier routes accept full square factors with symmetric square-root
   starts; triangular defaults and prepared fitting remain unchanged.
   Default adoption belongs to the separate TASK-33.14 decision study.
+- [x] **TASK-33.14.5 — symmetric PSD decision runner and smoke.** Shared
+  resumable runner, three fitted arms, composed rescue, mixed-unit F5, and
+  per-family decision summaries; production remains separately authorized.
 - [x] **TASK-33.16 — guard square-factor derivative-test starts.** Prepare
   ordinal and mixed models before constructing their representations and
   correlated starts; check free indices before writing the start vector.
