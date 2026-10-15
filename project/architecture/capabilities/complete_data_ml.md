@@ -59,6 +59,8 @@
   PSD lift, square factors preserve local minima at singular covariances
   (Levin, Kileel and Boumal 2025; Ding and Wright 2025); triangular factors
   remain the default. Default adoption is reserved for TASK-33.14.
+  Correlated-block derivative probes prepare ordinal and mixed parameter
+  layouts before constructing starts and guard start writes in optimized builds.
 
 - Frontier profile-LR scalar infrastructure for complete-data ML and
   moment-quadratic fits:

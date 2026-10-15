@@ -1720,6 +1720,9 @@ separate final decision for each explicitly covered scope.
   frontier routes accept full square factors with symmetric square-root
   starts; triangular defaults and prepared fitting remain unchanged.
   Default adoption belongs to the separate TASK-33.14 decision study.
+- [x] **TASK-33.16 — guard square-factor derivative-test starts.** Prepare
+  ordinal and mixed models before constructing their representations and
+  correlated starts; check free indices before writing the start vector.
 
 
 - [ ] **M — make caller-unit covariance audits scale robust.** Include standalone

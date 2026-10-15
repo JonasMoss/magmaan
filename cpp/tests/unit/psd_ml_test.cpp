@@ -1666,8 +1666,10 @@ TEST_CASE("PSD square correlated latent block derivatives cover every objective"
   auto correlate_start = [](const auto& pt, const auto& rep, Eigen::VectorXd& start) {
     for (std::size_t i = 0; i < pt.size(); ++i) {
       const auto& cell = rep.cell_for_row[i];
-      if (cell.used && cell.mat == MatId::Psi && cell.row != cell.col && pt.free[i] > 0)
+      if (cell.used && cell.mat == MatId::Psi && cell.row != cell.col && pt.free[i] > 0) {
+        REQUIRE(pt.free[i] - 1 < start.size());
         start(pt.free[i] - 1) = 0.2;
+      }
     }
   };
   auto check = [](const auto& probe, double tolerance) {
@@ -1701,12 +1703,14 @@ TEST_CASE("PSD square correlated latent block derivatives cover every objective"
   for (int j = 1; j <= 6; ++j)
     thresholds += "\nx" + std::to_string(j) + " | t" + std::to_string(j) + "1 + t" + std::to_string(j) + "2";
   auto ordinal_pt = lavaanify(measurement + thresholds);
-  auto ordinal_rep = build_matrix_rep(ordinal_pt);
-  REQUIRE(ordinal_rep.has_value());
   auto ordinal = association_stats({covariance});
   ordinal.NACOV.push_back(Eigen::MatrixXd::Identity(27, 27));
   ordinal.W_dwls.push_back(Eigen::MatrixXd::Identity(27, 27));
   ordinal.W_wls.push_back(Eigen::MatrixXd::Identity(27, 27));
+  REQUIRE(magmaan::estimate::prepare_ordinal_delta_partable(
+      ordinal_pt, ordinal).has_value());
+  auto ordinal_rep = build_matrix_rep(ordinal_pt);
+  REQUIRE(ordinal_rep.has_value());
   auto ordinal_start = magmaan::estimate::ordinal_start_values(ordinal_pt, *ordinal_rep, ordinal, {});
   REQUIRE(ordinal_start.has_value());
   correlate_start(ordinal_pt, *ordinal_rep, *ordinal_start);
@@ -1725,6 +1729,10 @@ TEST_CASE("PSD square correlated latent block derivatives cover every objective"
   auto mixed = magmaan::data::mixed_ordinal_stats_from_data({X}, {{1, 1, 0, 0, 0, 0}});
   REQUIRE(mixed.has_value());
   auto mixed_pt = lavaanify(measurement + "\nx1 | t11 + t12\nx2 | t21 + t22\nx1 ~*~ 1*x1\nx2 ~*~ 1*x2", build);
+  // Preparation fixes ordinal variances/intercepts and compacts free indices.
+  // Use that same parameter layout for the representation and the start.
+  REQUIRE(magmaan::estimate::prepare_mixed_ordinal_delta_partable(
+      mixed_pt, *mixed).has_value());
   auto mixed_rep = build_matrix_rep(mixed_pt);
   REQUIRE(mixed_rep.has_value());
   auto mixed_start = magmaan::estimate::mixed_ordinal_start_values(mixed_pt, *mixed_rep, *mixed, {});
