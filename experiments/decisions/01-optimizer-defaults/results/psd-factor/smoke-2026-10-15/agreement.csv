@@ -1,0 +1,12 @@
+"family","role","estimator","draws","comparable","different_T_gt_1e_4","ordinary_errors","ordinary_seconds"
+"control_weak_marker","control","ML",2,2,0,0,0.488000000000003
+"F1_boomsma","test","ML",48,48,0,0,0.540999999999996
+"F1_chen","test","ML",16,16,0,0,0.195000000000009
+"F1_constrained","test","ML",40,40,0,0,0.651000000000018
+"F1_engineering15","test","ML",8,8,0,0,0.0919999999999991
+"F1_ernst","control","ML",4,4,0,0,0.0449999999999999
+"F1_research47","test","ML",52,52,0,0,0.530000000000001
+"F1_wolf","test","ML",72,72,1,0,4.96
+"F2","test","ML",16,16,0,0,1.141
+"F3","test","ML",4,4,0,0,0.0480000000000019
+"F4","test","ML",16,16,0,0,1.14500000000001
