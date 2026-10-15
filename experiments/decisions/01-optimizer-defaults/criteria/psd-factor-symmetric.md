@@ -1,8 +1,8 @@
 # Lane psd-factor-symmetric: criteria (draft 2026-10-15, written before any run)
 
-**Status.** Draft, awaiting the author's approval. The production run then
-waits for simbox and a separate go from the author; the smoke run may start
-once the criteria are approved.
+**Status.** Approved by the author on 2026-10-15 ("lets go"). The smoke run
+may start now; the production run waits for simbox and the symmetric factor
+on main.
 
 **Decision.** Whether the default covariance factor of every PSD route
 (complete-data ML, FIML, ML2S, the least-squares family and ordinal/mixed
