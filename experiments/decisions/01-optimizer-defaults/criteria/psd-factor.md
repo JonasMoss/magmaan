@@ -1,7 +1,6 @@
 # Lane psd-factor: criteria (draft 2026-10-15, written before any run)
 
-**Status.** Draft for the author's approval. No decision run may start until
-the author approves these criteria and the compute (TASK-33.14).
+**Status.** Approved by the author on 2026-10-15 ("sure lets go"). The production run waits for simbox and a go from the author; the smoke run may start now.
 
 **Decision.** Whether the default covariance factor of every PSD route
 (complete-data ML, FIML, ML2S, the least-squares family and ordinal/mixed
