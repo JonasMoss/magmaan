@@ -39,8 +39,10 @@ p <- do.call(rbind,pairs)
 paired <- do.call(rbind,lapply(split(p,key(p,c(by,"arm"))),function(d)cbind(d[1,c(by,"arm")],data.frame(draws=nrow(d),success_wins=sum(d$success_win),success_losses=sum(d$success_loss),best_wins=sum(d$best_win),best_losses=sum(d$best_loss),wins=sum(d$win),losses=sum(d$loss),candidate_seconds=sum(d$candidate_seconds),baseline_seconds=sum(d$seconds_triangular)))))
 f5 <- x[x$transform=="mixed",]
 native <- x[x$transform=="native",]
+# F2 and F4 share draws, so match the native fit within its own family.
+f5$native_family <- sub("^F5_","",f5$family)
 ck <- c("population","model","estimator","N","replication","seed","arm")
-idx <- match(key(f5,ck),key(native,ck))
+idx <- match(key(f5,c("native_family",ck)),key(native,c("family",ck)))
 if(anyNA(idx)) stop("F5 consistency requires corresponding native cells; select all or F1,F2,F3,F5")
 f5$different <- f5$converged != native$converged[idx]
 consistency <- do.call(rbind,lapply(split(f5,key(f5,c("family","arm"))),function(d)data.frame(family=d$family[1],arm=d$arm[1],draws=nrow(d),success_differs=sum(d$different))))

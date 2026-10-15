@@ -16,6 +16,6 @@
 "started_utc","2026-10-15 15:20:50 UTC"
 "expected_cells","277"
 "expected_rows","1662"
-"summary_command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=experiments/decisions/01-optimizer-defaults/scripts/summarize_psd_factor_symmetric.R --args --run-id smoke-2026-10-15"
-"summary_source_md5","30bd4536d94317ada06c707268d038dc;0f78b54275948423f89faa863e63df53"
+"summary_command","/opt/R/4.6.1/lib/R/bin/exec/R --no-echo --no-restore --file=scripts/summarize_psd_factor_symmetric.R --args --run-id smoke-2026-10-15"
+"summary_source_md5","2ea71a06e4cdeaf8e18554da3093783e;0f78b54275948423f89faa863e63df53"
 "summary_note","Smoke verdicts are diagnostic only; production needs separate authorization."
