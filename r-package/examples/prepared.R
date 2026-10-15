@@ -110,7 +110,7 @@ for (method in c('DWLS', 'WLS')) {
   close_fit(estimate(m, d, weight = w, control = ctrl),
             magmaanlab:::fit_wls(spec, ss, W = w$W, control = ctrl))
 }
-reject(prepare_weight(d, 'WLS', W = diag(-1, 10)), 'positive definite')
+reject(prepare_weight(d, 'WLS', W = diag(-1, 10)), 'positive (semi)?definite')
 reject(prepare_weight(d, 'WLS', W = diag(9)), 'moment dimensions')
 reject(prepare_weight(prepare_data(m, ss), 'WLS'), 'raw data or explicit W')
 

@@ -335,6 +335,12 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-15: frontier PSD fitting offers an opt-in full square covariance factor
+(`PsdFitOptions::factor`, magmaanlab `psd_factor = "square"`), whose lifted local
+minima are exactly those of the PSD problem; starts are the symmetric square root
+of the projected start. The lower-triangular factor stays the default pending the
+pre-registered decision study TASK-33.14 (TASK-33.13, TASK-33.16).
+
 2026-10-11: the std.lv endpoint transport accepts linear equality constraints
 whose members share one scale form after tying factor scales (same-factor
 loadings, a factor's loadings or latent means across groups, loadings across
