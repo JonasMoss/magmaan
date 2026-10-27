@@ -1,4 +1,5 @@
 test_that("mixed structural models report delta residuals and theta scales", {
+  skip_lavaan_mixed_gamma()
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   ordered <- paste0("x", 1:3)
@@ -9,7 +10,7 @@ test_that("mixed structural models report delta residuals and theta scales", {
     spec <- model_spec(syntax, ordered = ordered, parameterization = param,
                        fixed_x = FALSE, auto_cov_y = TRUE)
     fit <- fit_model(spec, d, estimator = "DWLS")
-    oracle <- lavaan::sem(syntax, d, ordered = ordered, parameterization = param,
+    oracle <- lavaan_categorical_fit(lavaan::sem, syntax, d, ordered = ordered, parameterization = param,
                           fixed.x = FALSE, estimator = "DWLS")
     p <- fit$partable
     q <- lavaan::parTable(oracle)

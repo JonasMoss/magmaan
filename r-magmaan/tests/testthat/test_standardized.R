@@ -93,8 +93,10 @@ test_that("ordinary ML standardized rows match lavaan and the active delta covar
   standardized_delta(fit)
 })
 
-test_that("ordinal and mixed standardized rows include thresholds and fixed residuals", {
-  for (mixed in c(FALSE, TRUE)) for (par in c("delta", "theta")) for (grouped in c(FALSE, TRUE)) {
+for (mixed in c(FALSE, TRUE)) test_that(paste(if (mixed) "mixed" else "ordinal",
+  "standardized rows include thresholds and fixed residuals"), {
+  if (mixed) skip_lavaan_mixed_gamma()
+  for (par in c("delta", "theta")) for (grouped in c(FALSE, TRUE)) {
     group <- if (grouped) "school" else NULL
     d <- ordinal_hs()
     ordered <- paste0("x", 1:6)
@@ -105,7 +107,7 @@ test_that("ordinal and mixed standardized rows include thresholds and fixed resi
     fit <- magmaan(magmaan_model(cfa, prototype = d, ordered = ordered,
                                   parameterization = par, group = group), d, estimator = "DWLS",
                     options = list(preset = "lavaan-0.7.2"))
-    lav <- lav_cfa(cfa, d, ordered = ordered, parameterization = par,
+    lav <- lavaan_categorical_fit(lav_cfa, cfa, d, ordered = ordered, parameterization = par,
                    estimator = "WLSMV", fixed.x = FALSE, group = group)
     standardized_parity(fit, lav, "WLSMV")
     standardized_delta(fit)

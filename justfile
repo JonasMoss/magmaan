@@ -252,18 +252,27 @@ r-cmd-check output_dir="$HOME/.cache/magmaan-logs/r-cmd-check" library="$HOME/.c
     export R_LIBS="$library${R_LIBS:+:$R_LIBS}"
     export MAKEFLAGS="-j{{jobs}}" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
     cd "$output_dir"
+    failed=0
     for package_dir in r-package r-magmaan; do
         package="$(sed -n 's/^Package: //p' "$root/$package_dir/DESCRIPTION")"
         version="$(sed -n 's/^Version: //p' "$root/$package_dir/DESCRIPTION")"
-        nice -n 10 R CMD build "$root/$package_dir"
-        nice -n 10 R CMD check --no-manual "$package"_"$version".tar.gz
+        if ! nice -n 10 R CMD build "$root/$package_dir"; then
+            failed=1
+            continue
+        fi
+        if ! nice -n 10 R CMD check --no-manual "$package"_"$version".tar.gz; then
+            failed=1
+        fi
         if grep -Eq '[0-9]+ (ERROR|WARNING)' "$package.Rcheck/00check.log"; then
-            exit 1
+            failed=1
         fi
         if [ "$package" = magmaanlab ]; then
-            nice -n 10 R CMD INSTALL --library="$library" "$package.Rcheck/00_pkg_src/$package"
+            if ! nice -n 10 R CMD INSTALL --library="$library" "$package.Rcheck/00_pkg_src/$package"; then
+                failed=1
+            fi
         fi
     done
+    exit "$failed"
 
 # Force-clean the in-tree R build artifacts + the dev mirror.
 r-clean:

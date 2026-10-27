@@ -92,7 +92,7 @@ test_that("ordinal convention measures use n minus groups and CATML robust famil
         parameterization=p, group=if (grouped) "school" else NULL,
         group_labels=if (grouped) unique(as.character(d$school)) else NULL)
       fit <- fit_model(spec, d, estimator=estimator)
-      oracle <- lavaan::cfa(syntax, d, ordered=vars, estimator=convention,
+      oracle <- lavaan_categorical_fit(lavaan::cfa, syntax, d, ordered=vars, estimator=convention,
         parameterization=p, group=if (grouped) "school" else NULL)
       expect_convention_measures(fit, oracle, convention)
     }

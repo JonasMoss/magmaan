@@ -49,6 +49,14 @@ source-package checks run the same seven cases without a checkout of C++ test
 fixtures. Estimates, standard errors, global tests, standardized reporting and
 factor scores are still compared with installed lavaan.
 
+The R CI oracle is pinned to lavaan 0.7-2 for the `lavaan-0.7.2`
+preset (TASK-164.1); both source packages are checked before reporting failure.
+Live categorical inference requests expected bread on lavaan >= 0.7-3,
+and reporting tests select the requested test by name. Mixed Gamma-dependent
+oracle comparisons skip only on >= 0.7-3 pending TASK-164.2; all run on 0.7-2.
+Nested-reseed scenarios use a full-precision CSV draw frozen under 0.7.2,
+with its regeneration script beside the fixture.
+
 #### Dated changes
 
 2026-10-02: CI is configured for both portable R source-package checks, with

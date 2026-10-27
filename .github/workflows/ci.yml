@@ -42,13 +42,18 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           working-directory: r-package
-          extra-packages: any::testthat
+          # Oracle = lavaan 0.7-2 for the lavaan-0.7.2 preset; see TASK-164.
+          extra-packages: |
+            any::testthat
+            cran::lavaan@0.7-2
           needs: check
 
       - uses: extractions/setup-just@v2
 
       - name: Check both source packages (including live lavaan tests)
-        run: just jobs=2 r-cmd-check "$RUNNER_TEMP/r-check" "$RUNNER_TEMP/r-library"
+        run: |
+          Rscript -e 'cat("lavaan oracle: ", as.character(packageVersion("lavaan")), "\n", sep = "")'
+          just jobs=2 r-cmd-check "$RUNNER_TEMP/r-check" "$RUNNER_TEMP/r-library"
 
       - name: Upload R check diagnostics
         if: always()

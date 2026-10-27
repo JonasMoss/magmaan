@@ -8,7 +8,7 @@ test_that("theta fitted tables reconstruct scales for ordinal and mixed models",
     fit <- fit_model(syntax, d, ordered = ordered,
                      groups = if (grouped) "school" else NULL,
                      estimator = "DWLS", parameterization = "theta")
-    oracle <- lavaan::cfa(syntax, d, ordered = ordered,
+    oracle <- lavaan_categorical_fit(lavaan::cfa, syntax, d, ordered = ordered,
                           group = if (grouped) "school" else NULL,
                           estimator = "DWLS", parameterization = "theta")
     expect_true(fit$converged)

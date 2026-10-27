@@ -17,7 +17,7 @@ ordinal_nested_pair <- function(syntax, parameterization, convention,
       parameterization = parameterization, group = if (group) "school" else NULL,
       group_labels = if (group) levels(d$school) else NULL, group_equal = equal[[i]])
     fits[[i]] <- fit_model(spec, d, estimator = estimator)
-    refs[[i]] <- lavaan::cfa(syntax[[i]], d, ordered = ord, estimator = convention,
+    refs[[i]] <- lavaan_categorical_fit(lavaan::cfa, syntax[[i]], d, ordered = ord, estimator = convention,
       parameterization = parameterization, group = if (group) "school" else NULL,
       group.label = if (group) levels(d$school) else NULL, group.equal = equal[[i]])
     expect_true(fits[[i]]$converged)

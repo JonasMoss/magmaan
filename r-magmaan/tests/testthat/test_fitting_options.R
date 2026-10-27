@@ -69,7 +69,7 @@ test_that("ordinary all-ordinal DWLS exposes the lavaan fitting preset", {
         group = group, group.equal = equal, parameterization = parameterization)
     fit <- magmaan(m, d, estimator = "DWLS", inference = FALSE,
         options = list(preset = "lavaan-0.7.2"))
-    lv <- lavaan::cfa("f =~ x1+x2+x3+x4", d, ordered = paste0("x", 1:4),
+    lv <- lavaan_categorical_fit(lavaan::cfa, "f =~ x1+x2+x3+x4", d, ordered = paste0("x", 1:4),
         group = group, group.label = if (grouped) m$groups else NULL,
         group.equal = equal, parameterization = parameterization,
         estimator = "WLSMV", se = "none", test = "none")

@@ -15,7 +15,7 @@ test_that("ordered group blocks fit distinct templates with lavaan parity", {
   for (parameterization in c("delta", "theta")) {
     fit <- fit_model(group_block_syntax, d, groups = "school", ordered = ordered,
                      estimator = "DWLS", parameterization = parameterization)
-    oracle <- lavaan::cfa(group_block_syntax, d, group = "school", ordered = ordered,
+    oracle <- lavaan_categorical_fit(lavaan::cfa, group_block_syntax, d, group = "school", ordered = ordered,
                           estimator = "DWLS", parameterization = parameterization)
     expect_true(fit$converged)
     expect_equal(sort(unique(fit$partable$block)), 1:2)

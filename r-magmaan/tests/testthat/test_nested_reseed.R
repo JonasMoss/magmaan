@@ -1,23 +1,6 @@
-# Independently reconstruct decisions/04 cell 17, rep 542, seed 726270583.
-# The test owns its formulas and never reads the experiment leaf.
-nested_reseed_data <- function(seed = 726270583L, skewed = FALSE) {
-  loading <- rep(c(.7, .8, .75, .65), 2)
-  residual <- 1 - loading^2
-  residual[5] <- residual[5] - .4^2 - 2*.4*loading[5]*.4
-  population <- paste(c(
-    paste0('f1 =~ ', paste0(loading[1:4], '*x', 1:4, collapse = ' + ')),
-    paste0('f2 =~ ', paste0(loading[5:8], '*x', 5:8, collapse = ' + ')),
-    'f1 =~ .4*x5', 'f1 ~~ 1*f1', 'f2 ~~ 1*f2', 'f1 ~~ .4*f2',
-    paste0('x', 1:8, ' ~~ ', residual, '*x', 1:8),
-    paste0('x1 ~~ ', .3 * sqrt(residual[1]*residual[5]), '*x5')), collapse = '\n')
-  set.seed(seed)
-  do.call(rbind, lapply(c('a', 'b'), function(g) {
-    x <- lavaan::simulateData(population, sample.nobs = 100,
-      skewness = if (skewed) rep(2, 8) else NULL,
-      kurtosis = if (skewed) rep(7, 8) else NULL)
-    x$group <- g
-    x
-  }))
+# Frozen lavaan 0.7.2 draw; see fixtures/generate_nested_reseed.R (TASK-164.1).
+nested_reseed_data <- function() {
+  read.csv(test_path("fixtures", "nested_reseed.csv"))
 }
 
  test_that("anova recovers the decisions/04 larger local optimum without replacing fits", {

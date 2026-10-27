@@ -449,7 +449,7 @@ test_that("all-ordinal DWLS preset matches live lavaan delta theta and invarianc
       expect_equal(staged$theta, fit$theta, tolerance = 1e-8)
       expect_equal(staged$fitting, fit$fitting, tolerance = 1e-8)
       expect_equal(staged$verdict, fit$verdict, tolerance = 1e-8)
-      lv <- lavaan::cfa(model, d, ordered = paste0("x", 1:4), estimator = "WLSMV",
+      lv <- lavaan_categorical_fit(lavaan::cfa, model, d, ordered = paste0("x", 1:4), estimator = "WLSMV",
           group = group, group.equal = equal %||% character(),
           parameterization = parameterization, se = "none", test = "none")
       expect_equal(as.numeric(fit$theta), as.numeric(.ordinal_fitting_match(fit, lv, "est")), tolerance = 1e-5)

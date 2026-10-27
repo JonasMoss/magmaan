@@ -8,7 +8,7 @@ test_that('ordinary ordinal nonlinear fits retain lavaan compatibility and refus
   for (par in c('delta','theta')) {
     m<-magmaan_model(syntax,d,ordered=names(d),parameterization=par)
     fit<-magmaan(m,d,estimator='DWLS',inference=FALSE)
-    lv<-lavaan::cfa(syntax,d,ordered=names(d),parameterization=par,estimator='WLSMV')
+    lv<-lavaan_categorical_fit(lavaan::cfa, syntax,d,ordered=names(d),parameterization=par,estimator='WLSMV')
     lab<-as_lab_fit(fit); rows<-lab$partable[lab$partable$free>0,]; rows<-rows[order(rows$free),]
     key<-function(pt) paste(pt$lhs,pt$op,pt$rhs,pt$group)
     reference<-lavaan::parTable(lv); hit<-match(key(rows),key(reference))

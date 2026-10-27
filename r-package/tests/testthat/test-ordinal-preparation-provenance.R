@@ -50,7 +50,7 @@ test_that("explicit grouped theta residuals survive lab preparation", {
     auto_cov_y=FALSE, meanstructure=TRUE)
   actual <- fit_model(spec,d,estimator="DWLS",
     options=list(preset="lavaan-0.7.2"))
-  oracle <- lavaan::lavaan(syntax,data=d,ordered=ordered,parameterization="theta",
+  oracle <- lavaan_categorical_fit(lavaan::lavaan, syntax,data=d,ordered=ordered,parameterization="theta",
     group="school", group.label=unique(as.character(d$school)),
     estimator="WLSMV", auto.var=FALSE,auto.fix.first=FALSE,
     auto.cov.lv.x=FALSE,auto.cov.y=FALSE,meanstructure=TRUE)
@@ -99,7 +99,7 @@ test_that("live DELTA scale restrictions and invariance match lavaan", {
     names(lavaan_args)[names(lavaan_args)=="syntax"] <- "model"
     names(lavaan_args)[names(lavaan_args)=="group.labels"] <- "group.label"
     oracle <- do.call(if (automatic) lavaan::cfa else lavaan::lavaan,
-      c(lavaan_args,list(data=d,estimator="WLSMV")))
+      c(lavaan_args,list(data=d,estimator="WLSMV"), lavaan_expected_bread()))
     expect_true(fit$converged, info=id)
     expect_true(lavaan::lavInspect(oracle,"converged"), info=id)
     mp <- fit$partable; lp <- lavaan::parTable(oracle)

@@ -14,7 +14,7 @@ test_that('ordinal nonlinear equalities match live lavaan covariance tests score
     model <- paste(base,if(grouped) 'a1 == b2^2' else 'a == b^2',sep='\n')
     group <- if(grouped) 'g' else NULL
     fit <- fit_model(model,d,ordered=paste0('y',1:4),groups=group,parameterization=par,estimator='DWLS')
-    ref <- lavaan::cfa(model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV')
+    ref <- lavaan_categorical_fit(lavaan::cfa, model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV')
     expect_true(fit$converged)
     rows <- fit$partable[fit$partable$free>0,]; rows<-rows[order(rows$free),]
     oracle<-lavaan::parTable(ref); hit<-match(.nonlinear_ordinal_key(rows),.nonlinear_ordinal_key(oracle))
@@ -25,18 +25,18 @@ test_that('ordinal nonlinear equalities match live lavaan covariance tests score
     expect_equal(inf$test$df,as.numeric(lavaan::fitMeasures(ref,'df')))
     expect_equal(infer_fit_df_stat(fit),inf$test$df)
     expect_equal(inf$test$statistic,as.numeric(lavaan::fitMeasures(ref,'chisq.scaled')),tolerance=1e-5)
-    ref_fitted<-lavaan::cfa(model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV',start=lavaan::parTable(ref))
+    ref_fitted<-lavaan_categorical_fit(lavaan::cfa, model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV',start=lavaan::parTable(ref))
     score<-score_tests(fit,bread='expected',estimated_weight=FALSE,cov='model_implied')
     # Preserve the core N*F/2 score; transport lavaan's N/(N-G) score divisor.
     divisor<-(nrow(d)-if(grouped) 2 else 1)/nrow(d)
     expect_equal(score$mi*divisor^2,lavaan::lavTestScore(ref_fitted)$uni$X2,tolerance=1e-5)
     h1<-fit_model(base,d,ordered=paste0('y',1:4),groups=group,parameterization=par,estimator='DWLS')
-    lv1<-lavaan::cfa(base,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV')
+    lv1<-lavaan_categorical_fit(lavaan::cfa, base,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV')
     nested<-convention_nested(h1,fit,'WLSMV')$test
     expected<-lavaan::lavTestLRT(lv1,ref_fitted,method='satorra.2000')
     own_start<-lavaan::parTable(ref)
     own_start$est[hit]<-as.numeric(fit$theta)
-    ref_own<-lavaan::cfa(model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV',start=own_start)
+    ref_own<-lavaan_categorical_fit(lavaan::cfa, model,d,ordered=paste0('y',1:4),group=group,parameterization=par,estimator='WLSMV',start=own_start)
     own_expected<-lavaan::lavTestLRT(lv1,ref_own,method='satorra.2000')
     expect_equal(own_expected[2,'Chisq diff'],expected[2,'Chisq diff'],tolerance=1e-5)
     expect_true(nested$available,info=nested$detail)

@@ -184,13 +184,13 @@ test_that("ordered variables use the categorical estimators", {
   m <- magmaan_model(cfa, prototype = o, ordered = ord)
   fit <- magmaan(m, o, estimator = "DWLS")
   expect_true(isTRUE(as_lab_fit(fit)$converged))
-  expect_lavaan_estimates(fit, lavaan::cfa(cfa, o, ordered = ord, estimator = "DWLS"),
+  expect_lavaan_estimates(fit, lavaan_categorical_fit(lavaan::cfa, cfa, o, ordered = ord, estimator = "DWLS"),
                           tolerance = 1e-3)
   # Grouped, from a zero-row schema whose factor levels declare everything.
   grouped <- magmaan_model(cfa, prototype = o[0, c(ord, "school")], ordered = ord,
                            group = "school")
   fit <- magmaan(grouped, o, estimator = "DWLS")
-  expect_lavaan_estimates(fit, lavaan::cfa(cfa, o, ordered = ord, estimator = "DWLS",
+  expect_lavaan_estimates(fit, lavaan_categorical_fit(lavaan::cfa, cfa, o, ordered = ord, estimator = "DWLS",
                                            group = "school"), tolerance = 1e-3)
 })
 

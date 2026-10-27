@@ -185,7 +185,7 @@ test_that("categorical Mplus models preserve data-driven thresholds and live lav
     for(v in variables) syntax <- c(syntax,paste0(v," | ",paste0("t",seq_len(categories-1L),collapse="+")),
       paste0(v," ~ 0*1"),paste0(v,if(parameterization=="theta") " ~~ 1*" else " ~*~ 1*",v))
     actual <- fit_model(spec,d,estimator="DWLS")
-    oracle <- lavaan::lavaan(paste(syntax,collapse="\n"),data=d,ordered=variables,
+    oracle <- lavaan_categorical_fit(lavaan::lavaan, paste(syntax,collapse="\n"),data=d,ordered=variables,
       parameterization=parameterization,estimator="WLSMV",meanstructure=TRUE,
       auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
     expect_true(actual$converged);expect_true(lavaan::lavInspect(oracle,"converged"))
@@ -247,7 +247,7 @@ test_that("grouped categorical Mplus defaults and shortcuts match live explicit 
     actual <- fit_model(spec,d,estimator="DWLS")
     prepared <- prepare_model(spec,prototype=d);reused <- estimate(prepared,prepare_data(prepared,d))
     expect_equal(reused$partable$est,actual$partable$est,tolerance=1e-8)
-    oracle <- lavaan::lavaan(c$model,data=d,group="g",ordered=paste0("u",1:6),
+    oracle <- lavaan_categorical_fit(lavaan::lavaan, c$model,data=d,group="g",ordered=paste0("u",1:6),
       parameterization=c$parameterization,estimator="WLSMV",meanstructure=TRUE,
       auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
     expect_true(actual$converged);expect_true(lavaan::lavInspect(oracle,"converged"))
@@ -285,7 +285,7 @@ VARIABLE: NAMES=u1-u6; CATEGORICAL=u1-u6;",
       "MODEL: f1 BY u1-u3; f2 BY u4-u6;",
       if(id=="fixed_nonunit") "{u1@0.8};" else "{u1-u2} (shared); [u1$1@-0.5 u1$2@0.5]; [u2$1@-0.5 u2$2@0.5];",sep="\n")
     actual <- fit_model(mplus_model(input),d,estimator="DWLS")
-    oracle <- lavaan::lavaan(reference(id),data=d,ordered=names(d),parameterization="delta",estimator="WLSMV",meanstructure=TRUE,auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
+    oracle <- lavaan_categorical_fit(lavaan::lavaan, reference(id),data=d,ordered=names(d),parameterization="delta",estimator="WLSMV",meanstructure=TRUE,auto.var=FALSE,auto.fix.first=FALSE,auto.cov.lv.x=FALSE,auto.cov.y=FALSE)
     p <- actual$partable;q <- lavaan::parTable(oracle);key <- function(p) paste(p$lhs,p$op,p$rhs,p$group)
     index <- match(key(p),key(q));use <- !is.na(index)&p$op %in% c("=~","|","~*~")
     expect_true(actual$converged);expect_equal(p$free[use]>0,q$free[index[use]]>0)

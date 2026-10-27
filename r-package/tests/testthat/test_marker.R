@@ -149,7 +149,7 @@ test_that("the retained small-N oracle witness reverts to the original model", {
   }
   spec <- model_spec("f =~ x1+x2+x3+x4", meanstructure = TRUE, fixed_x = FALSE,
     ordered = ordered, group = if (grouped) "g" else "", group_labels = if (grouped) c("A", "B") else NULL)
-  oracle <- function(off = FALSE) suppressWarnings(lavaan::cfa(spec$syntax, d,
+  oracle <- function(off = FALSE) suppressWarnings(lavaan_categorical_fit(lavaan::cfa, spec$syntax, d,
     meanstructure = TRUE, fixed.x = FALSE, ordered = ordered,
     group = if (grouped) "g" else NULL,
     estimator = if (route == "FIML") "ML" else "DWLS",

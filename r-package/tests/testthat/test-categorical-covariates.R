@@ -55,13 +55,13 @@ test_that("precomputed categorical data cannot bypass the fixed-x check", {
 test_that("explicit joint categorical models and continuous fixed-x remain usable", {
   skip_if_not_installed("lavaan")
   d <- categorical_covariate_data()
-  oracle <- lavaan::sem("y ~ x", d, ordered = "y", estimator = "DWLS")
+  oracle <- lavaan_categorical_fit(lavaan::sem, "y ~ x", d, ordered = "y", estimator = "DWLS")
   expect_true(lavaan::lavInspect(oracle, "options")$conditional.x)
   expect_lt(lavaan::fitMeasures(oracle, "fmin"), 1e-12)
   spec <- model_spec("y ~ x", ordered = "y", fixed_x = FALSE,
                      parameterization = "theta")
   fit <- fit_model(spec, d, estimator = "DWLS")
-  joint_oracle <- lavaan::sem("y ~ x", d, ordered = "y", estimator = "DWLS",
+  joint_oracle <- lavaan_categorical_fit(lavaan::sem, "y ~ x", d, ordered = "y", estimator = "DWLS",
                              fixed.x = FALSE, conditional.x = FALSE,
                              parameterization = "theta")
   expect_true(fit$converged)

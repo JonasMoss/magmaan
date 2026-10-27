@@ -1,3 +1,10 @@
+# Select the requested convention explicitly; lavaan >= 0.7-3 adds Browne tests.
+lavaan_bundle_test <- function(lav, bundle) {
+  name <- switch(bundle, MLM = "satorra.bentler", MLR = "yuan.bentler.mplus",
+                 WLSMV = "scaled.shifted", ULSMV = "scaled.shifted", "standard")
+  lavaan::lavInspect(lav, "test")[[name]]
+}
+
 # Whole-bundle parity, with matching mean structure, group order and random X.
 lavaan_compat_reference <- function(fit, lav, lavaan_compat, tolerance = 2e-4) {
   ours <- fit$lab$partable
@@ -12,8 +19,7 @@ lavaan_compat_reference <- function(fit, lav, lavaan_compat, tolerance = 2e-4) {
   expect_equal(as.vector(actual), as.vector(lavaan::lavInspect(lav, "vcov")[index, index]), tolerance = tolerance)
   s <- summary(fit, lavaan_compat = lavaan_compat)
   rows <- coef(s)
-  lr <- lavaan::lavInspect(lav, "test")
-  t <- lr[[length(lr)]]
+  t <- lavaan_bundle_test(lav, lavaan_compat)
   expect_equal(s$tests$statistic, as.numeric(t$stat), tolerance = tolerance)
   expect_equal(s$tests$df, t$df)
   if (is.na(t$pvalue)) expect_true(is.na(s$tests$pvalue))
@@ -87,7 +93,7 @@ test_that("ordinal bundles retain the estimator and match lavaan", {
       lavaan_bundles <- switch(estimator, DWLS = c("DWLS", "WLSMV"),
                             ULS = c("ULS", "ULSMV"), WLS = "WLS")
       for (lavaan_compat in lavaan_bundles) {
-        lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = lavaan_compat,
+        lav <- lavaan_categorical_fit(lavaan::cfa, cfa, d, ordered = ord, estimator = lavaan_compat,
                           parameterization = parameterization)
         lavaan_compat_reference(fit, lav, lavaan_compat, tolerance = 2e-3)
       }
@@ -166,7 +172,7 @@ test_that("grouped ordinal reporting uses each group's n minus one", {
         # scaled.shifted for MV bundles; robust.sem/standard for plain
         # DWLS/ULS (no p-value); standard/standard for WLS. lavaan's
         # categorical reporting uses each unequal group's n_g - 1.
-        lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = lavaan_compat,
+        lav <- lavaan_categorical_fit(lavaan::cfa, cfa, d, ordered = ord, estimator = lavaan_compat,
           parameterization = parameterization, group = "school", group.equal = "loadings",
           group.label = levels(d$school))
         lavaan_compat_reference(fit, lav, lavaan_compat, tolerance = 2e-3)
@@ -186,7 +192,7 @@ test_that("unequal-group WLSMV covariance retains n_g/N sandwich geometry", {
     fit <- magmaan(magmaan_model(cfa, prototype = d, ordered = ord,
       parameterization = par, group = "school"), d, estimator = "DWLS",
       options = list(preset = "lavaan-0.7.2"))
-    lav <- lav_cfa(cfa, d, ordered = ord, parameterization = par,
+    lav <- lavaan_categorical_fit(lav_cfa, cfa, d, ordered = ord, parameterization = par,
       group = "school", estimator = "WLSMV", fixed.x = FALSE)
     pt <- lavaan::parTable(lav)
     rows <- fit$lab$partable
@@ -246,7 +252,7 @@ test_that("grouped theta threshold equalities match lavaan reporting bundles", {
       lavaan_bundles <- switch(estimator, DWLS = c("DWLS", "WLSMV"),
                             ULS = c("ULS", "ULSMV"), WLS = "WLS")
       for (lavaan_compat in lavaan_bundles) {
-        lav <- lavaan::cfa(cfa, d, ordered = ord, estimator = lavaan_compat,
+        lav <- lavaan_categorical_fit(lavaan::cfa, cfa, d, ordered = ord, estimator = lavaan_compat,
           parameterization = "theta", group = "school", group.equal = eq,
           group.label = levels(d$school))
         lavaan_compat_reference(fit, lav, lavaan_compat, tolerance = 2e-3)
@@ -337,8 +343,8 @@ test_that("ordinal anova conventions match lavaan in both argument orders", {
     null <- magmaan_model(restricted, prototype = d, ordered = ord, parameterization = "theta")
     a <- magmaan(model, d, estimator = estimator, inference = FALSE)
     b <- magmaan(null, d, estimator = estimator, inference = FALSE)
-    ref_a <- lavaan::cfa(cfa, d, ordered = ord, parameterization = "theta", estimator = bundle)
-    ref_b <- lavaan::cfa(restricted, d, ordered = ord, parameterization = "theta", estimator = bundle)
+    ref_a <- lavaan_categorical_fit(lavaan::cfa, cfa, d, ordered = ord, parameterization = "theta", estimator = bundle)
+    ref_b <- lavaan_categorical_fit(lavaan::cfa, restricted, d, ordered = ord, parameterization = "theta", estimator = bundle)
     ref <- lavaan::lavTestLRT(ref_a, ref_b)
     for (order in list(list(a, b), list(b, a))) {
       out <- anova(order[[1]], order[[2]], lavaan_compat = bundle)
@@ -380,7 +386,7 @@ fiml_compat_nested_reference <- function(h1, h0, lav1, lav0, bundle) {
     expect_equal(a$statistic, ref[["Chisq diff"]][2], tolerance = 2e-4)
     expect_equal(a$df, ref[["Df diff"]][2])
     expect_equal(a$pvalue, ref[["Pr(>Chisq)"]][2], tolerance = 2e-4)
-    tests <- lapply(list(lav0, lav1), function(x) tail(lavaan::lavInspect(x, "test"), 1)[[1]])
+    tests <- lapply(list(lav0, lav1), function(x) lavaan_bundle_test(x, bundle))
     scale <- if (bundle == "ML") 1 else
       (tests[[1]]$df * tests[[1]]$scaling.factor -
        if (tests[[2]]$df == 0) 0 else tests[[2]]$df * tests[[2]]$scaling.factor) /
@@ -482,6 +488,7 @@ test_that("FIML compatibility refuses invalid pairs explicitly", {
 })
 
 test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
+  skip_lavaan_mixed_gamma()
   skip_if_not_installed("lavaan")
   d <- hs(); ord <- paste0("x", 1:3)
   for (v in ord) d[[v]] <- ordered(cut(d[[v]], quantile(d[[v]], c(0, 1/3, 2/3, 1)),
@@ -494,7 +501,7 @@ test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
       model <- magmaan_model(s, prototype = d, ordered = ord, parameterization = p,
         group = if (grouped) "school" else NULL, group.equal = eq)
       fits[[i]] <- magmaan(model, d, estimator = "DWLS", inference = FALSE)
-      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
+      refs[[i]] <- lavaan_categorical_fit(lavaan::cfa, s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
         group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
       # Reporting is gated at identical points; grouped stopping differences
@@ -522,6 +529,7 @@ test_that("mixed WLSMV reporting preserves policy and matches lavaan", {
 })
 
 test_that("mixed preset retained WLSMV reporting matches lavaan", {
+  skip_lavaan_mixed_gamma()
   skip_if_not_installed("lavaan")
   d <- hs(); ord <- paste0("x", 1:3)
   for (v in ord) d[[v]] <- ordered(cut(d[[v]], quantile(d[[v]], c(0, 1/3, 2/3, 1)),
@@ -535,7 +543,7 @@ test_that("mixed preset retained WLSMV reporting matches lavaan", {
         group = if (grouped) "school" else NULL, group.equal = eq)
       fits[[i]] <- magmaan(model, d, estimator = "DWLS", inference = FALSE,
         options = list(preset = "lavaan-0.7.2"))
-      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
+      refs[[i]] <- lavaan_categorical_fit(lavaan::cfa, s, d, ordered = ord, estimator = "WLSMV", parameterization = p,
         group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
       # TASK-94: grouped theta configural endpoint gaps are 3.1e-5

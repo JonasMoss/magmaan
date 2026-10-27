@@ -6,7 +6,7 @@
   fit <- suppressWarnings(fit_model(model, data, meanstructure = TRUE,
       fixed_x = FALSE, options = list(preset = "lavaan-0.7.2"), estimator = estimator,
       ordered = ordered))
-  oracle <- suppressWarnings(lavaan::sem(model, data, meanstructure = TRUE,
+  oracle <- suppressWarnings(lavaan_categorical_fit(lavaan::sem, model, data, meanstructure = TRUE,
       fixed.x = FALSE, estimator = if (estimator == "FIML") "ML" else estimator,
       missing = if (estimator == "FIML") "ml" else "listwise", ordered = ordered))
   mp <- fit$partable

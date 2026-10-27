@@ -1,6 +1,7 @@
 # Mixed WLSMV point gates, doctest-relative 1e-5.
 # Grouped optimizer stopping differences are recorded in oracle-defects.md.
 test_that("mixed WLSMV global and nested bundles match lavaan", {
+  skip_lavaan_mixed_gamma()
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   ord <- paste0("x", 1:3)
@@ -18,7 +19,7 @@ test_that("mixed WLSMV global and nested bundles match lavaan", {
         parameterization = p, group = if (grouped) "school" else NULL,
         group_labels = if (grouped) levels(d$school) else NULL, group_equal = eq)
       fits[[i]] <- fit_model(spec, d, estimator = "DWLS", control = list(ftol = 1e-14, gtol = 1e-10, max_iter = 5000))
-      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV",
+      refs[[i]] <- lavaan_categorical_fit(lavaan::cfa, s, d, ordered = ord, estimator = "WLSMV",
         parameterization = p, group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
       expect_true(fits[[i]]$converged)
@@ -97,6 +98,7 @@ test_that("mixed WLSMV global and nested bundles match lavaan", {
 # Mixed WLSMV point gates, doctest-relative 1e-5.
 # Versioned fitting retains endpoints except the explicit TASK-94 point gate.
 test_that("mixed preset retained WLSMV bundles match lavaan", {
+  skip_lavaan_mixed_gamma()
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   ord <- paste0("x", 1:3)
@@ -114,7 +116,7 @@ test_that("mixed preset retained WLSMV bundles match lavaan", {
         parameterization = p, group = if (grouped) "school" else NULL,
         group_labels = if (grouped) levels(d$school) else NULL, group_equal = eq)
       fits[[i]] <- fit_model(spec, d, estimator = "DWLS", options = list(preset = "lavaan-0.7.2"))
-      refs[[i]] <- lavaan::cfa(s, d, ordered = ord, estimator = "WLSMV",
+      refs[[i]] <- lavaan_categorical_fit(lavaan::cfa, s, d, ordered = ord, estimator = "WLSMV",
         parameterization = p, group = if (grouped) "school" else NULL,
         group.label = if (grouped) levels(d$school) else NULL, group.equal = eq)
       expect_true(fits[[i]]$converged)
