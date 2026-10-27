@@ -641,6 +641,18 @@ simulations choose between expected and observed). A badly calibrated
 misspecification-robust recipe calls for a finite-sample correction, not a
 return to expected information.
 
+**Principle: estimators keep their conventional definitions (adopted
+2026-10-27, TASK-164).** The policy changes inference only. An estimator,
+including how its weight is formed, means what it means in the general
+literature and software, so magmaan's estimates match the reference
+implementations for the same estimator. A different weight is a different
+estimator under its own explicit name. Example: DWLS keeps the conventional
+weight diag(NACOV)^-1, whose NACOV uses the score crossproduct (Mplus and
+lavaan up to 0.7-2), while its policy inference uses exact first-stage
+sampling rows. RDWLS is the separate estimator weighted by the diagonal of the
+exact first-stage covariance. magmaan's RDWLS is not LISREL's RDWLS, which
+denotes DWLS estimates with robust inference.
+
 `inference = TRUE` is the default. With `inference = FALSE`, the call only
 estimates; `infer(fit)` later runs the same composer without refitting, reusing
 retained data and geometry. Repeated `summary()`, `vcov()` and `confint()`
