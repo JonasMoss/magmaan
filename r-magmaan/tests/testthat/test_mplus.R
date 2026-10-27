@@ -62,7 +62,9 @@ test_that('explicit Mplus joint models match frozen Demo and lavaan ML/FIML gate
       summary <- magmaan_model(magmaanlab::mplus_model(summary_input))
       e <- tryCatch(magmaan(summary, d), error=identity)
       expect_identical(e$reason, 'summary_without_means')
-      raw_file <- tempfile(fileext='.dat')
+      # macOS temporary-directory prefixes can exceed Mplus's 90-column limit.
+      # A relative filename also exercises resolution from the working directory.
+      raw_file <- tempfile(tmpdir='.', fileext='.dat')
       write.table(d, raw_file, row.names=FALSE, col.names=FALSE, quote=FALSE)
       repaired <- sub('FILE=x; TYPE=COVARIANCE; NOBSERVATIONS=500;',
                       paste0('FILE=', raw_file, ';'), summary_input, fixed=TRUE)
