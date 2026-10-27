@@ -55,6 +55,7 @@ function(magmaan_add_test_target target label)
 endfunction()
 
 magmaan_add_test_target(magmaan_test_smoke smoke
+  unit/number_text_test.cpp
   unit/version_test.cpp)
 
 magmaan_add_test_target(magmaan_test_spec spec

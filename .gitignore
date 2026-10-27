@@ -51,3 +51,5 @@ r-package/build-rdev/
 
 # Portable R build configuration generated at install time.
 r-package/src/Makevars
+
+r-package/src/Makevars.win

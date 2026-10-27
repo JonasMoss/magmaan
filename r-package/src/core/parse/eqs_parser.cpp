@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "magmaan/parse/number_text.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -192,7 +193,7 @@ class Reader {
   bool number(double& value) {
     if (!peek().number) return bad(peek().span, "expected a numeric EQS coefficient");
     const auto token = take();
-    const auto result = std::from_chars(token.text.data(), token.text.data() + token.text.size(), value);
+    const auto result = detail::decimal_from_chars(token.text.data(), token.text.data() + token.text.size(), value);
     if (result.ec != std::errc{} || result.ptr != token.text.data() + token.text.size() || !std::isfinite(value))
       return bad(token.span, "malformed or nonfinite EQS coefficient");
     return true;

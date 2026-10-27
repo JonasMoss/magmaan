@@ -1,4 +1,12 @@
-# magmaanlab (development)
+# magmaanlab 0.2.2
+
+- Portable package checks now run on Windows, macOS and Linux with current
+  dependencies. Live lavaan comparisons accommodate 0.7-3; the pinned
+  lavaan-0.7.2 preset retains its own oracle.
+
+- Windows now generates the complete vendored build configuration and locates
+  NLopt in the installed nloptr package. macOS numeric model conversion uses
+  a locale-independent fallback where floating-point charconv is unavailable.
 
 - Frontier PSD fitters accept `psd_factor = "square"` for full square covariance
   factors. Triangular factors remain the default; projected start covariances

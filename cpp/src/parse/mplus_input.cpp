@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include "magmaan/parse/number_text.hpp"
 #include <cmath>
 #include <limits>
 #include <map>
@@ -229,7 +230,7 @@ class Reader {
       while (i<body.size() && (digit(body[i]) || body[i]=='.')) ++i;
       double code=0;
       auto numeric=body.substr(begin,i-begin);
-      const auto parsed=std::from_chars(numeric.data(),numeric.data()+numeric.size(),code);
+      const auto parsed=detail::decimal_from_chars(numeric.data(),numeric.data()+numeric.size(),code);
       if (numeric.empty() || parsed.ec!=std::errc{} || parsed.ptr!=numeric.data()+numeric.size() || !std::isfinite(code) || std::trunc(code)!=code || std::abs(code)>2147483647) { fail("non-integral or invalid grouping code; Mplus requires integer grouping values and suggests DEFINE, which magmaan does not import"); return; }
       while (i<body.size() && blank(body[i])) ++i;
       if (i==body.size() || body[i]!='=') { fail("count, value list or range without labels; Mplus determines count-form g1, g2 labels from ascending data values"); return; }

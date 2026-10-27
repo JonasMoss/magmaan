@@ -11,3 +11,5 @@
 
 ^src/Makevars$
 ^\.github$
+
+^src/Makevars[.]win$

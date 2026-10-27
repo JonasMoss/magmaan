@@ -2,6 +2,7 @@
 #include "detail_mplus_diagnostic.hpp"
 #include <algorithm>
 #include <charconv>
+#include "magmaan/parse/number_text.hpp"
 #include <map>
 #include <set>
 #include <optional>
@@ -99,7 +100,7 @@ class Lowerer {
     if (i < ts.size() && ts[i].text == "-") { sign = -1; ++i; }
     if (i == ts.size()) { i = original; return {}; }
     double result = 0; const auto& text = ts[i].text;
-    const auto parsed = std::from_chars(text.data(),text.data()+text.size(),result);
+    const auto parsed = detail::decimal_from_chars(text.data(),text.data()+text.size(),result);
     if (text.empty() || !std::all_of(text.begin(),text.end(),[](char c) { return (c >= '0' && c <= '9') || c == '.'; }) || std::count(text.begin(),text.end(),'.') > 1) { i = original; return {}; }
     if (parsed.ec != std::errc{} || parsed.ptr != text.data()+text.size() || !std::isfinite(result)) { i = original; return {}; }
     ++i; return sign * result;

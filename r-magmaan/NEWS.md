@@ -1,4 +1,8 @@
-# magmaan (development)
+# magmaan 0.2.2
+
+- Portable package checks now run on Windows, macOS and Linux with current
+  dependencies. Live lavaan comparisons accommodate 0.7-3; the pinned
+  lavaan-0.7.2 preset retains its own oracle.
 
 - Complete-data endpoint audits now support simple equality-constrained std.lv
   charts, including loading and latent-mean ties across factors or groups.

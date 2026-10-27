@@ -1,6 +1,7 @@
 #include "magmaan/parse/parser.hpp"
 
 #include <charconv>
+#include "magmaan/parse/number_text.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -103,7 +104,7 @@ bool is_rejected_op(std::string_view t) noexcept {
 // shape; this should always succeed.
 double parse_double(std::string_view text) noexcept {
   double v = 0.0;
-  std::from_chars(text.data(), text.data() + text.size(), v);
+  detail::decimal_from_chars(text.data(), text.data() + text.size(), v);
   return v;
 }
 

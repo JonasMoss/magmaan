@@ -1,5 +1,5 @@
 #include "magmaan/compat/mplus/model.hpp"
-#include <charconv>
+#include "magmaan/parse/number_text.hpp"
 #include <algorithm>
 #include <limits>
 #include <variant>
@@ -12,11 +12,7 @@
 namespace magmaan::compat::mplus {
 namespace {
 std::string number(double value) {
-  char buffer[64];
-  const auto result = std::to_chars(buffer, buffer + sizeof(buffer), value,
-                                   std::chars_format::general,
-                                   std::numeric_limits<double>::max_digits10);
-  return std::string(buffer, result.ptr);
+  return parse::detail::decimal_to_text(value, std::numeric_limits<double>::max_digits10);
 }
 }  // namespace
 

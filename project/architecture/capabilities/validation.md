@@ -58,6 +58,13 @@ different estimator; TASK-164); all run on 0.7-2.
 Nested-reseed scenarios use a full-precision CSV draw frozen under 0.7.2,
 with its regeneration script beside the fixture.
 
+Portable R distribution additionally checks both source packages on Linux,
+macOS and Windows against current dependencies. Windows generates its own
+Makevars through the shared configure script; macOS model-number conversion
+uses classic-locale streams where floating-point charconv is unavailable for
+the supported deployment target. The numeric conversion gate checks finite
+binary64 round trips, range errors, partial tokens and a comma-decimal locale.
+
 #### Dated changes
 
 2026-10-02: CI is configured for both portable R source-package checks, with
