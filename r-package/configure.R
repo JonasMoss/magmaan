@@ -10,9 +10,11 @@ probe <- function(option) {
 }
 if (!nzchar(flags)) flags <- probe("--cflags")
 if (!nzchar(libs)) libs <- probe("--libs")
+if (!nzchar(libs) && .Platform$OS.type == "windows")
+  stop("NLopt was not found: install Rtools with its NLopt library, or set NLOPT_CFLAGS and NLOPT_LIBS. The nloptr DLL does not export the NLopt C API.")
 if (!nzchar(libs)) {
   dll <- list.files(system.file("libs", package = "nloptr"),
-                    pattern = "nloptr[.](so|dll)$", full.names = TRUE, recursive = TRUE)
+                    pattern = "nloptr[.]so$", full.names = TRUE, recursive = TRUE)
   if (length(dll)) {
     libs <- shQuote(normalizePath(dll[1], winslash = "/"))
     if (.Platform$OS.type != "windows")

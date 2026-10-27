@@ -1,5 +1,5 @@
-#include "f2c.h"
 #include <math.h>
+#include "f2c.h"
 
 /* libf2c power helper for `x ** y` with double base and exponent. f2c emits a
    call to `pow_dd` for the one fractional power in dqk15i; libf2c is not linked,

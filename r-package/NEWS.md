@@ -5,7 +5,7 @@
   lavaan-0.7.2 preset retains its own oracle.
 
 - Windows now generates the complete vendored build configuration and locates
-  NLopt in the installed nloptr package. macOS numeric model conversion uses
+  NLopt through Rtools or explicit library flags. macOS numeric model conversion uses
   a locale-independent fallback where floating-point charconv is unavailable.
 
 - Frontier PSD fitters accept `psd_factor = "square"` for full square covariance

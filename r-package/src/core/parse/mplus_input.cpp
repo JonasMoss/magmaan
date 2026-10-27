@@ -439,7 +439,7 @@ class Reader {
         while(j<numbers.size() && (digit(numbers[j]) || numbers[j]=='.')) ++j;
         double n=0; auto token=numbers.substr(begin,j-begin);
         if(token.starts_with('+')) token.remove_prefix(1);
-        auto p=std::from_chars(token.data(),token.data()+token.size(),n);
+        auto p=detail::decimal_from_chars(token.data(),token.data()+token.size(),n);
         if(token.empty() || p.ec!=std::errc{} || p.ptr!=token.data()+token.size() || !std::isfinite(n)) return {};
         return n;
       };

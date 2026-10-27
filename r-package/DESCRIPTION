@@ -10,8 +10,8 @@ Depends: R (>= 4.3.0)
 Imports: Rcpp, nloptr, stats, utils
 Suggests: testthat (>= 3.0.0), lavaan
 Config/testthat/edition: 3
-SystemRequirements: C++23, USE_C17, NLopt (a system NLopt, or the bundled NLopt from the
-    nloptr package, which is used automatically when no system NLopt is found)
+SystemRequirements: C++23, USE_C17, NLopt (a system NLopt; on Unix, the library
+    in nloptr is used automatically when no system NLopt is found)
 Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
     methods development and research, including frontier methods. The
     opinionated one-call package for ordinary users is 'magmaan', which
