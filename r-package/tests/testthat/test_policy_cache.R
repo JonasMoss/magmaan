@@ -21,6 +21,8 @@ test_that("FIML policy snapshots reuse ingredients and rebuild after restoration
   expect_identical(inference_reuse(prepare_inference(f1))$ingredient_builds, 1)
   expect_identical(prepare_inference(f1), prepare_inference(f1))
   restored <- unserialize(serialize(list(f1, f0), NULL))
+  expect_true(native_pointer_live(prepare_inference(f1)$native))
+  expect_false(native_pointer_live(attr(restored[[1]], "policy_cache")$fiml$value$native))
   expect_identical(policy_inference(restored[[1]]), global)
   expect_identical(policy_nested(restored[[1]], restored[[2]]), nested)
   ctx <- unserialize(serialize(prepare_inference(f1), NULL))

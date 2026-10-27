@@ -9,7 +9,7 @@
   saved <- cache[[kind]]
   native <- if (is.null(saved)) NULL else if (kind == "dwls") saved$value else saved$value$native
   if (is.null(saved) || !identical(saved$pid, Sys.getpid()) ||
-      is.null(native) || identical(format(native), "<pointer: (nil)>") ||
+      !native_pointer_live_impl(native) ||
       !identical(saved$keys, keys)) {
     saved <- list(pid = Sys.getpid(), keys = keys, value = build())
     cache[[kind]] <- saved
@@ -25,7 +25,7 @@
 prepare_inference <- function(fit, data = NULL) {
   if (inherits(fit, "magmaan_inference")) {
     if (!is.null(data)) stop("prepare_inference(): a snapshot already owns its data")
-    if (identical(format(fit$native), "<pointer: (nil)>") ||
+    if (!native_pointer_live_impl(fit$native) ||
         !identical(fit$pid, Sys.getpid())) return(prepare_inference(fit$original_fit,
           if (identical(fit$estimator, "ML")) fit$raw else NULL))
     return(fit)

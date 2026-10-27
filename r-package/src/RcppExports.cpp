@@ -11,6 +11,16 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// native_pointer_live_impl
+bool native_pointer_live_impl(SEXP pointer);
+RcppExport SEXP _magmaanlab_native_pointer_live_impl(SEXP pointerSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< SEXP >::type pointer(pointerSEXP);
+    rcpp_result_gen = Rcpp::wrap(native_pointer_live_impl(pointer));
+    return rcpp_result_gen;
+END_RCPP
+}
 // version
 std::string version();
 RcppExport SEXP _magmaanlab_version() {
@@ -4775,6 +4785,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_magmaanlab_native_pointer_live_impl", (DL_FUNC) &_magmaanlab_native_pointer_live_impl, 1},
     {"_magmaanlab_version", (DL_FUNC) &_magmaanlab_version, 0},
     {"_magmaanlab_parse_parse", (DL_FUNC) &_magmaanlab_parse_parse, 1},
     {"_magmaanlab_eqs_model_impl", (DL_FUNC) &_magmaanlab_eqs_model_impl, 2},

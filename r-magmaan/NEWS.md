@@ -1,5 +1,8 @@
 # magmaan 0.2.2
 
+- Restored model handles now use the lab's native pointer-address check, so
+  serialized models rebuild correctly across platform-specific pointer displays.
+
 - Portable package checks now run on Windows, macOS and Linux with current
   dependencies. Live lavaan comparisons accommodate 0.7-3; the pinned
   lavaan-0.7.2 preset retains its own oracle.

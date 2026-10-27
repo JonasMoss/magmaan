@@ -224,7 +224,7 @@ magmaan_model <- function(model, prototype = NULL,
   if (is.null(cache)) cache <- new.env(parent = emptyenv())
   handle <- cache$handle
   if (is.null(handle) || !identical(cache$pid, Sys.getpid()) ||
-      identical(format(handle$native), "<pointer: (nil)>")) {
+      !magmaanlab::native_pointer_live(handle$native)) {
     prototype <- as.data.frame(stats::setNames(lapply(model$ordered, function(v)
       factor(character(), levels = model$categories[[v]], ordered = TRUE)), model$ordered))
     handle <- magmaanlab::prepare_model(model$spec, prototype = prototype)

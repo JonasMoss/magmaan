@@ -34,7 +34,12 @@ if (!nzchar(libs)) {
 sources <- list.files("src", pattern = "[.](cpp|c)$", recursive = TRUE)
 objects <- paste(sub("[.](cpp|c)$", ".o", sort(sources)), collapse = " \\\n  ")
 text <- paste0(paste(readLines("src/Makevars.in"), collapse = "\n"), "\n")
+compiler <- system2(file.path(R.home("bin"), "R"), c("CMD", "config", "CC"),
+                    stdout = TRUE)
+legacy_flags <- if (any(grepl("clang", compiler, fixed = TRUE)))
+  "-Wno-deprecated-non-prototype" else ""
 for (pair in list(c("@NLOPT_CFLAGS@", flags), c("@NLOPT_LIBS@", libs),
+                 c("@LEGACY_CFLAGS@", legacy_flags),
                  c("@OBJECTS@", objects))) {
   text <- paste(strsplit(text, pair[1], fixed = TRUE)[[1]], collapse = pair[2])
 }

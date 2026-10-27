@@ -1,5 +1,8 @@
 # magmaanlab 0.2.2
 
+- Restored fit/model caches now check native pointer addresses rather than
+  platform-specific display strings, rebuilding safely on macOS and Windows.
+
 - Linux fallback linking to nloptr now records a relocatable library name and
   a sibling-library runpath instead of an absolute build-machine dependency.
 

@@ -1,4 +1,5 @@
 useDynLib(magmaanlab, .registration = TRUE)
+export(native_pointer_live)
 importFrom(Rcpp, sourceCpp)
 export(compute_defined)
 export(composite_weights)

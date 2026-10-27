@@ -299,3 +299,11 @@ structural_identification <- function(model, prototype = NULL) {
     return(structural_identification(prepare_model(spec, prototype = prototype)))
   structural_identification_impl(spec$partable)
 }
+
+#' Check whether a native pointer has a live address
+#'
+#' @param pointer An external pointer from a prepared or inference object.
+#' @return A logical scalar: TRUE for an external pointer with a non-null address.
+#' @keywords internal
+#' @export
+native_pointer_live <- function(pointer) native_pointer_live_impl(pointer)

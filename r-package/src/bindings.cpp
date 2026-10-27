@@ -23,6 +23,13 @@
 #include "magmaan/compat/lavaan/composite_fold.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 
+// Pointer display strings differ across platforms; serialization clears the
+// address itself. R wrappers use this before rebuilding process-local handles.
+// [[Rcpp::export(rng = false)]]
+bool native_pointer_live_impl(SEXP pointer) {
+  return TYPEOF(pointer) == EXTPTRSXP && R_ExternalPtrAddr(pointer) != nullptr;
+}
+
 namespace {
 
 const char* parse_error_kind(magmaan::ParseError::Kind k) {
