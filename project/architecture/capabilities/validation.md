@@ -68,6 +68,10 @@ The small-N covariance-boundary H1 witness uses the independent
 [unbounded-likelihood proof](../../validation/oracle-defects.md#small-n-fiml-h1-at-an-unbounded-covariance-boundary-2026-10-27)
 in place of live stopping-flag/endpoint parity. Converged controls retain the
 strict moment and start comparisons.
+The exact-fit MLM trace comparison evaluates both implementations at the known
+parameter point, separating inference agreement from optimizer stopping error;
+its numerical tolerance is unchanged. Mplus file-source preservation checks
+explicit LF and CRLF bytes on every platform.
 
 #### Dated changes
 

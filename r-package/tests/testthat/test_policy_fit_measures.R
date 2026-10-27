@@ -17,9 +17,20 @@ test_that('policy fit measures reduce to robust MLM at exact fit', {
   sigma <- matrix(.49,4,4); diag(sigma) <- 1
   d <- as.data.frame(z %*% chol(sigma)); names(d) <- paste0('x',1:4)
   fit <- fit_model(policy_cfa,d)
+  # Compare inference at the known exact-fit point. Independent optimizers
+  # stop at slightly different points on different BLAS/platform combinations.
+  for (r in which(fit$partable$free > 0)) {
+    row <- fit$partable[r,]
+    fit$theta[row$free] <- if (row$op=='=~') 1 else if (row$lhs=='f') .49 else .51
+  }
   got <- policy_fit_measures(fit)
   expect_true(all(is.na(got$reason)))
-  ref <- lavaan::cfa(policy_cfa,d,estimator='MLM')
+  pt <- lavaan::parTable(lavaan::cfa(policy_cfa,d,estimator='MLM',do.fit=FALSE))
+  pt$ustart[pt$op=='=~'] <- 1
+  pt$ustart[pt$op=='~~' & pt$lhs!='f'] <- .51
+  pt$ustart[pt$op=='~~' & pt$lhs=='f'] <- .49
+  ref <- lavaan::cfa(policy_cfa,d,estimator='MLM',
+    start=pt$ustart[pt$free>0],optim.method='none')
   fm <- lavaan::fitMeasures(ref)
   details <- attr(got,'details')
   expect_equal(details$user$trace,unname(fm['chisq.scaling.factor']*fm['df']),tolerance=1e-8)

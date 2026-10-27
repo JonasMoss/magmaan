@@ -75,9 +75,15 @@ test_that("Mplus inputs retain notes, spelling, starts and serialize across proc
   expect_true(all(c("X1","X2","X3") %in% m$partable$lhs))
   expect_named(m$mplus_notes, c("class","rule","line","col","message"))
   expect_output(print(m), "reported but not imported; see \\$mplus_notes")
-  inp <- tempfile(fileext=".inp"); writeLines(m$mplus_source, inp)
-  expect_equal(mplus_model(file=inp)$partable, m$partable)
-  expect_identical(mplus_model(file=inp)$mplus_source, paste0(m$mplus_source, "\n"))
+  inp <- tempfile(fileext=".inp")
+  # Write explicit bytes so both newline conventions run on every platform.
+  for (source in c(paste0(m$mplus_source, "\n"),
+                   gsub("\n", "\r\n", m$mplus_source, fixed=TRUE))) {
+    writeBin(charToRaw(source), inp)
+    parsed <- mplus_model(file=inp)
+    expect_equal(parsed$partable, m$partable)
+    expect_identical(parsed$mplus_source, source)
+  }
   saved <- tempfile(fileext=".rds"); result <- tempfile(fileext=".rds")
   saveRDS(list(spec=m, fit=fit, data=d), saved)
   script <- tempfile(fileext=".R")
