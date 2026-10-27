@@ -100,8 +100,11 @@ each `.c` file are preserved as-is.
   (consolidated include path; we vendor `cport/f2c.h` rather than depending
   on a system libf2c).
 
-No other modifications. Re-vendoring (from a fresh upstream pull) is a
-mechanical copy-plus-this-patch.
+- `cport/i1mach.c` — return zero after the fatal invalid-index STOP path,
+  avoiding an uninitialized C return if STOP is not declared non-returning.
+  Valid-index machine constants are unchanged.
+
+Re-vendoring (from a fresh upstream pull) must preserve these local patches.
 
 R packaging defines `MAGMAAN_R_PORT_IO` so the unreachable internal Fortran
 STOP path raises an R error instead of aborting the R process or writing to

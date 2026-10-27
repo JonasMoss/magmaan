@@ -342,7 +342,8 @@ L40:
 /* 	fprintf(stderr, "invalid argument: i1mach(%ld)\n", *i); */
 /* 	exit(1);return 0; /+ some compilers demand return values +/ */
 /* } */
-    return ret_val;
+    /* STOP does not return; keep the translated C return defined nonetheless. */
+    return 0;
 } /* i1mach_ */
 
 #undef output
