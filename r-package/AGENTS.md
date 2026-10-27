@@ -46,8 +46,10 @@ packaging/toolchain path. On an R-load undefined symbol, run `just r-clean` and
 reinstall. `just vendor-check` first refreshes generated files, then checks Git
 status; it is a mutating check, not a read-only comparison.
 
-Portable `configure` resolves NLopt and enumerates vendored objects into ignored
-`src/Makevars` from `src/Makevars.in`. The dev install supplies its own Makevars
+Portable `configure` and `configure.win` share `configure.R`, resolve NLopt and
+enumerate vendored objects into ignored `src/Makevars` or `src/Makevars.win`
+from `src/Makevars.in`. Windows uses Rtools/system NLopt; its nloptr DLL does
+not export the C API. The Unix nloptr fallback must preserve binary relocation. The dev install supplies its own Makevars
 and bypasses configure when `MAGMAAN_ROOT` is set. `USE_C17` selects R's legacy
 C compiler mode for f2c callbacks. The portable R build's PORT I/O guard raises
 an R error on internal STOP instead of terminating the process.

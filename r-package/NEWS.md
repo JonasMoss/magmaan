@@ -1,5 +1,12 @@
 # magmaanlab 0.2.2
 
+- Linux fallback linking to nloptr now records a relocatable library name and
+  a sibling-library runpath instead of an absolute build-machine dependency.
+
+- The small-N singular FIML H1 witness now has an independent unbounded-
+  likelihood gate; its numerical stopping flag is outside live parity.
+  Converged control moments and starts retain strict comparisons.
+
 - Portable package checks now run on Windows, macOS and Linux with current
   dependencies. Live lavaan comparisons accommodate 0.7-3; the pinned
   lavaan-0.7.2 preset retains its own oracle.

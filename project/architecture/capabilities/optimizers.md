@@ -155,11 +155,13 @@ SQUAREM acceleration and lavaan's covariance repair: when the minimum
 eigenvalue is below `1e-6`, add `max(diag(Sigma))*1e-8` to the diagonal.
 Native FIML H1 options and tolerances are unchanged. Converged lavaan H1
 means and covariances are gated at `1e-10` relative (with unit absolute floor).
-When lavaan's H1 EM stalls, the preset must also report non-convergence and
-use the same repair rule; endpoint moments and their derived first starts
-are outside this compatibility contract. The retained N=20 seed 12953003
-has a covariance gap of `1.1e-7`; two equivalent lavaan call forms themselves
-differ by `1.8e-4`. Both stall. The internal prepared H1 accessor and
+Stalled covariance-boundary endpoints and their derived starts are outside
+this compatibility contract. The N=20 seed 12953003 has an independently
+proved unbounded saturated likelihood; its live stopping flag is also outside
+parity, while native non-convergence and covariance repairs remain gated.
+See the [proof and replacement gate](../../validation/oracle-defects.md#small-n-fiml-h1-at-an-unbounded-covariance-boundary-2026-10-27).
+Two equivalent lavaan call forms previously differed by `1.8e-4`; its stopping
+flag can also vary with numerical libraries. The internal prepared H1 accessor and
 `fit$fitting$h1` expose per-group `converged`, EM update `iterations`,
 `covariance_repairs` and the `lavaan_covariance_ridge` rule flag.
 Frozen C++ witnesses and live lavaan 0.7.2 tests cover the stalled case and

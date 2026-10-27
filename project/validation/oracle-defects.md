@@ -256,6 +256,37 @@ Upstream: not filed externally. Found and independently verified 2026-10-02.
 
 ## Investigated — not a defect
 
+### Small-N FIML H1 at an unbounded covariance boundary (2026-10-27)
+
+Scope: the D5 MCAR witness at N=20, seed 12953003, in
+`test_fiml_h1_preset.R` and `fitting/lavaan_fiml_h1_0_7_2.json`. Five complete
+observations span an affine space of rank four in six variables. The native
+preset stops without convergence and records covariance repairs. Installed
+lavaan 0.7.2 can report either convergence or a stall depending on numerical
+library/call details; a stopping flag does not establish existence of an H1 MLE.
+This is an ill-posed target, not evidence of a different SEM estimator.
+
+Independent proof: center the complete rows at their mean mu and choose a unit
+null vector v with every coordinate nonzero. The frozen draw has a null residual
+below 6e-16 and minimum absolute coordinate 0.005675. Set
+Sigma(epsilon) = I - vv' + epsilon vv', for epsilon > 0. Every complete-row
+residual is orthogonal to v, so its quadratic form stays fixed while its
+log-determinant term is log(epsilon). Every incomplete observation uses a proper
+principal submatrix: because v is dense, its limiting covariance is positive
+definite. Those likelihood contributions have finite limits. With five complete
+rows, the negative log likelihood therefore tends to minus infinity as
+(5/2) log(epsilon). There is no finite global saturated Gaussian maximum.
+
+The independent base-R Gaussian calculation (without additive density constants)
+gives 90.61425, 79.10195 and 67.58903 at epsilon = 1e-6, 1e-8 and 1e-10.
+`test_fiml_h1_preset.R` constructs this null direction and gates both its geometry
+and the descending likelihood path. It retains native non-convergence and
+covariance-repair checks, and the frozen C++ configured-ML fixture remains a
+second native gate. For this witness, the live stopping flag, endpoint moments
+and derived starts are outside the parity target. The other two converged
+positive-definite endpoints retain the 1e-10 moment/start comparison and stopping
+flag comparison. No global-optimum claim is made for those EM endpoints.
+
 ### Retained Mplus ex6.10 ULS statistic identities (TASK-117)
 
 This resolves a naming/convention discrepancy, not the validity of the

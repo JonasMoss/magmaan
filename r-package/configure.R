@@ -16,9 +16,17 @@ if (!nzchar(libs)) {
   dll <- list.files(system.file("libs", package = "nloptr"),
                     pattern = "nloptr[.]so$", full.names = TRUE, recursive = TRUE)
   if (length(dll)) {
-    libs <- shQuote(normalizePath(dll[1], winslash = "/"))
-    if (.Platform$OS.type != "windows")
-      libs <- paste(libs, paste0("-Wl,-rpath,", shQuote(dirname(dll[1]))))
+    directory <- normalizePath(dirname(dll[1]), winslash = "/")
+    if (identical(Sys.info()[["sysname"]], "Linux")) {
+      # Linking the absolute .so path embeds the build machine in DT_NEEDED.
+      # A sibling-library runpath also supports relocated binary installs.
+      libs <- paste0("-L", shQuote(directory), " -l:nloptr.so ",
+                     "-Wl,-rpath,'$$ORIGIN/../../nloptr/libs' ",
+                     "-Wl,-rpath,", shQuote(directory))
+    } else {
+      libs <- paste(shQuote(normalizePath(dll[1], winslash = "/")),
+                    paste0("-Wl,-rpath,", shQuote(directory)))
+    }
   } else {
     libs <- "-lnlopt"
   }

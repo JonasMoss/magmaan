@@ -26,6 +26,31 @@ test_that("preset FIML H1 and first starts match lavaan 0.7.2 at small N", {
                              outer(x,c(1,.8,.6))+matrix(rnorm(n*3),n)))
     names(d) <- c(paste0("y",1:3),paste0("x",1:3))
     for (v in names(d)) d[runif(n)<.2,v] <- NA_real_
+    boundary_witness <- seed == 12953003L
+    if (boundary_witness) {
+      # Independent unbounded-likelihood witness; see the oracle ledger.
+      complete <- as.matrix(d[complete.cases(d), , drop = FALSE])
+      expect_equal(nrow(complete), 5L)
+      mu <- colMeans(complete)
+      centered <- sweep(complete, 2L, mu)
+      q <- qr(t(centered))
+      basis <- qr.Q(q, complete = TRUE)[, seq.int(q$rank + 1L, ncol(d)), drop = FALSE]
+      direction <- drop(basis %*% seq_len(ncol(basis)))
+      direction <- direction / sqrt(sum(direction^2))
+      expect_lt(max(abs(centered %*% direction)), 1e-12)
+      expect_gt(min(abs(direction)), 1e-6)
+      objective <- function(epsilon) {
+        covariance <- diag(ncol(d)) + (epsilon - 1) * tcrossprod(direction)
+        sum(vapply(seq_len(nrow(d)), function(i) {
+          observed <- which(!is.na(d[i, ]))
+          residual <- unlist(d[i, observed], use.names = FALSE) - mu[observed]
+          block <- covariance[observed, observed, drop = FALSE]
+          as.numeric((determinant(block, logarithm = TRUE)$modulus +
+                        crossprod(residual, solve(block, residual))) / 2)
+        }, numeric(1)))
+      }
+      expect_true(all(diff(vapply(c(1e-6, 1e-8, 1e-10), objective, numeric(1))) < -10))
+    }
     prepared <- prepare_model(model, meanstructure = TRUE, fixed_x = FALSE)
     data <- prepare_data(prepared, d, kind = "raw")
     actual <- suppressWarnings(probe(prepared$native, data$native))
@@ -33,10 +58,13 @@ test_that("preset FIML H1 and first starts match lavaan 0.7.2 at small N", {
       fixed.x=FALSE,se="none",test="none",do.fit=FALSE))
     oracle <- lavaan::lavInspect(lv,"h1")
     oracle_converged <- em_result$result$converged
-    expect_identical(as.logical(actual$converged), oracle_converged)
+    if (boundary_witness) {
+      expect_false(actual$converged[[1]])
+      expect_gt(actual$covariance_repairs[[1]], 0L)
+    } else expect_identical(as.logical(actual$converged), oracle_converged)
     expect_true(actual$lavaan_covariance_ridge)
     expect_gt(actual$iterations[[1]], 0L)
-    if (oracle_converged) {
+    if (!boundary_witness && oracle_converged) {
       close(actual$mean[[1]], oracle$mean)
       close(actual$cov[[1]], oracle$cov)
     } else {
@@ -47,7 +75,7 @@ test_that("preset FIML H1 and first starts match lavaan 0.7.2 at small N", {
       fixed_x=FALSE,options=list(preset="lavaan-0.7.2")))
     expect_equal(fit$fitting$h1, actual[c("converged", "iterations",
       "covariance_repairs", "lavaan_covariance_ridge")])
-    if (!oracle_converged) next
+    if (boundary_witness || !oracle_converged) next
     mp <- fit$partable; lp <- lavaan::parTable(lv)
     free <- mp$free > 0L
     expected <- lp$start[match(key(mp[free,]),key(lp))]

@@ -64,6 +64,10 @@ Makevars through the shared configure script; macOS model-number conversion
 uses classic-locale streams where floating-point charconv is unavailable for
 the supported deployment target. The numeric conversion gate checks finite
 binary64 round trips, range errors, partial tokens and a comma-decimal locale.
+The small-N covariance-boundary H1 witness uses the independent
+[unbounded-likelihood proof](../../validation/oracle-defects.md#small-n-fiml-h1-at-an-unbounded-covariance-boundary-2026-10-27)
+in place of live stopping-flag/endpoint parity. Converged controls retain the
+strict moment and start comparisons.
 
 #### Dated changes
 
