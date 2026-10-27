@@ -53,7 +53,8 @@ The R CI oracle is pinned to lavaan 0.7-2 for the `lavaan-0.7.2`
 preset (TASK-164.1); both source packages are checked before reporting failure.
 Live categorical inference requests expected bread on lavaan >= 0.7-3,
 and reporting tests select the requested test by name. Mixed Gamma-dependent
-oracle comparisons skip only on >= 0.7-3 pending TASK-164.2; all run on 0.7-2.
+oracle comparisons skip on >= 0.7-3, whose mixed DWLS weights changed (a
+different estimator; TASK-164); all run on 0.7-2.
 Nested-reseed scenarios use a full-precision CSV draw frozen under 0.7.2,
 with its regeneration script beside the fixture.
 

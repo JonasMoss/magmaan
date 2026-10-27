@@ -14,5 +14,5 @@ lavaan_categorical_fit <- function(fun, ...) {
 
 skip_lavaan_mixed_gamma <- function() {
   testthat::skip_if(lavaan_at_least_073(),
-    "lavaan >= 0.7-3 mixed Gamma: TASK-164.2")
+    "lavaan >= 0.7-3 changed its mixed DWLS weights (TASK-164); DWLS parity targets lavaan 0.7-2")
 }

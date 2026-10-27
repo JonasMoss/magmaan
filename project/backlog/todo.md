@@ -1261,7 +1261,8 @@ ordinary-user default.
   CI installs lavaan 0.7-2 and checks both packages before failing. Categorical
   inference uses expected bread on >= 0.7-3; bundle tests are selected by name;
   nested-reseed draws are frozen at full precision. Mixed Gamma-dependent
-  comparisons remain active on 0.7-2 and skip on >= 0.7-3 pending TASK-164.2.
+  comparisons remain active on 0.7-2 and skip on >= 0.7-3, whose mixed DWLS
+  weights changed (a different estimator; TASK-164).
 
 - [x] **S — textbook WLSMV DELTA parity regression (TASK-63).** The
   implied-correlation gate reads live prepared `~*~` response scales and
