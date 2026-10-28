@@ -2,6 +2,8 @@
 #include "magmaan/api/policy_mi.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "ordinal_test_helpers.hpp"
+#include <Eigen/QR>
+#include <Eigen/SVD>
 
 TEST_CASE("robust_ordinal_ij DWLS and WLS support observed MCAR ordinal stats") {
   Eigen::MatrixXd X =
@@ -864,7 +866,29 @@ TEST_CASE("association ML global and nested spectral reconstruction") {
         full_A(alt.free[row]-1) = found++ == 0 ? 1 : -1;
     }
     REQUIRE(found==2);
-    Eigen::MatrixXd independent_A = full_A*ij->coordinates;
+    // The law sits at the larger model's fit, so the null tangent is carried
+    // there from the embedded null point (TASK-168): least squares in the
+    // correlation metric V at the fit, then the complement of the carried
+    // directions. The null point maps rows of the same structure.
+    Eigen::VectorXd null_point = ea.theta;
+    for (std::size_t row = 0; row < alt.size(); ++row)
+      if (alt.free[row] > 0 && null.free[row] > 0)
+        null_point(alt.free[row]-1) = en.theta(null.free[row]-1);
+    auto at_null = ev->evaluate(null_point,true,false); REQUIRE(at_null.has_value());
+    auto corr_null = model::correlation_evaluation(*at_null); REQUIRE(corr_null.has_value());
+    Eigen::MatrixXd Delta_null(6*groups,ij->coordinates.cols());
+    for (int b = 0; b < groups; ++b) {
+      int k = 0;
+      for (int c = 0; c < 4; ++c) for (int r = c+1; r < 4; ++r)
+        Delta_null.row(6*b+k++) = corr_null->J_sigma.row(10*b+c*4-c*(c-1)/2+r-c)*ij->coordinates;
+    }
+    const Eigen::MatrixXd exact_A = full_A*ij->coordinates;
+    Eigen::JacobiSVD<Eigen::MatrixXd> exact_svd(exact_A, Eigen::ComputeFullV);
+    const Eigen::MatrixXd N0 = exact_svd.matrixV().rightCols(exact_A.cols()-1);
+    const Eigen::MatrixXd carried = (Delta.transpose()*V*Delta).ldlt().solve(Delta.transpose()*V*Delta_null*N0);
+    Eigen::FullPivHouseholderQR<Eigen::MatrixXd> carried_qr(carried);
+    const Eigen::MatrixXd carried_Q = carried_qr.matrixQ();
+    Eigen::MatrixXd independent_A = carried_Q.rightCols(1).transpose();
     Eigen::MatrixXd independent_C = independent_A*Hinv*independent_A.transpose();
     Eigen::MatrixXd independent_S = independent_A*Hinv*ij->meat*Hinv.transpose()*independent_A.transpose();
     CHECK(nested->spectrum(0) == doctest::Approx(independent_S(0,0)/independent_C(0,0)).epsilon(1e-10));

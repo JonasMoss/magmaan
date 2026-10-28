@@ -126,8 +126,9 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
       auto common=estimate::mixed_ordinal_dwls_profile_lrt(p1,m.rep,profile_stats,*fit,
           common_null,m.rep,*fit,parameterization);
       REQUIRE_MESSAGE(common.has_value(),(common.has_value()? "" : common.error().detail));
+      // The lab common-point profile keeps the exact restriction at the H1 fit;
+      // it is compared with the exact-row reconstruction below.
       const Eigen::VectorXd eig=common->eigvals.tail(nested.lr.df);
-      CHECK((nested.lr.eigenvalues-eig).norm()<=1e-10*eig.norm());
       // Independent saturated-moment projection: N Cov(weighted residuals)
       // has blocks W^(1/2) Gamma_exact W^(1/2); the fitted Jacobian supplies U.
       auto objective=estimate::frontier::mixed_ordinal_ls_objective(p1,m.rep,*stats,*fit,
@@ -158,12 +159,28 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
       const Eigen::MatrixXd H=K.transpose()*parts->hessian*K/N;
       const Eigen::MatrixXd L=(K.transpose()*K).ldlt().solve(K.transpose());
       const Eigen::MatrixXd V=N*L*ij->vcov*L.transpose();
-      auto direct=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),embedding->restriction.A);
+      auto exact_rows=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),embedding->restriction.A);
+      REQUIRE(exact_rows);
+      CHECK((exact_rows->eigenvalues-eig).norm()<=1e-10*eig.norm());
+      auto exact_moment=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),tangent->A);
+      REQUIRE(exact_moment);
+      CHECK((exact_moment->eigenvalues-eig).norm()<=1e-10*eig.norm());
+      // The policy carries the null tangent from the embedded null point to
+      // the alternative's fit (TASK-168). Parameter and moment nesting give
+      // the same null tangent, hence the same carried restriction.
+      auto carried=api::frontier::moment_transported_restriction(m.pt,m.rep,*fit,
+          embedding->theta,robust::restriction_null_directions(embedding->restriction.A),
+          *stats,parameterization);
+      REQUIRE_MESSAGE(carried.has_value(),(carried.has_value()? "" : carried.error().detail));
+      auto carried_moment=api::frontier::moment_transported_restriction(m.pt,m.rep,*fit,
+          tangent->embedding,tangent->tangent,*stats,parameterization);
+      REQUIRE_MESSAGE(carried_moment.has_value(),(carried_moment.has_value()? "" : carried_moment.error().detail));
+      auto direct=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),*carried);
       REQUIRE(direct);
-      CHECK((nested.lr.eigenvalues-direct->eigenvalues).norm()<=1e-10*eig.norm());
-      auto moment=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),tangent->A);
+      CHECK((nested.lr.eigenvalues-direct->eigenvalues).norm()<=1e-10*direct->eigenvalues.norm());
+      auto moment=robust::compute_satorra2000_from_sandwich(H,H*V*H.transpose(),*carried_moment);
       REQUIRE(moment);
-      CHECK((nested.lr.eigenvalues-moment->eigenvalues).norm()<=1e-10*eig.norm());
+      CHECK((nested.lr.eigenvalues-moment->eigenvalues).norm()<=1e-8*direct->eigenvalues.norm());
       // Moving the marker preserves implied moments but changes parameter
       // slots; the mixed policy must use its moment-nesting fallback.
       const auto reparameterized=mixed_model(groups,true,true);
@@ -180,7 +197,9 @@ TEST_CASE("Mixed DWLS policy: exact sampling global law and IJ nested law") {
           {magmaan::robust::frontier::FmgMethod::All, 0.0, true}).p_value).epsilon(1e-12));
       CHECK(moment_nested.lr.df==nested.lr.df);
       CHECK(moment_nested.lr.statistic==doctest::Approx(nested.lr.statistic).epsilon(1e-7));
-      CHECK((moment_nested.lr.eigenvalues-nested.lr.eigenvalues).norm()<1e-10);
+      // The carried rows make the law identification-invariant (TASK-168); the
+      // two null fits differ only by optimizer noise.
+      CHECK((moment_nested.lr.eigenvalues-nested.lr.eigenvalues).norm()<=1e-8*nested.lr.eigenvalues.norm());
       CHECK(api::policy_ingredient_builds(cache)==2);
       api::policy_inference_dwls(cache,{});
       api::policy_nested_dwls(cache0,{},cache,{});

@@ -22,8 +22,15 @@ population_syntax <- function(cell, group) {
 
 geometry_draw <- function(cell, rep, seed) {
   started <- proc.time()[['elapsed']]
-  rows <- expand.grid(geometry = c('expected', 'observed'), test = c('score', 'lr'),
-    stringsAsFactors = FALSE)
+  # Score quadratics do not use the restriction rows. LR arms pair each
+  # geometry with the exact parameter-nesting rows (lavaan's A.method =
+  # "exact") and the carried, identification-invariant rows (TASK-168; the
+  # ordinary policy since the 2026-10-28 amendment).
+  rows <- rbind(
+    expand.grid(geometry = c('expected', 'observed'), test = 'score', restriction = 'none',
+      stringsAsFactors = FALSE),
+    expand.grid(geometry = c('expected', 'observed'), test = 'lr',
+      restriction = c('exact', 'invariant'), stringsAsFactors = FALSE))
   rows <- cbind(cell[rep(1, nrow(rows)), ], rep = rep, seed = seed, rows)
   rows$converged_h0 <- rows$converged_h1 <- FALSE
   for (k in c('statistic','df','p_sb','p_peba4','policy_p_sb','policy_p_peba4','policy_gap')) rows[[k]] <- NA_real_
@@ -45,19 +52,21 @@ geometry_draw <- function(cell, rep, seed) {
     rows$converged_h0 <- isTRUE(f0$converged); rows$converged_h1 <- isTRUE(f1$converged)
     if (!all(rows$converged_h0 & rows$converged_h1)) stop('library convergence verdict failed')
     shared <- magmaanlab::prepare_inference_data(f1)
-    hyp <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(f0, shared),
-                                        magmaanlab::prepare_inference(f1, shared))
+    i0 <- magmaanlab::prepare_inference(f0, shared); i1 <- magmaanlab::prepare_inference(f1, shared)
+    hyp <- list(exact = magmaanlab::prepare_hypothesis(i0, i1, restriction = 'exact'),
+                invariant = magmaanlab::prepare_hypothesis(i0, i1, restriction = 'invariant'))
     policy <- anova(h1, h0)
     for (i in seq_len(nrow(rows))) {
       tryCatch({
-        q <- magmaanlab::inference_quadratic(hyp, rows$test[i], rows$geometry[i])
+        h <- hyp[[if (rows$restriction[i] == 'none') 'invariant' else rows$restriction[i]]]
+        q <- magmaanlab::inference_quadratic(h, rows$test[i], rows$geometry[i])
         p <- magmaanlab::calibrate_quadratic(q, c('sb', 'peba4'))
         rows$statistic[i] <- q$statistic; rows$df[i] <- q$df
         if (q$df != 6) stop('restriction df differs from registered six')
         rows$p_sb[i] <- p$p_value[1]; rows$p_peba4[i] <- p$p_value[2]
         at <- if (rows$test[i] == 'score') which(policy$test == 'score') else which(policy$test != 'score')
         rows$policy_p_sb[i] <- policy$p.sb[at]; rows$policy_p_peba4[i] <- policy$p.peba4[at]
-        if (rows$geometry[i] == 'observed') {
+        if (rows$geometry[i] == 'observed' && rows$restriction[i] != 'exact') {
           rows$policy_gap[i] <- max(abs(c(rows$p_sb[i]-rows$policy_p_sb[i],
             rows$p_peba4[i]-rows$policy_p_peba4[i])))
           if (!is.finite(rows$policy_gap[i]) || rows$policy_gap[i] > 1e-7) stop('observed arm disagrees with anova policy')

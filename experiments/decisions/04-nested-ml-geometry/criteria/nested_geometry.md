@@ -71,3 +71,30 @@ reported comparator. The registered rule is kept as a reporting criterion. If
 observed fails it in some cell, the consequence is finite-sample correction
 work on the observed recipe, not a return to expected information.
 
+
+## Amendment 2026-10-28 (TASK-168), after production, before the rerun
+
+The exact restriction map pairs the larger model's Jacobian at its own fit with
+rows from the parameter nesting. Away from the null those rows depend on how
+the models are identified, so marker and std.lv give different LR references
+(lavaan's `A.method = "exact"` behaves the same way). The ordinary policy now
+carries the null tangent from the embedded null point to the larger model's fit
+by least squares in that fit's expected-information moment metric, and takes
+the restriction rows as its complement. The rows are identification-invariant,
+and they coincide with the exact rows when the null holds at the fit. As with
+the geometry, this is fixed by principle; the rerun is calibration evidence
+for the amended policy, not a selection.
+
+The rerun adds two LR arms, the carried rows in each geometry; score arms do
+not use the rows (restriction `none`). The LR policy arm is now observed with
+carried rows, and the anova() agreement check applies to it and the observed
+score arm. The registered paired rule compares the expected-geometry exact-row
+comparator (lavaan's Satorra-2000) with the policy arm and stays a reporting
+criterion. The observed exact-row arm is the pre-amendment policy. A new
+`restriction_gaps` table reports, per cell and geometry, the median and
+maximum absolute PEBA4 p-value difference between carried and exact rows and
+the number of changed decisions at 5%. The production seed base (726100041)
+and cells are unchanged, so the rerun reuses the 2026-10-03 draws and the
+exact-row arms should reproduce that run up to library changes since then.
+It runs per cell on simbox (run ID production-2026-10-28) and is combined with
+`modal/combine.R`; earlier results stay frozen.

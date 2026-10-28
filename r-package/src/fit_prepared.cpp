@@ -289,10 +289,15 @@ SEXP prepare_ntml_data_impl(Rcpp::List fit, SEXP raw, std::string storage) {
 }
 
 // [[Rcpp::export]]
-SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context) {
+SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context,
+                                  std::string restriction = "invariant") {
   auto& a = score_bindings::get<score_bindings::Context>(null_context,"magmaan_inference_context");
   auto& b = score_bindings::get<score_bindings::Context>(alternative_context,"magmaan_inference_context");
-  auto h = magmaan::robust::frontier::prepare_ntml_hypothesis(a.ntml,b.ntml);
+  if (restriction != "invariant" && restriction != "exact")
+    Rcpp::stop("magmaan: restriction must be \"invariant\" or \"exact\"");
+  auto h = magmaan::robust::frontier::prepare_ntml_hypothesis(a.ntml,b.ntml,
+      restriction == "exact" ? magmaan::robust::NestedRestriction::Exact
+                             : magmaan::robust::NestedRestriction::Invariant);
   if (!h) stop_post(h.error());
   return score_bindings::handle(*h,"magmaan_ntml_hypothesis");
 }

@@ -13,6 +13,7 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 #include <Eigen/LU>
+#include <Eigen/QR>
 
 #include "magmaan/api/policy.hpp"
 #include "magmaan/api/conventions.hpp"
@@ -25,6 +26,7 @@
 #include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/prepared_ntml.hpp"
+#include "magmaan/robust/restriction.hpp"
 #include "magmaan/spec/build.hpp"
 
 // The ordinary-user inference policy for complete-data ML. References:
@@ -502,7 +504,8 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
   auto out = api::policy_nested_ml(null, {}, alt, {});
   CHECK_FALSE(out.psd_boundary);
   // References on fresh snapshots of the same fits.
-  auto h = ntml::prepare_ntml_hypothesis(prepare_on(*data, null_model), prepare_on(*data, alt_model));
+  auto h = ntml::prepare_ntml_hypothesis(prepare_on(*data, null_model), prepare_on(*data, alt_model),
+                                         magmaan::robust::NestedRestriction::Invariant);
   REQUIRE(h.has_value());
   for (bool score : {true, false}) {
     const auto& test = score ? out.score : out.lr;
@@ -869,6 +872,43 @@ Eigen::MatrixXd numeric_information(const Model& model, const magmaan::data::Raw
   return H;
 }
 
+// The policy LR restriction (TASK-168), rebuilt from first principles: carry
+// the null tangent N0 at the embedded null point to the larger model's fit by
+// least squares in the expected normal-theory metric at that fit,
+// <dS_a, dS_b> = (1/2) tr(S^-1 dS_a S^-1 dS_b), with finite-difference
+// covariance derivatives; the restriction rows span the complement of the
+// carried directions. Single group, no mean structure.
+Eigen::MatrixXd transported_restriction_fd(const Model& model, const Eigen::VectorXd& fit,
+                                           const Eigen::VectorXd& null_point,
+                                           const Eigen::MatrixXd& K, const Eigen::MatrixXd& N0) {
+  auto ev = magmaan::model::ModelEvaluator::build(model.pt, model.rep);
+  REQUIRE(ev.has_value());
+  auto derivative = [&](const Eigen::VectorXd& theta, const Eigen::VectorXd& direction) {
+    const double h = 1e-6;
+    auto plus = ev->sigma(theta + h * direction), minus = ev->sigma(theta - h * direction);
+    REQUIRE(plus.has_value()); REQUIRE(minus.has_value());
+    return Eigen::MatrixXd((plus->sigma[0] - minus->sigma[0]) / (2.0 * h));
+  };
+  auto at_fit = ev->sigma(fit); REQUIRE(at_fit.has_value());
+  const Eigen::MatrixXd W = at_fit->sigma[0].inverse();
+  std::vector<Eigen::MatrixXd> dF, dN;
+  for (Eigen::Index a = 0; a < K.cols(); ++a) dF.push_back(derivative(fit, K.col(a)));
+  for (Eigen::Index a = 0; a < N0.cols(); ++a) dN.push_back(derivative(null_point, K * N0.col(a)));
+  auto inner = [&](const Eigen::MatrixXd& x, const Eigen::MatrixXd& y) {
+    return 0.5 * (W * x * W * y).trace();
+  };
+  Eigen::MatrixXd G(K.cols(), K.cols()), C(K.cols(), N0.cols());
+  auto at = [](Eigen::Index k) { return static_cast<std::size_t>(k); };
+  for (Eigen::Index a = 0; a < K.cols(); ++a) {
+    for (Eigen::Index b = 0; b < K.cols(); ++b) G(a, b) = inner(dF[at(a)], dF[at(b)]);
+    for (Eigen::Index b = 0; b < N0.cols(); ++b) C(a, b) = inner(dF[at(a)], dN[at(b)]);
+  }
+  const Eigen::MatrixXd N = G.ldlt().solve(C);
+  Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr(N);
+  const Eigen::MatrixXd Q = qr.matrixQ();
+  return Q.rightCols(K.cols() - N0.cols()).transpose();
+}
+
 Eigen::VectorXd sorted(Eigen::VectorXd v) {
   std::sort(v.data(), v.data() + v.size());
   return v;
@@ -968,8 +1008,11 @@ TEST_CASE("policy nested tests: observed geometry under a misspecified larger mo
   scores.rowwise() -= scores.colwise().mean().eval();
   const Eigen::MatrixXd J = K.transpose() * scores.transpose() * scores * K;
   const Eigen::MatrixXd Pinv = (K.transpose() * *H1 * K).inverse();
-  const Eigen::MatrixXd M = A * Pinv * A.transpose();
-  const Eigen::MatrixXd B = A * Pinv * J * Pinv * A.transpose();
+  const Eigen::MatrixXd At = transported_restriction_fd(alt_model, alt.est.theta,
+      nf.estimates.theta, K, magmaan::robust::restriction_null_directions(A));
+  REQUIRE(At.rows() == A.rows());
+  const Eigen::MatrixXd M = At * Pinv * At.transpose();
+  const Eigen::MatrixXd B = At * Pinv * J * Pinv * At.transpose();
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> reference(B, M);
   REQUIRE(reference.info() == Eigen::Success);
   CHECK((out.lr.eigenvalues - sorted(reference.eigenvalues())).norm() <

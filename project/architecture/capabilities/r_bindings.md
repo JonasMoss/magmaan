@@ -491,12 +491,16 @@
   Satorra-2000, ordinal/mixed-ordinal, pairwise-composite, continuous weighted
   inference and the SB2010 null-point injection. Mixed-point delta remains
   the lavaan compatibility option. In the expected geometry SB matches
-  lavaan's `satorra.2000` with the exact restriction map. Like lavaan's
-  `A.method = "exact"`, the map pairs the larger model's Jacobian at its own
-  estimate with restriction rows from the parameter nesting, so the reference
-  spectrum (not the statistic) shifts slightly with marker versus std.lv
-  identification; `"delta"` is invariant. The shift is noise-sized under H0
-  (TASK-168, parked in the speculative backlog). A model without free
+  lavaan's `satorra.2000` with the exact restriction map when the lab
+  hypothesis uses `restriction = "exact"`. Like lavaan's `A.method = "exact"`,
+  that map pairs the larger model's Jacobian at its own estimate with rows from
+  the parameter nesting, so its reference spectrum (not the statistic) shifts
+  with marker versus std.lv identification. The ordinary policy and the lab
+  default (`restriction = "invariant"`) instead carry the null tangent from the
+  embedded null point to the larger fit by least squares in the fit's expected
+  moment metric (`robust::transported_restriction_alpha`) and use the
+  complement, which is identification-invariant and equals the exact rows when
+  the null holds at the fit (TASK-168). A model without free
   parameters is evaluated at its fixed values instead of optimized
   (`evaluate_fixed` in `estimate/fit.cpp`), passes the verdict vacuously, and
   gets an empty covariance. Its global score and LR tests use the full moment

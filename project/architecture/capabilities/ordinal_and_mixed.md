@@ -491,9 +491,13 @@ estimated-weight/Gamma work beyond the exact sampling Jacobian.
   reporting, modification indices, score tests, and standardized-solution
   reporting.
 - DWLS nested policy (task-17.4) uses the observed-Hessian parameter-space
-  estimated-weight IJ law at H1 with the exact embedding restriction map.
-  Its spectrum has exactly df_diff terms and matches the common-point profile
-  and task-17.3 diagnostic construction. T = N(F_H0 − F_H1), All (SB/PEBA4 comparators), typed
+  estimated-weight IJ law at H1. Since 2026-10-28 (TASK-168) its restriction
+  rows carry the null tangent from the embedded null point (parameter or
+  moment nesting) to the H1 fit through the DWLS-weighted moment residuals
+  (`api::frontier::moment_transported_restriction`), so the law is
+  identification-invariant; with the exact embedding rows the spectrum
+  matches the common-point profile and task-17.3 diagnostic construction,
+  which the lab keeps as `A` beside `A_invariant`. T = N(F_H0 − F_H1), All (SB/PEBA4 comparators), typed
   nesting reasons and unsupported nested score are preserved. The separate-point
   profile law remains an explicitly named lab comparator. Confirmed on fresh
   draws in decision study 05 (4.3-7.8%); the global test, ML and FIML recipes are unchanged.
@@ -1191,7 +1195,9 @@ exact-fit and identification-chart gates pass in `ordinal_ij_test.cpp`. The
 lab wrapper gates covariance reconstruction and threshold cross-covariance.
 Lab `association_ml_global_test` and `association_ml_nested_test` compose
 All, SB and PEBA4 spectra from the local correlation ML residual metric and
-exact Stage-1 Gamma, or observed H/IJ meat and an exact parameter restriction.
+exact Stage-1 Gamma, or observed H/IJ meat and a parameter restriction carried
+from the embedded null point to the larger fit in the normal-theory correlation
+metric there (identification-invariant since 2026-10-28, TASK-168).
 Explicit matrix reconstructions, zero-df/exact-fit reductions, one-restriction,
 grouped and misspecified pseudo-true restriction gates are in `ordinal_ij_test.cpp`.
 Moment nesting is refused. Ordinary covariance, global/nested tests and
@@ -1365,7 +1371,8 @@ covers at about 95%. The global test uses the exact spectrum tail (All) on the
 robust-ordinal spectrum, because SB and PEBA4 over-reject at df >= 53; it was
 confirmed on fresh draws at 2.9-6.8%. The nested test uses the r-term
 parameter-space law (observed Hessian, estimated-weight IJ meat, exact
-restriction map) with SB and PEBA4, after the separate-point profile law's
+restriction map; carried identification-invariant rows since 2026-10-28,
+TASK-168) with SB and PEBA4, after the separate-point profile law's
 cancellation artifact was diagnosed; confirmed at 4.3-7.8%. ML/FIML likelihood-score
 contracts have their own gates (task-22). FIML and DWLS policy ingredients
 (observed bread and casewise scores; IJ influence and exact Hessian) are built

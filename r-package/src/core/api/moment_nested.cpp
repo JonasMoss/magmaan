@@ -7,6 +7,7 @@
 #include <Eigen/QR>
 #include <Eigen/SVD>
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/robust/restriction.hpp"
 
 namespace magmaan::api::frontier {
 
@@ -125,6 +126,72 @@ post_expected<MomentNestedTangent> moment_nested_tangent(
   return moment_nested_tangent_impl(std::move(null_pt), null_rep, null_estimates,
       std::move(alternative_pt), alternative_rep, alternative_estimates, stats,
       parameterization, null_row_user, alternative_row_user);
+}
+
+// TASK-168: the nested DWLS reference is evaluated at the alternative's fit.
+// Carry the null tangent from the embedded null point to that fit through the
+// DWLS-weighted moment residuals, so the restriction does not depend on the
+// parameterization (identification) of either model.
+template<class Stats>
+static post_expected<Eigen::MatrixXd> moment_transported_restriction_impl(
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const Eigen::VectorXd& null_point, const Eigen::MatrixXd& null_directions,
+    const Stats& stats, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  auto fail = [](PostError::Kind kind, const std::string& detail)
+      -> post_expected<Eigen::MatrixXd> {
+    return std::unexpected(PostError{kind, "DWLS nested restriction: " + detail});
+  };
+  fit_expected<estimate::frontier::OrdinalLsObjective> o1 = [&] {
+    if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
+      auto prepared = estimate::prepare_mixed_ordinal_partable(alternative_pt, stats,
+          parameterization, nullptr, alternative_row_user);
+      if (!prepared) return fit_expected<estimate::frontier::OrdinalLsObjective>(
+          std::unexpected(prepared.error()));
+      return estimate::frontier::mixed_ordinal_ls_objective(alternative_pt,
+          alternative_rep, stats, alternative_estimates,
+          estimate::OrdinalWeightKind::DWLS, parameterization);
+    } else return estimate::frontier::ordinal_ls_objective(alternative_pt,
+        alternative_rep, stats, alternative_estimates,
+        estimate::OrdinalWeightKind::DWLS, parameterization, alternative_row_user);
+  }();
+  if (!o1) return fail(PostError::Kind::NumericIssue, o1.error().detail);
+  auto c1 = estimate::build_eq_constraints(o1->pt);
+  if (!c1) return fail(PostError::Kind::UnsupportedNesting, c1.error().detail);
+  const Eigen::MatrixXd K = c1->K();
+  if (null_directions.rows() != K.cols() ||
+      null_point.size() != alternative_estimates.theta.size())
+    return fail(PostError::Kind::NumericIssue, "null tangent and alternative coordinates disagree");
+  auto at_fit = o1->problem.J(alternative_estimates.theta);
+  auto at_null = o1->problem.J(null_point);
+  if (!at_fit || !at_null) return fail(PostError::Kind::NumericIssue,
+      !at_fit ? at_fit.error().detail : at_null.error().detail);
+  // Weighted residual Jacobians already carry the DWLS metric.
+  const Eigen::MatrixXd F = *at_fit * K;
+  return robust::transported_restriction_alpha(F, F, *at_null * K, null_directions);
+}
+
+post_expected<Eigen::MatrixXd> moment_transported_restriction(
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const Eigen::VectorXd& null_point, const Eigen::MatrixXd& null_directions,
+    const data::OrdinalStats& stats, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return moment_transported_restriction_impl(std::move(alternative_pt), alternative_rep,
+      alternative_estimates, null_point, null_directions, stats, parameterization,
+      alternative_row_user);
+}
+
+post_expected<Eigen::MatrixXd> moment_transported_restriction(
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const Eigen::VectorXd& null_point, const Eigen::MatrixXd& null_directions,
+    const data::MixedOrdinalStats& stats, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* alternative_row_user) {
+  return moment_transported_restriction_impl(std::move(alternative_pt), alternative_rep,
+      alternative_estimates, null_point, null_directions, stats, parameterization,
+      alternative_row_user);
 }
 
 } // namespace magmaan::api::frontier

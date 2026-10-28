@@ -654,6 +654,91 @@ fiml_structured_h1_information(spec::LatentStructure pt,
 
 }  // namespace
 
+post_expected<Eigen::MatrixXd>
+fiml_expected_moment_information(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const FIMLPack& pack) {
+  const FIMLCache& cache = pack.cache;
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_expected_moment_information: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  if (static_cast<std::size_t>(est.theta.size()) != ev_or->n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_expected_moment_information: theta size mismatch"));
+  }
+  auto eval_or = ev_or->evaluate(est.theta, false, false);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_expected_moment_information: ModelEvaluator::evaluate failed: " +
+            eval_or.error().detail));
+  }
+  const auto& sigma = eval_or->moments.sigma;
+  const std::size_t B = raw.X.size();
+  if (B == 0 || cache.block_p.size() != B || sigma.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_expected_moment_information: raw, model, and pattern-cache "
+        "blocks differ"));
+  }
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b)
+    off_b[b + 1] = off_b[b] + cache.block_p[b] + vech_len(cache.block_p[b]);
+  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(off_b.back(), off_b.back());
+  for (const FIMLPattern& pattern : cache.patterns) {
+    if (pattern.block >= B || pattern.n_obs <= 0 || pattern.observed.empty()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_expected_moment_information: invalid observed-data pattern"));
+    }
+    const std::size_t b = pattern.block;
+    const Eigen::Index p = cache.block_p[b];
+    const auto& o = pattern.observed;
+    const auto q = static_cast<Eigen::Index>(o.size());
+    const Eigen::MatrixXd Sigma_o = select_square(sigma[b], o);
+    Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (Sigma_o + Sigma_o.transpose()));
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_expected_moment_information: observed-pattern covariance is "
+          "not positive definite"));
+    }
+    const Eigen::MatrixXd P = llt.solve(Eigen::MatrixXd::Identity(q, q));
+    const double n = static_cast<double>(pattern.n_obs);
+    const Eigen::Index mu0 = off_b[b], s0 = off_b[b] + p;
+    auto full = [&](Eigen::Index k) { return o[static_cast<std::size_t>(k)]; };
+    for (Eigen::Index a = 0; a < q; ++a)
+      for (Eigen::Index c = 0; c < q; ++c)
+        V(mu0 + full(a), mu0 + full(c)) += n * P(a, c);
+    // (1/2) tr(P dS_(ij) P dS_(kl)) for vech coordinates (i >= j), (k >= l).
+    for (Eigen::Index j = 0; j < q; ++j) {
+      for (Eigen::Index i = j; i < q; ++i) {
+        const Eigen::Index row = s0 + vech_index(p, std::max(full(i), full(j)),
+                                                 std::min(full(i), full(j)));
+        const double di = i == j ? 0.5 : 1.0;
+        for (Eigen::Index l = 0; l < q; ++l) {
+          for (Eigen::Index k = l; k < q; ++k) {
+            const Eigen::Index col = s0 + vech_index(p, std::max(full(k), full(l)),
+                                                     std::min(full(k), full(l)));
+            const double dk = k == l ? 0.5 : 1.0;
+            V(row, col) += n * di * dk * (P(i, k) * P(j, l) + P(i, l) * P(j, k));
+          }
+        }
+      }
+    }
+  }
+  return Eigen::MatrixXd(0.5 * (V + V.transpose()));
+}
+
 post_expected<FIMLEtaJacobian>
 fiml_eta_jacobian(spec::LatentStructure pt,
                   const model::MatrixRep& rep,

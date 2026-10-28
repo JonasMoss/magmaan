@@ -92,7 +92,7 @@ test_that("FIML policy uses retained missing-pattern scores for global and neste
 })
 
 
-test_that("DWLS nested policy equals the exact parameter-IJ construction", {
+test_that("DWLS nested policy equals the carried-restriction parameter-IJ construction", {
   skip_if_not_installed("lavaan")
   d <- lavaan::HolzingerSwineford1939
   ord <- paste0("x",1:6)
@@ -109,7 +109,10 @@ test_that("DWLS nested policy equals the exact parameter-IJ construction", {
   expect_equal(policy$p_all, magmaan_core$robust_fmg_test(policy$statistic,
     policy$df, policy$eigenvalues, "all", 0)$p_value, tolerance = 1e-12)
   parts <- magmaanlab:::ordinal_nested_diagnostic_impl(f1,f0)
-  K <- parts$K; A <- parts$A
+  # The policy carries the null tangent to f1's fit (TASK-168); parts$A keeps
+  # the exact nesting rows, which give a different law away from the null.
+  K <- parts$K; A <- parts$A_invariant
+  expect_equal(dim(A), dim(parts$A))
   H <- crossprod(K,parts$hessian_total%*%K)/f1$ntotal
   L <- solve(crossprod(K),t(K))
   V <- f1$ntotal*L%*%magmaan_core$robust_ordinal_ij(f1,f1$ordinal_stats, first_stage = "exact")$vcov%*%t(L)

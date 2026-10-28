@@ -255,6 +255,55 @@ association_ml_global_test(spec::LatentStructure pt, const model::MatrixRep& rep
   return out;
 }
 
+// Implied-correlation vech Jacobian at theta in the reduced coordinates K and
+// the same columns under the normal-theory metric of the correlation ML
+// discrepancy at theta, group-weighted: w' vech(dQ) = n_b/2 tr(P^-1 dP P^-1 dQ).
+// Correlation moments are fixed coordinates, so the metric does not depend on
+// how either model is parameterized.
+struct AssociationMomentJacobian { Eigen::MatrixXd J, weighted; };
+static post_expected<AssociationMomentJacobian> association_moment_jacobian(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const Eigen::VectorXd& theta, const Eigen::MatrixXd& K,
+    const std::vector<std::int64_t>& n_obs) {
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev) return std::unexpected(make_post_err(PostError::Kind::NumericIssue, ev.error().detail));
+  auto evaluation = ev->evaluate(theta, true, false);
+  if (!evaluation) return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+      evaluation.error().detail));
+  auto corr = model::correlation_evaluation(std::move(*evaluation));
+  if (!corr) return std::unexpected(make_post_err(PostError::Kind::NumericIssue, corr.error().detail));
+  AssociationMomentJacobian out{corr->J_sigma * K, Eigen::MatrixXd::Zero(corr->J_sigma.rows(), K.cols())};
+  if (n_obs.size() != corr->moments.sigma.size())
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "association moment metric: group counts and correlation blocks differ"));
+  Eigen::Index offset = 0;
+  for (std::size_t b = 0; b < corr->moments.sigma.size(); ++b) {
+    const Eigen::MatrixXd& P = corr->moments.sigma[b];
+    const Eigen::Index p = P.rows();
+    Eigen::LLT<Eigen::MatrixXd> llt(P);
+    if (llt.info() != Eigen::Success)
+      return std::unexpected(make_post_err(PostError::Kind::BoundaryNesting,
+          "association moment metric: implied correlation is not positive definite"));
+    const Eigen::MatrixXd Pinv = llt.solve(Eigen::MatrixXd::Identity(p, p));
+    const double n = static_cast<double>(n_obs[b]);
+    for (Eigen::Index k = 0; k < out.J.cols(); ++k) {
+      Eigen::MatrixXd dP(p, p);
+      for (Eigen::Index c = 0; c < p; ++c)
+        for (Eigen::Index r = c; r < p; ++r)
+          dP(r, c) = dP(c, r) = out.J(offset + vech_index(p, r, c), k);
+      const Eigen::MatrixXd M = Pinv * dP * Pinv;
+      for (Eigen::Index c = 0; c < p; ++c)
+        for (Eigen::Index r = c; r < p; ++r)
+          out.weighted(offset + vech_index(p, r, c), k) = n * (r == c ? 0.5 : 1.0) * M(r, c);
+    }
+    offset += vech_len(p);
+  }
+  if (offset != out.J.rows())
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "association moment metric: correlation Jacobian rows differ"));
+  return out;
+}
+
 post_expected<AssociationMlTest>
 association_ml_nested_test(spec::LatentStructure pt_alt, const model::MatrixRep& rep_alt,
     const data::OrdinalStats& stats, const Estimates& est_alt,
@@ -280,7 +329,17 @@ association_ml_nested_test(spec::LatentStructure pt_alt, const model::MatrixRep&
       est_null.theta,c1->constraints,c0->constraints);
   if (!embedding) return std::unexpected(embedding.error());
   AssociationMlTest out;
-  out.restriction = embedding->restriction.A;
+  // TASK-168: the law below sits at the alternative's fit; carry the null
+  // tangent there so the restriction is parameterization-invariant.
+  const Eigen::MatrixXd K1 = c1->constraints.K();
+  auto at_fit = association_moment_jacobian(pt_alt, rep_alt, est_alt.theta, K1, stats.n_obs);
+  if (!at_fit) return std::unexpected(at_fit.error());
+  auto at_null = association_moment_jacobian(pt_alt, rep_alt, embedding->theta, K1, stats.n_obs);
+  if (!at_null) return std::unexpected(at_null.error());
+  auto transported = robust::transported_restriction_alpha(at_fit->weighted, at_fit->J,
+      at_null->J, robust::restriction_null_directions(embedding->restriction.A));
+  if (!transported) return std::unexpected(transported.error());
+  out.restriction = std::move(*transported);
   out.df = static_cast<int>(out.restriction.rows());
   double N = 0;
   for (auto n : stats.n_obs) N += static_cast<double>(n);

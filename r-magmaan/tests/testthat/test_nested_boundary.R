@@ -25,12 +25,13 @@ test_that("released-label tests compute at an improper null and match expected S
   expect_true(all(is.na(result$reason)))
   expect_false(attr(result, "psd_boundary"))
 
-  # The policy uses observed geometry. Its expected-geometry lab comparator
-  # is Satorra-2000 with the exact restriction map, as in test-magmaan.R.
+  # The policy uses observed geometry and the carried restriction. Its
+  # expected-geometry exact-restriction lab comparator is lavaan's Satorra-2000
+  # with the exact restriction map, as in test-magmaan.R.
   shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))
   hypothesis <- magmaanlab::prepare_hypothesis(
     magmaanlab::prepare_inference(as_lab_fit(f0), shared),
-    magmaanlab::prepare_inference(as_lab_fit(f1), shared))
+    magmaanlab::prepare_inference(as_lab_fit(f1), shared), restriction = "exact")
   expected <- magmaanlab::calibrate_quadratic(
     magmaanlab::inference_quadratic(hypothesis, "lr", geometry = "expected"), "sb")
   lav0 <- suppressWarnings(lavaan::cfa(nested_boundary_null, d,

@@ -340,6 +340,19 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-28: the ordinary nested LR reference no longer depends on how the
+models are identified (TASK-168). The exact restriction map, like lavaan's
+`A.method = "exact"`, applies parameter-nesting rows at the larger model's fit,
+and away from the null those rows shift with marker versus std.lv. ML, FIML,
+all-ordinal and mixed DWLS, and association ML now carry the null tangent from
+the embedded null point to the larger fit by least squares in that fit's
+expected (Gauss-Newton) moment metric and use its complement. The rows agree
+with the exact ones when the null holds at the fit, and marker and std.lv now
+give the same p-values on every route. The lab's `prepare_hypothesis()` gains
+`restriction = c("invariant", "exact")`; `"exact"` keeps lavaan parity.
+decisions/04 is rerun with carried-row arms; calibration of the DWLS, FIML and
+association routes rests on their earlier exact-row evidence plus that rerun.
+
 2026-10-15: frontier PSD fitting offers an opt-in full square covariance factor
 (`PsdFitOptions::factor`, magmaanlab `psd_factor = "square"`), whose lifted local
 minima are exactly those of the PSD problem; starts are the symmetric square root

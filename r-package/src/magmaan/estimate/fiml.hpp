@@ -388,6 +388,19 @@ fiml_expected_information(spec::LatentStructure pt,
                           const Estimates& est,
                           const FIMLPack& pack);
 
+// Expected FIML information in saturated-moment coordinates, evaluated at the
+// model-implied moments of `est`: block-diagonal over raw blocks, each block in
+// the [mu_b; vech(Sigma_b)] layout of `fiml_eta_jacobian`, total-likelihood
+// units. Each observed-data pattern contributes its conditional Gaussian
+// Fisher information, so Delta' V Delta equals `fiml_expected_information`.
+// With complete data it is the normal-theory weight n_b Gamma_NT(Sigma_b)^-1.
+post_expected<Eigen::MatrixXd>
+fiml_expected_moment_information(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const FIMLPack& pack);
+
 // Observed-H1 FIML information in theta space: the realized observed-pattern
 // moment Hessian, evaluated at the model-implied moments and projected through
 // the first-order eta Jacobian Delta. This is lavaan's

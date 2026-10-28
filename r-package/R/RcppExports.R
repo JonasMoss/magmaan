@@ -681,8 +681,8 @@ prepare_ntml_data_impl <- function(fit, raw, storage) {
     .Call(`_magmaanlab_prepare_ntml_data_impl`, fit, raw, storage)
 }
 
-prepare_ntml_hypothesis_impl <- function(null_context, alternative_context) {
-    .Call(`_magmaanlab_prepare_ntml_hypothesis_impl`, null_context, alternative_context)
+prepare_ntml_hypothesis_impl <- function(null_context, alternative_context, restriction = "invariant") {
+    .Call(`_magmaanlab_prepare_ntml_hypothesis_impl`, null_context, alternative_context, restriction)
 }
 
 ntml_quadratic_impl <- function(object, hypothesis, score, observed = FALSE) {

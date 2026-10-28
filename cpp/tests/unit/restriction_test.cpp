@@ -177,3 +177,60 @@ TEST_CASE("restriction_alpha_from_K: a nonzero fixed path retains its affine val
   CHECK((result->A*offset-result->b).norm()<1e-12);
   CHECK((result->A*K0).norm()<1e-12);
 }
+
+// TASK-168. The transported restriction must (a) reduce to the exact rows when
+// the fit lies on the null, (b) transform with the larger model's coordinate
+// change at its fit, whatever the (different) coordinate change at the null
+// point, and (c) ignore invertible changes of moment coordinates when the
+// metric transforms with them. Row spaces are compared through the
+// annihilated directions, since the rows are orthonormal only up to rotation.
+TEST_CASE("Transported nested restriction is invariant to reparameterization") {
+  using magmaan::robust::restriction_null_directions;
+  using magmaan::robust::transported_restriction_alpha;
+  const Eigen::Index q = 12, r1 = 5, m = 2;
+  std::srand(16804);
+  const Eigen::MatrixXd fit = Eigen::MatrixXd::Random(q, r1);
+  const Eigen::MatrixXd at_null = fit + 0.2 * Eigen::MatrixXd::Random(q, r1);
+  const Eigen::MatrixXd root = Eigen::MatrixXd::Random(q, q);
+  const Eigen::MatrixXd V = root * root.transpose() + Eigen::MatrixXd::Identity(q, q);
+  const Eigen::MatrixXd exact = Eigen::HouseholderQR<Eigen::MatrixXd>(
+      Eigen::MatrixXd::Random(r1, r1)).householderQ() *
+      Eigen::MatrixXd::Identity(r1, m);
+  const Eigen::MatrixXd A_exact = exact.transpose();
+  const Eigen::MatrixXd N0 = restriction_null_directions(A_exact);
+  REQUIRE(N0.cols() == r1 - m);
+  CHECK((A_exact * N0).norm() < 1e-12);
+
+  // (a) Same point: the exact row space.
+  auto same = transported_restriction_alpha(V * fit, fit, fit, N0);
+  REQUIRE(same.has_value());
+  CHECK(same->rows() == m);
+  CHECK((*same * N0).norm() < 1e-10);
+
+  auto base = transported_restriction_alpha(V * fit, fit, at_null, N0);
+  REQUIRE(base.has_value());
+  const Eigen::MatrixXd kept = restriction_null_directions(*base);
+
+  // (b) Different coordinate changes at the fit and at the null point.
+  const Eigen::MatrixXd J_fit = Eigen::MatrixXd::Identity(r1, r1) +
+                                0.3 * Eigen::MatrixXd::Random(r1, r1);
+  const Eigen::MatrixXd J_null = Eigen::MatrixXd::Identity(r1, r1) +
+                                 0.3 * Eigen::MatrixXd::Random(r1, r1);
+  const Eigen::MatrixXd N0_new = J_null.fullPivLu().solve(N0);
+  auto moved = transported_restriction_alpha(V * fit * J_fit, fit * J_fit,
+                                             at_null * J_null, N0_new);
+  REQUIRE(moved.has_value());
+  const Eigen::MatrixXd kept_new = J_fit.fullPivLu().solve(kept);
+  CHECK((*moved * kept_new).norm() / kept_new.norm() < 1e-10);
+  // The exact rows carried by J_null are not the ones the fit needs.
+  CHECK(((A_exact * J_null) * kept_new).norm() / kept_new.norm() > 1e-3);
+
+  // (c) Moment coordinates: Δ -> DΔ with metric D^-T V D^-1.
+  const Eigen::MatrixXd D = Eigen::MatrixXd::Identity(q, q) +
+                            0.2 * Eigen::MatrixXd::Random(q, q);
+  const Eigen::MatrixXd Dinv = D.fullPivLu().inverse();
+  const Eigen::MatrixXd V_new = Dinv.transpose() * V * Dinv;
+  auto rescaled = transported_restriction_alpha(V_new * D * fit, D * fit, D * at_null, N0);
+  REQUIRE(rescaled.has_value());
+  CHECK((*rescaled * kept).norm() < 1e-9);
+}

@@ -2456,14 +2456,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // prepare_ntml_hypothesis_impl
-SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context);
-RcppExport SEXP _magmaanlab_prepare_ntml_hypothesis_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP) {
+SEXP prepare_ntml_hypothesis_impl(SEXP null_context, SEXP alternative_context, std::string restriction);
+RcppExport SEXP _magmaanlab_prepare_ntml_hypothesis_impl(SEXP null_contextSEXP, SEXP alternative_contextSEXP, SEXP restrictionSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type null_context(null_contextSEXP);
     Rcpp::traits::input_parameter< SEXP >::type alternative_context(alternative_contextSEXP);
-    rcpp_result_gen = Rcpp::wrap(prepare_ntml_hypothesis_impl(null_context, alternative_context));
+    Rcpp::traits::input_parameter< std::string >::type restriction(restrictionSEXP);
+    rcpp_result_gen = Rcpp::wrap(prepare_ntml_hypothesis_impl(null_context, alternative_context, restriction));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -4967,7 +4968,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_inference_snapshot_impl", (DL_FUNC) &_magmaanlab_inference_snapshot_impl, 1},
     {"_magmaanlab_score_components_matrix_impl", (DL_FUNC) &_magmaanlab_score_components_matrix_impl, 7},
     {"_magmaanlab_prepare_ntml_data_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_data_impl, 3},
-    {"_magmaanlab_prepare_ntml_hypothesis_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_hypothesis_impl, 2},
+    {"_magmaanlab_prepare_ntml_hypothesis_impl", (DL_FUNC) &_magmaanlab_prepare_ntml_hypothesis_impl, 3},
     {"_magmaanlab_ntml_quadratic_impl", (DL_FUNC) &_magmaanlab_ntml_quadratic_impl, 4},
     {"_magmaanlab_ntml_reference_impl", (DL_FUNC) &_magmaanlab_ntml_reference_impl, 2},
     {"_magmaanlab_ntml_rows_impl", (DL_FUNC) &_magmaanlab_ntml_rows_impl, 1},

@@ -1,5 +1,13 @@
 # magmaanlab (development version)
 
+- `prepare_hypothesis()` gains `restriction = c("invariant", "exact")`. The
+  default, now also the ordinary policy's, carries the null tangent to the
+  larger model's fit, so nested LR references no longer change between marker
+  and std.lv identification. `"exact"` keeps the parameter-nesting rows of
+  lavaan's `A.method = "exact"`. Policy nested LR tests for ML, FIML, DWLS,
+  mixed DWLS and association ML use the invariant rows; their p-values change
+  slightly when the larger model is misspecified.
+
 - Pairwise-deletion ordinal statistics keep their Gamma convention
   (`pd_gamma = "overlap"`) and moment supports when passed back to inference.
   Robust tests, FMG tests and nested tests on pairwise-missing ordinal data no

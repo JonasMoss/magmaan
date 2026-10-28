@@ -47,6 +47,11 @@ struct NTMLHypothesis {
   std::shared_ptr<NTMLFit> null_fit, alternative;
   std::shared_ptr<NTMLFit> embedded_null; // H1 evaluation at H0, when slots differ
   RestrictionAlpha restriction;
+  // LR reference restriction; the score always uses `restriction` at the
+  // embedded null, where the exact rows are coordinate-free.
+  NestedRestriction lr_restriction = NestedRestriction::Exact;
+  Eigen::VectorXd null_point_theta;            // null estimate in H1's slots
+  std::optional<Eigen::MatrixXd> transported;  // cached invariant LR rows
   std::shared_ptr<NTMLQuadratic> score, lr;                    // expected geometry
   std::shared_ptr<NTMLQuadratic> score_observed, lr_observed;  // observed geometry
 };
@@ -70,7 +75,8 @@ post_expected<const NTMLGeometry*> ntml_geometry(NTMLFit& fit);
 post_expected<const UFactor*> ntml_factor(NTMLFit& fit, Information bread = Information::Expected);
 post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(NTMLFit& fit, bool score);
 post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
-    std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative);
+    std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative,
+    NestedRestriction lr_restriction = NestedRestriction::Exact);
 // The nested score and likelihood-ratio quadratics with their reference rows.
 // `geometry` selects the information in the reference law; the statistics'
 // numerators never change. Expected (the default, lavaan's Satorra-2000 and

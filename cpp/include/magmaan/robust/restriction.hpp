@@ -100,4 +100,36 @@ restriction_alpha_delta_from_jacobians(
     int                                      expected_m,
     double                                   tol_singular = 1e-10);
 
+// Restriction used by a nested difference reference evaluated at the larger
+// model's fit. Exact: rows from the parameter nesting (lavaan's
+// A.method = "exact"); shifts with the parameterization when the fit is off
+// the null. Invariant: the null tangent carried to the fit through moment
+// space (transported_restriction_alpha); unchanged under reparameterization.
+enum class NestedRestriction { Exact, Invariant };
+
+// Identification-invariant restriction for a nested difference at the larger
+// model's fit. The exact rows from the parameter nesting describe the null's
+// directions only at points on the null; paired with the larger model's
+// Jacobian and information at its own fit they shift with the
+// parameterization (marker versus std.lv). Here the null's tangent at the
+// embedded null point, `null_point_jacobian * null_directions`, is carried to
+// the fit by projection in one moment metric V: N = (Δ'VΔ)⁻¹Δ'V Δ_null N0
+// with Δ the larger model's moment Jacobian at its fit. Arguments are in the
+// larger model's reduced coordinates: `weighted_fit_jacobian` = VΔ,
+// `fit_jacobian` = Δ, `null_point_jacobian` = the larger model's Jacobian at
+// the embedded null point, `null_directions` (r1 × r0) spanning the null
+// tangent there. Returns orthonormal rows (r1 − r0) × r1 annihilating N.
+// When the fit lies on the null the row space equals the exact restriction.
+post_expected<Eigen::MatrixXd>
+transported_restriction_alpha(
+    const Eigen::Ref<const Eigen::MatrixXd>& weighted_fit_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& fit_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& null_point_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& null_directions,
+    double tol_singular = 1e-10);
+
+// Orthonormal basis (r1 × (r1 − m)) of the null space of restriction rows A.
+Eigen::MatrixXd restriction_null_directions(
+    const Eigen::Ref<const Eigen::MatrixXd>& A);
+
 }  // namespace magmaan::robust

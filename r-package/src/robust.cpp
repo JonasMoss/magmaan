@@ -11,6 +11,7 @@
 #include "gamma_arg.h"
 #include "ntml_snapshot.h"
 
+#include "magmaan/api/policy.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/restriction.hpp"
 #include "magmaan/robust/weighted_chisq.hpp"
@@ -1249,10 +1250,17 @@ Rcpp::List ordinal_nested_diagnostic_impl(Rcpp::List fit_H1,
   auto common = magmaan::estimate::ordinal_dwls_profile_lrt(
       c1.pt, c1.rep, stats, e1, null_pt, c1.rep, e1, par);
   if (!common) stop_post(common.error());
+  // The policy's rows: the null tangent carried from the embedded null point
+  // to the larger model's fit (TASK-168). `A` keeps the exact nesting rows.
+  auto carried = magmaan::api::frontier::moment_transported_restriction(
+      c1.pt, c1.rep, e1, embed->theta,
+      magmaan::robust::restriction_null_directions(embed->restriction.A), stats, par);
+  if (!carried) stop_post(carried.error());
   return Rcpp::List::create(
       Rcpp::_["hessian_total"] = Rcpp::wrap(parts->hessian),
       Rcpp::_["K"] = Rcpp::wrap(k1->K()),
       Rcpp::_["A"] = Rcpp::wrap(embed->restriction.A),
+      Rcpp::_["A_invariant"] = Rcpp::wrap(*carried),
       Rcpp::_["common"] = profile_lrt_to_list(*common));
 }
 

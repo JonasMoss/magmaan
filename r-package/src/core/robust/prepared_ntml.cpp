@@ -312,7 +312,8 @@ post_expected<const Eigen::MatrixXd*> ntml_score_sandwich(NTMLFit& fit, Informat
   return &*slot;
 }
 post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
-    std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative) {
+    std::shared_ptr<NTMLFit> null_fit, std::shared_ptr<NTMLFit> alternative,
+    NestedRestriction lr_restriction) {
   if (!null_fit || !alternative || null_fit->data != alternative->data)
     return std::unexpected(PostError{PostError::Kind::NotNested,
         "NTML hypothesis: fits must share one prepared inference dataset"});
@@ -328,6 +329,8 @@ post_expected<std::shared_ptr<NTMLHypothesis>> prepare_ntml_hypothesis(
   auto out = std::make_shared<NTMLHypothesis>();
   out->null_fit = std::move(null_fit); out->alternative = std::move(alternative);
   out->restriction = std::move(embedding->restriction);
+  out->lr_restriction = lr_restriction;
+  out->null_point_theta = embedding->theta;
   if (!embedding->same_ambient) {
     auto estimates=out->null_fit->estimates;
     estimates.theta=std::move(embedding->theta);
@@ -347,7 +350,9 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
   if (slot) return slot;
   // The per-null LR cache is keyed by the alternative only, so it holds the
   // expected geometry alone.
-  if (!score && !observed) for (const auto& entry : h.null_fit->nested_lr)
+  const bool shared_cache = !score && !observed &&
+                            h.lr_restriction == NestedRestriction::Exact;
+  if (shared_cache) for (const auto& entry : h.null_fit->nested_lr)
     if (entry.first == h.alternative) { slot=entry.second; return slot; }
   NTMLFit& fit = score ? *(h.embedded_null ? h.embedded_null : h.null_fit) : *h.alternative;
   auto info = ntml_information(fit); if (!info) return std::unexpected(info.error());
@@ -373,6 +378,32 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
     metric = D.transpose()* **info * D;
     directions = **wd * D;
   } else {
+    const Eigen::MatrixXd* A = &h.restriction.A;
+    if (h.lr_restriction == NestedRestriction::Invariant) {
+      if (!h.transported) {
+        // The alternative's moment Jacobian at the embedded null point.
+        auto estimates = h.alternative->estimates;
+        estimates.theta = h.null_point_theta;
+        auto at_null = prepare_ntml_fit(h.alternative->data, h.alternative->pt,
+                                        h.alternative->rep, std::move(estimates));
+        if (!at_null) return std::unexpected(at_null.error());
+        auto g_null = ntml_geometry(**at_null);
+        if (!g_null) return std::unexpected(g_null.error());
+        auto g_fit = ntml_geometry(fit);
+        if (!g_fit) return std::unexpected(g_fit.error());
+        // Expected information metric at the fit: group b carries n_b, as in
+        // ntml_information.
+        Eigen::MatrixXd weighted = **wd;
+        for (const auto& b : (*g_fit)->base.blocks)
+          weighted.middleRows(start(b,(*g_fit)->base.has_means),
+                              width(b,(*g_fit)->base.has_means)) *= static_cast<double>(b.n_obs);
+        auto rows = transported_restriction_alpha(weighted * K, (*g_fit)->Delta * K,
+            (*g_null)->Delta * K, restriction_null_directions(h.restriction.A));
+        if (!rows) return std::unexpected(rows.error());
+        h.transported = std::move(*rows);
+      }
+      A = &*h.transported;
+    }
     const Eigen::MatrixXd P = K.transpose()* *sensitivity * K;
     const auto normalized_P = detail::equilibrate_symmetric(P);
     Eigen::LLT<Eigen::MatrixXd> factor(normalized_P.matrix);
@@ -381,8 +412,8 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
           ? "NTML LR: alternative observed information is not positive definite on its free directions"
           : "NTML LR: singular alternative information"));
     const Eigen::MatrixXd Y = normalized_P.scale.asDiagonal() *
-        factor.solve(normalized_P.scale.asDiagonal() * h.restriction.A.transpose());
-    metric = h.restriction.A * Y;
+        factor.solve(normalized_P.scale.asDiagonal() * A->transpose());
+    metric = *A * Y;
     directions = **wd * K * Y;
   }
   metric = 0.5*(metric+metric.transpose()).eval();
@@ -403,7 +434,7 @@ post_expected<std::shared_ptr<NTMLQuadratic>> ntml_quadratic(
   auto q = from_rows(std::move(whitened),statistic,static_cast<int>(h.restriction.A.rows()));
   if (!q) return std::unexpected(q.error());
   slot = *q;
-  if (!score && !observed) h.null_fit->nested_lr.emplace_back(h.alternative,slot);
+  if (shared_cache) h.null_fit->nested_lr.emplace_back(h.alternative,slot);
   return slot;
 }
 } // namespace magmaan::robust::frontier

@@ -1,3 +1,11 @@
+# magmaan (development version)
+
+- Nested likelihood-ratio tests from `anova()` no longer depend on how the
+  models are identified: marker and std.lv fits give the same p-values for ML,
+  FIML, ordinal and mixed DWLS, and association ML. The reference law now uses
+  restriction rows carried to the larger model's fit; p-values change slightly
+  when the larger model is misspecified, and the statistic is unchanged.
+
 # magmaan 0.2.2
 
 - Restored model handles now use the lab's native pointer-address check, so

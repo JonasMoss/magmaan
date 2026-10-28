@@ -12,7 +12,8 @@ with affine equality constraints.}
 \usage{
 prepare_inference_data(fit, data = NULL,
   storage = c("auto", "casewise", "tiled"))
-prepare_hypothesis(null, alternative)
+prepare_hypothesis(null, alternative,
+  restriction = c("invariant", "exact"))
 inference_quadratic(object, test = c("score", "lr"),
                     geometry = NULL)
 inference_covariance(context, robust = TRUE)
@@ -29,6 +30,13 @@ casewise storage when the contribution matrix occupies at most 64 MiB.}
 \code{prepare_inference(fit, shared_data)} using the same inference dataset.
 Exact parameter nesting requires matching ambient parameter slots and numeric
 models. The null adds affine restrictions.}
+\item{restriction}{Nested LR restriction rows. \code{"invariant"} (the default and
+the ordinary policy's) carries the null tangent from the embedded null point to
+the alternative's fit in its expected-information moment metric, so the
+reference law does not depend on how either model is identified.
+\code{"exact"} applies the parameter-nesting rows at the alternative's fit, as
+lavaan's Satorra (2000) \code{A.method = "exact"} does; away from the null they
+depend on the identification. Score quadratics are unaffected.}
 \item{object}{An inference snapshot (global test), or prepared hypothesis (nested test).}
 \item{test}{Expected-information score or ML likelihood-ratio quadratic.}
 \item{context}{A prepared inference snapshot.}
@@ -40,8 +48,8 @@ reducers. It retains structured expected-information geometry and each test's
 reduction separately. Global LR uses the centered empirical GOF spectrum;
 global score uses likelihood contributions at the fitted null point. Restricted
 means require additional linear and constant terms, so these spectra are not
-silently equated. Nested LR uses the exact H1-anchored Satorra--2000 reduction;
-nested score evaluates at H0.
+silently equated. Nested LR uses the H1-anchored Satorra--2000 reduction with
+the selected restriction rows; nested score evaluates at H0.
 
 No empirical Gamma or full U matrix is required. Casewise storage reuses one
 contribution matrix across fits. Tiled storage reduces global score and GOF

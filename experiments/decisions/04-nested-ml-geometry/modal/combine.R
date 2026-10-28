@@ -38,8 +38,13 @@ if(meta[[1]]$value[match('lane',meta[[1]]$key)]!=lane || meta[[1]]$value[match('
 parts <- lapply(files,readRDS)
 for(i in seq_len(nrow(cells))) {
   x <- parts[[i]]; reps <- switch(mode,smoke=2L,pilot=20L,production=cells$production_reps[i])
-  if(lane=='nested-geometry') x$arm <- paste(x$geometry,x$test)
-  arms <- if(lane=='structured-mean') c('policy_lr','policy_score','pre66_lr') else c('expected score','observed score','expected lr','observed lr')
+  # Runs after the 2026-10-28 amendment carry a restriction column and two
+  # extra LR arms (carried rows).
+  amended <- lane=='nested-geometry' && !is.null(x$restriction)
+  if(lane=='nested-geometry') x$arm <- if(amended) paste(x$geometry,x$test,x$restriction) else paste(x$geometry,x$test)
+  arms <- if(lane=='structured-mean') c('policy_lr','policy_score','pre66_lr') else if(amended)
+    c('expected score none','observed score none','expected lr exact','observed lr exact',
+      'expected lr invariant','observed lr invariant') else c('expected score','observed score','expected lr','observed lr')
   if(any(x$cell_id!=cells$cell_id[i]) || nrow(x)!=length(arms)*reps ||
      anyDuplicated(x[c('rep','arm')]) || !setequal(x$rep,seq_len(reps)) || !setequal(x$arm,arms)) stop('Incomplete or duplicate draws')
   if(any(x$seed!=seed+10000L*x$cell_id+x$rep)) stop('Seed mismatch')
@@ -53,7 +58,7 @@ write_csv(if(lane=='structured-mean') structured_population_checks() else geomet
 s <- if(lane=='structured-mean') structured_summaries(raw,cells,mode) else geometry_summaries(raw,cells,mode)
 for(name in names(s)) write_csv(s[[name]],file.path(out,paste0(name,'.csv')))
 write_metadata(file.path(out,'metadata.csv'),list(mode=mode,lane=lane,seed_base=seed,
-  executor='modal',cells=nrow(cells),git_head=meta[[1]]$value[match('git_head',meta[[1]]$key)],
+  executor=Sys.getenv('MAGMAAN_EXECUTOR','modal'),cells=nrow(cells),git_head=meta[[1]]$value[match('git_head',meta[[1]]$key)],
   source_hashes=meta[[1]]$value[match('source_hashes',meta[[1]]$key)],source_metadata=paste(dirs,collapse=';')),
   packages=c('magmaanlab','magmaan','lavaan'))
 cat('Combined into ',out,'\n',sep='')

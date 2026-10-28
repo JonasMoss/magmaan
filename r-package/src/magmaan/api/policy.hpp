@@ -364,6 +364,23 @@ post_expected<MomentNestedTangent> moment_nested_tangent(
     estimate::OrdinalParameterization parameterization,
     const std::vector<std::int8_t>* null_row_user = nullptr,
     const std::vector<std::int8_t>* alternative_row_user = nullptr);
+// Identification-invariant restriction rows for the nested DWLS reference at
+// the alternative's fit: the null tangent at `null_point` (the null estimate in
+// the alternative's slots), spanned by `null_directions` in the alternative's
+// reduced coordinates, is carried to the fit through the DWLS-weighted moment
+// residuals (robust::transported_restriction_alpha).
+post_expected<Eigen::MatrixXd> moment_transported_restriction(
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const Eigen::VectorXd& null_point, const Eigen::MatrixXd& null_directions,
+    const data::OrdinalStats& stats, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* alternative_row_user = nullptr);
+post_expected<Eigen::MatrixXd> moment_transported_restriction(
+    spec::LatentStructure alternative_pt, const model::MatrixRep& alternative_rep,
+    const estimate::Estimates& alternative_estimates,
+    const Eigen::VectorXd& null_point, const Eigen::MatrixXd& null_directions,
+    const data::MixedOrdinalStats& stats, estimate::OrdinalParameterization parameterization,
+    const std::vector<std::int8_t>* alternative_row_user = nullptr);
 } // namespace frontier
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,

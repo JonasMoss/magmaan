@@ -423,14 +423,18 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
     expect_equal(c(a$pvalue[a$reference %in% "sb"][k], a$pvalue[a$reference %in% "peba4"][k]), cal$p_value, tolerance = 1e-10)
   }
   # The LR statistic is the normal-theory difference. In the expected
-  # geometry the lab's SB is lavaan's Satorra (2000) with the exact
-  # restriction map; the policy's observed geometry is not a lavaan method.
+  # geometry with restriction = "exact" the lab's SB is lavaan's Satorra (2000)
+  # with the exact restriction map; the policy's observed geometry and carried
+  # (identification-invariant) restriction are not a lavaan method.
   nt <- lavaan::lavTestLRT(lav_cfa(m0, d), lav_cfa(m1, d))
   expect_equal(a$test, rep(c("score", "lr"), each = 2))
   expect_equal(a$statistic[3], as.numeric(nt[2, "Chisq diff"]), tolerance = 1e-6)
   sb <- lavaan::lavTestLRT(lav_cfa(m0, d, estimator = "MLM"), lav_cfa(m1, d, estimator = "MLM"),
                            method = "satorra.2000", A.method = "exact", scaled.shifted = FALSE)
-  lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h, "lr", geometry = "expected"), "sb")
+  h_exact <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(as_lab_fit(f0), shared),
+                                            magmaanlab::prepare_inference(as_lab_fit(f1), shared),
+                                            restriction = "exact")
+  lab_sb <- magmaanlab::calibrate_quadratic(magmaanlab::inference_quadratic(h_exact, "lr", geometry = "expected"), "sb")
   expect_equal(lab_sb$p_value, as.numeric(sb[2, "Pr(>Chisq)"]), tolerance = 1e-5)
   expect_output(print(a), "Nested tests of f0 \\(restricted\\) against f1")
   expect_output(print(a), "The score test is primary")

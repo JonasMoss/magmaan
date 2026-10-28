@@ -98,7 +98,10 @@ structured_draw <- function(cell,rep,seed) {
     if(!all(rows$converged_h0 & rows$converged_h1)) stop('library convergence verdict failed')
     shared <- magmaanlab::prepare_inference_data(f1)
     i1 <- magmaanlab::prepare_inference(f1,shared)
-    hyp <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(f0,shared),i1)
+    # The frozen 2026-10-05 lane reconstructs exact parameter-nesting rows;
+    # the ordinary policy has carried rows since TASK-168.
+    hyp <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(f0,shared),i1,
+                                          restriction='exact')
     for(i in 1:3) {
       stage <- paste0(rows$arm[i],':quadratic')
       tryCatch({

@@ -61,8 +61,11 @@ expected metric; its casewise parameter scores are evaluated at the embedded
 null fit. Missingness patterns are random, not fixed sampling strata.
 Global LR uses `fiml_ugamma_spectrum` with saturated observed-H1 information.
 Nested LR uses the larger-fit observed bread and direct casewise likelihood
-score meat, reduced by the exact restriction map through
-`compute_satorra2000_from_sandwich`. The lab/compatibility FIML Satorra driver
+score meat, reduced through `compute_satorra2000_from_sandwich` by restriction
+rows carried from the embedded null point to the larger fit in the expected
+FIML moment metric (`fiml_expected_moment_information`, whose Delta' V Delta is
+`fiml_expected_information`; TASK-168), so the reference does not depend on
+identification. With complete data the metric is the ML normal-theory weight. The lab/compatibility FIML Satorra driver
 remains unchanged: its empirical Magmaan route transports saturated influence
 into the larger fit, which can differ under larger-model misspecification.
 Global and nested score/LR tests default to PEBA4 (TASK-97; decision
@@ -621,7 +624,8 @@ models with affine equalities, one or more groups. Covariance is the
 observed-bread casewise-score sandwich. Global and nested score tests use
 observed sensitivity with the expected metric. The global LR uses the saturated
 observed-H1 spectrum, and the nested LR uses the larger fit's observed bread
-and direct casewise-score meat through the exact restriction map, reported with
+and direct casewise-score meat through the restriction map (carried
+identification-invariant rows since 2026-10-28, TASK-168), reported with
 SB and PEBA4. Calibration is limited (research/44, decisions/03). The lab's
 transported-influence FIML Satorra driver is unchanged and is no longer a default.
 

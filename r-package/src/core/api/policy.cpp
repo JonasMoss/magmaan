@@ -570,7 +570,9 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
   auto exact = dwls_policy_stats(input_stats, cache);
   if (!exact) return unavailable(reason_from(exact.error()), exact.error().detail);
   const auto& stats = *exact;
-  Eigen::MatrixXd K, restriction;
+  Eigen::MatrixXd K, restriction, null_directions;
+  Eigen::VectorXd null_point;
+  const spec::LatentStructure alternative_unprepared = alternative_pt;
   // Nesting: lift the null into the alternative's parameter space on the
   // prepared (threshold- and scale-augmented) structures.
   {
@@ -597,6 +599,8 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
           : moment.error().kind == PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
           : InferenceReason::NumericFailure, moment.error().detail);
       restriction = moment->A;
+      null_point = moment->embedding;
+      null_directions = moment->tangent;
     } else if (!embedding) {
       const auto kind = embedding.error().kind;
       return unavailable(kind == PostError::Kind::NotNested ? InferenceReason::NotNested
@@ -605,9 +609,22 @@ static PolicyNested policy_nested_dwls_cached(spec::LatentStructure null_pt,
           : InferenceReason::NumericFailure, embedding.error().detail);
     } else {
       restriction = embedding->restriction.A;
+      null_point = embedding->theta;
+      null_directions = robust::restriction_null_directions(restriction);
     }
     if (restriction.rows() == 0)
       return unavailable(InferenceReason::EquivalentModels, "equivalent models in moment space");
+    // TASK-168: the reference below sits at the alternative's fit; carry the
+    // null tangent there so the restriction is parameterization-invariant.
+    auto transported = frontier::moment_transported_restriction(alternative_unprepared,
+        alternative_rep, alternative_estimates, null_point, null_directions, stats,
+        parameterization, alternative_row_user);
+    if (!transported) {
+      const auto kind = transported.error().kind;
+      return unavailable(kind == PostError::Kind::BoundaryNesting ? InferenceReason::BoundaryNesting
+          : InferenceReason::NumericFailure, transported.error().detail);
+    }
+    restriction = std::move(*transported);
     K = c1->K();
     alternative_pt = std::move(p1);
     null_pt = std::move(p0);
@@ -709,8 +726,10 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
     return unavailable(InferenceReason::NotConverged,
                        "a fit did not pass its convergence verdict");
   }
+  // The LR reference sits at the alternative's fit, so it carries the null
+  // tangent there instead of reusing the exact nesting rows (TASK-168).
   auto hypothesis = robust::frontier::prepare_ntml_hypothesis(std::move(null),
-                                                              std::move(alternative));
+      std::move(alternative), robust::NestedRestriction::Invariant);
   if (!hypothesis) {
     const auto kind=hypothesis.error().kind;
     const auto reason=kind==PostError::Kind::UnsupportedNesting ? InferenceReason::UnsupportedNesting
@@ -864,6 +883,29 @@ static PolicyInference policy_inference_fiml_cached(spec::LatentStructure pt,
   return out;
 }
 
+// TASK-168: the LR reference is evaluated at the alternative's fit, so the
+// null tangent is carried there instead of reusing the exact nesting rows,
+// which shift with the parameterization. The metric is the alternative's
+// expected FIML moment information at its fit; with complete data it is the
+// normal-theory weight the ML route uses.
+static post_expected<Eigen::MatrixXd> fiml_lr_restriction(
+    const spec::LatentStructure& pt, const model::MatrixRep& rep,
+    const data::RawData& raw, const estimate::fiml::FIMLPack& pack,
+    const estimate::Estimates& fit, const robust::NestedEmbedding& embedding,
+    const Eigen::MatrixXd& K) {
+  auto at_fit = estimate::fiml::fiml_eta_jacobian(pt, rep, raw, fit, pack);
+  if (!at_fit) return std::unexpected(at_fit.error());
+  estimate::Estimates null_point = fit;
+  null_point.theta = embedding.theta;
+  auto at_null = estimate::fiml::fiml_eta_jacobian(pt, rep, raw, null_point, pack);
+  if (!at_null) return std::unexpected(at_null.error());
+  auto metric = estimate::fiml::fiml_expected_moment_information(pt, rep, raw, fit, pack);
+  if (!metric) return std::unexpected(metric.error());
+  const Eigen::MatrixXd F = at_fit->Delta_theta * K;
+  return robust::transported_restriction_alpha(*metric * F, F,
+      at_null->Delta_theta * K, robust::restriction_null_directions(embedding.restriction.A));
+}
+
 static PolicyNested policy_nested_fiml_cached(spec::LatentStructure null_pt,
     const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
     const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
@@ -921,7 +963,13 @@ static PolicyNested policy_nested_fiml_cached(spec::LatentStructure null_pt,
   const Eigen::MatrixXd A = (N / 2.0) * K.transpose() * mb->hessian * K;
   const Eigen::MatrixXd rows = -0.5 * mb->scores * K;
   const Eigen::MatrixXd B = rows.transpose() * rows;
-  auto spectrum = robust::compute_satorra2000_from_sandwich(A, B, embedding->restriction.A);
+  auto restriction = fiml_lr_restriction(alternative_pt, alternative_rep, raw, pack,
+      alternative_estimates, *embedding, K);
+  if (!restriction) {
+    set_unavailable(out.lr, nested_reason(restriction.error()), restriction.error().detail);
+    return out;
+  }
+  auto spectrum = robust::compute_satorra2000_from_sandwich(A, B, *restriction);
   if (!spectrum) {
     set_unavailable(out.lr, reason_from(spectrum.error()), spectrum.error().detail);
     return out;

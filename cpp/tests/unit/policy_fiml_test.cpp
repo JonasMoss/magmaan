@@ -58,6 +58,26 @@ void available(const api::PolicyTest& t, int df) {
   CHECK(t.eigenvalues.allFinite()); CHECK(t.eigenvalues.minCoeff() >= 0);
   CHECK(std::isfinite(t.statistic)); CHECK(std::isfinite(t.p_sb)); CHECK(std::isfinite(t.p_peba4));
 }
+// The policy LR law carries the null tangent from the embedded null point to
+// the alternative's fit in the expected FIML moment metric (TASK-168).
+Eigen::MatrixXd transported_fiml_restriction(const Model& m1, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack, const estimate::Estimates& e1,
+    const robust::NestedEmbedding& embedding, const Eigen::MatrixXd& K) {
+  auto at_fit = estimate::fiml::fiml_eta_jacobian(m1.pt,m1.rep,raw,e1,pack); REQUIRE(at_fit);
+  auto null_point = e1; null_point.theta = embedding.theta;
+  auto at_null = estimate::fiml::fiml_eta_jacobian(m1.pt,m1.rep,raw,null_point,pack); REQUIRE(at_null);
+  auto V = estimate::fiml::fiml_expected_moment_information(m1.pt,m1.rep,raw,e1,pack); REQUIRE(V);
+  // The moment metric reproduces the independently assembled theta-space
+  // expected information.
+  auto expected = estimate::fiml::fiml_expected_information(m1.pt,m1.rep,raw,e1,pack); REQUIRE(expected);
+  const Eigen::MatrixXd& D = at_fit->Delta_theta;
+  CHECK((D.transpose()* *V *D-*expected).norm() <= 1e-10*expected->norm());
+  const Eigen::MatrixXd F = D*K;
+  auto A = robust::transported_restriction_alpha(*V*F,F,at_null->Delta_theta*K,
+      robust::restriction_null_directions(embedding.restriction.A)); REQUIRE(A);
+  CHECK(A->rows() == embedding.restriction.A.rows());
+  return *A;
+}
 // Independent normal observed-pattern log density, differentiated casewise.
 Eigen::MatrixXd numeric_scores(const Model& m, const data::RawData& raw,
                                const estimate::Estimates& est) {
@@ -122,6 +142,29 @@ TEST_CASE("FIML policy: complete-data reductions and typed reasons") {
   CHECK(fn.lr.statistic == doctest::Approx(mn.lr.statistic).epsilon(1e-8));
   CHECK((fn.lr.eigenvalues-mn.lr.eigenvalues).norm() < 1e-9);
   CHECK((fn.score.eigenvalues-mn.score.eigenvalues).norm() < 1e-8);
+  {
+    // Unequal groups: both routes weight each group's transport metric by its
+    // size, so complete-data FIML and ML nested LR laws still coincide.
+    auto grouped = rows(1200,0,2);
+    grouped.X[1].conservativeResize(700, Eigen::NoChange);
+    auto g1 = build("f =~ x1 + x2 + x3 + x4",2), g0 = build("f =~ x1 + a*x2 + a*x3 + x4",2);
+    auto ge1 = fit(g1,grouped), ge0 = fit(g0,grouped);
+    auto gpack = estimate::fiml::fiml_pack(grouped); REQUIRE(gpack);
+    auto gd = robust::frontier::prepare_ntml_data(grouped,true); REQUIRE(gd);
+    auto as_ml = [&](const Model& m, estimate::Estimates e) {
+      auto ev = model::ModelEvaluator::build(m.pt,m.rep); REQUIRE(ev);
+      auto im = ev->sigma(e.theta); REQUIRE(im);
+      auto value = estimate::ml_value((*gd)->sample,*im); REQUIRE(value);
+      e.fmin = 0.5 * *value;
+      auto prepared = robust::frontier::prepare_ntml_fit(*gd,m.pt,m.rep,e); REQUIRE(prepared);
+      return *prepared;
+    };
+    auto gf = api::policy_nested_fiml(g0.pt,g0.rep,ge0,{},g1.pt,g1.rep,ge1,{},grouped,*gpack);
+    auto gm = api::policy_nested_ml(as_ml(g0,ge0),{},as_ml(g1,ge1),{});
+    available(gf.lr,3); available(gm.lr,3);
+    CHECK(gf.lr.statistic == doctest::Approx(gm.lr.statistic).epsilon(1e-8));
+    CHECK((gf.lr.eigenvalues-gm.lr.eigenvalues).norm() < 1e-8*gm.lr.eigenvalues.norm());
+  }
   api::PolicyFitState failed; failed.converged = false;
   CHECK(api::policy_inference_fiml(m1.pt,m1.rep,raw,*pack,e1,failed).score.reason == api::InferenceReason::NotConverged);
   failed.penalized = true;
@@ -153,9 +196,10 @@ TEST_CASE("ML nested LR: restricted misspecified means use exact casewise scores
     auto k0 = estimate::build_eq_constraints(m0.pt); REQUIRE(k0);
     auto embedding = robust::embed_nested_null(m1.pt,m1.rep,m0.pt,m0.rep,e0.theta,*k1,*k0); REQUIRE(embedding);
     const auto numeric = numeric_scores(m1,raw,e1);
+    const Eigen::MatrixXd transported = transported_fiml_restriction(m1,raw,*pack,e1,*embedding,k1->K());
     auto reference = robust::compute_satorra2000_from_sandwich(
         (static_cast<double>(pack->cache.n_total)/2.0)*k1->K().transpose()*mb->hessian*k1->K(),
-        k1->K().transpose()*numeric.transpose()*numeric*k1->K(),embedding->restriction.A); REQUIRE(reference);
+        k1->K().transpose()*numeric.transpose()*numeric*k1->K(),transported); REQUIRE(reference);
     CHECK((direct.lr.eigenvalues-reference->eigenvalues).norm() < 1e-7);
     for (auto storage : {robust::frontier::ContributionStorage::Casewise,
                          robust::frontier::ContributionStorage::Tiled}) {
@@ -200,7 +244,7 @@ TEST_CASE("ML nested LR: restricted misspecified means use exact casewise scores
         auto observed = robust::frontier::ntml_observed_information(**f1); REQUIRE(observed);
         auto old = robust::compute_satorra2000_from_sandwich(
             k1->K().transpose()* **observed * k1->K(),
-            old_scores.transpose()*old_scores,embedding->restriction.A); REQUIRE(old);
+            old_scores.transpose()*old_scores,transported); REQUIRE(old);
         CHECK((result.lr.eigenvalues-old->eigenvalues).norm()/old->eigenvalues.norm() <= 1e-12);
       }
     }
@@ -277,7 +321,8 @@ TEST_CASE("FIML policy: MCAR MAR grouped sandwich and evaluation-point score mea
     CHECK((score_components->rows-numeric_null).norm()/numeric_null.norm() < 1e-7);
     auto reference = robust::compute_satorra2000_from_sandwich(
         (static_cast<double>(pack->cache.n_total)/2.0)*k1->K().transpose()*mb->hessian*k1->K(),
-        k1->K().transpose()*numeric.transpose()*numeric*k1->K(),embedding->restriction.A); REQUIRE(reference);
+        k1->K().transpose()*numeric.transpose()*numeric*k1->K(),
+        transported_fiml_restriction(m1,raw,*pack,e1,*embedding,k1->K())); REQUIRE(reference);
     CHECK((nested.lr.eigenvalues-reference->eigenvalues).norm() < 1e-7);
   }
 }

@@ -248,10 +248,16 @@ prepare_inference_data <- function(fit, data = NULL, storage = c("auto", "casewi
   .score_object(list(native=prepare_ntml_data_impl(fit,raw,match.arg(storage)),raw=raw), "magmaan_inference_data")
 }
 
-prepare_hypothesis <- function(null, alternative) {
+# `restriction` selects the nested LR restriction rows: "invariant" (the
+# ordinary policy's) carries the null tangent from the embedded null point to
+# the alternative's fit; "exact" applies the parameter-nesting rows at that fit,
+# as lavaan's Satorra-2000 A.method = "exact" does, and depends on how the
+# models are identified away from the null.
+prepare_hypothesis <- function(null, alternative, restriction = c("invariant", "exact")) {
   stopifnot(inherits(null,"magmaan_inference"), inherits(alternative,"magmaan_inference"))
-  .score_object(list(native=prepare_ntml_hypothesis_impl(null$native,alternative$native),
-      null=null,alternative=alternative),"magmaan_inference_hypothesis")
+  restriction <- match.arg(restriction)
+  .score_object(list(native=prepare_ntml_hypothesis_impl(null$native,alternative$native,restriction),
+      null=null,alternative=alternative,restriction=restriction),"magmaan_inference_hypothesis")
 }
 
 # `geometry` applies to nested hypotheses: "expected" (lavaan's Satorra-2000

@@ -541,4 +541,61 @@ restriction_alpha_delta_from_jacobians(
   return svd.matrixU().rightCols(expected_m).transpose();
 }
 
+post_expected<Eigen::MatrixXd>
+transported_restriction_alpha(
+    const Eigen::Ref<const Eigen::MatrixXd>& weighted_fit_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& fit_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& null_point_jacobian,
+    const Eigen::Ref<const Eigen::MatrixXd>& null_directions,
+    double tol_singular) {
+  const Eigen::Index r1 = fit_jacobian.cols();
+  const Eigen::Index r0 = null_directions.cols();
+  if (weighted_fit_jacobian.rows() != fit_jacobian.rows() ||
+      weighted_fit_jacobian.cols() != r1 ||
+      null_point_jacobian.rows() != fit_jacobian.rows() ||
+      null_point_jacobian.cols() != r1 || null_directions.rows() != r1 ||
+      r0 > r1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "transported_restriction_alpha: Jacobian or null-direction shapes "
+        "disagree"));
+  }
+  if (r0 == r1) return Eigen::MatrixXd::Zero(0, r1);
+  // G = Δ'VΔ at the fit; C = Δ'V Δ_null N0 carries the null tangent.
+  const Eigen::MatrixXd G = weighted_fit_jacobian.transpose() * fit_jacobian;
+  const Eigen::MatrixXd C = weighted_fit_jacobian.transpose() *
+                            (null_point_jacobian * null_directions);
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (G + G.transpose()));
+  if (ldlt.info() != Eigen::Success || !ldlt.isPositive()) {
+    return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
+        "transported_restriction_alpha: larger-model information is not "
+        "positive definite at its fit"));
+  }
+  const Eigen::MatrixXd N = ldlt.solve(C);
+  if (!N.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "transported_restriction_alpha: non-finite transported directions"));
+  }
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(N, Eigen::ComputeFullU);
+  const Eigen::VectorXd& s = svd.singularValues();
+  const double cutoff = tol_singular * static_cast<double>(r1) *
+                        std::max(1.0, s.size() > 0 ? s(0) : 0.0);
+  Eigen::Index rank = 0;
+  for (Eigen::Index i = 0; i < s.size(); ++i)
+    if (s(i) > cutoff) ++rank;
+  if (rank != r0) {
+    return std::unexpected(make_err(PostError::Kind::BoundaryNesting,
+        "transported_restriction_alpha: the null tangent loses rank when "
+        "carried to the larger model's fit"));
+  }
+  return svd.matrixU().rightCols(r1 - r0).transpose();
+}
+
+Eigen::MatrixXd restriction_null_directions(
+    const Eigen::Ref<const Eigen::MatrixXd>& A) {
+  const Eigen::Index r1 = A.cols();
+  if (A.rows() == 0) return Eigen::MatrixXd::Identity(r1, r1);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullV);
+  return svd.matrixV().rightCols(r1 - A.rows());
+}
+
 }  // namespace magmaan::robust

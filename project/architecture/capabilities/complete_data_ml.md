@@ -561,11 +561,15 @@
   not thread-safe; prepared inputs must remain immutable.
 
   R `prepare_inference_data` provides a shared dataset to `prepare_inference`.
-  `prepare_hypothesis` owns an exact nested pair. Parameter-key embedding
+  `prepare_hypothesis` owns an exact nested pair; its `restriction` selects the
+  LR rows: carried from the embedded null point to the H1 fit in the
+  group-weighted expected metric (default, the policy's, identification-
+  invariant) or the exact parameter-nesting rows (lavaan's `A.method =
+  "exact"`; TASK-168). Parameter-key embedding
   expresses dropped or fixed H0 paths as affine restrictions in H1's slots;
   existing same-slot affine pairs retain their calculation path.
   `inference_quadratic` produces global score/ML GOF or nested
-  score/exact H1-anchored Satorra–2000 LR without invoking a test wrapper;
+  score/H1-anchored Satorra–2000 LR without invoking a test wrapper;
   `inference_rows` returns its casewise rows (a score statistic is the squared
   norm of their column sums, and their crossproduct is the spectrum's reduced
   matrix), so moment-based calibrations can be composed outside the core.

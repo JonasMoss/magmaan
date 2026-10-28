@@ -388,6 +388,16 @@ NestedDwls nested_dwls(const magmaan::data::OrdinalStats& stats, int groups,
   return r;
 }
 
+Eigen::MatrixXd transported_dwls_restriction(const OrdinalModel& alt,
+    const magmaan::estimate::Estimates& e1, const api::frontier::MomentNestedTangent& tangent,
+    const magmaan::data::OrdinalStats& stats, OrdinalParameterization parameterization) {
+  auto A = api::frontier::moment_transported_restriction(alt.pt, alt.rep, e1,
+      tangent.embedding, tangent.tangent, stats, parameterization);
+  REQUIRE_MESSAGE(A.has_value(), (A.has_value() ? "" : A.error().detail));
+  CHECK(A->rows() == tangent.A.rows());
+  return *A;
+}
+
 Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::OrdinalStats& stats_value,
                                  OrdinalParameterization parameterization) {
   const auto* stats = &stats_value;
@@ -424,16 +434,21 @@ Eigen::VectorXd check_common_law(const NestedDwls& r, const magmaan::data::Ordin
   const Eigen::MatrixXd L = (K.transpose() * K).ldlt().solve(K.transpose());
   const Eigen::MatrixXd V = N * L * ij->vcov * L.transpose();
   const Eigen::MatrixXd B = H * V * H.transpose();
-  auto tangent_spectrum = magmaan::robust::compute_satorra2000_from_sandwich(H, B, tangent->A);
+  // The policy carries the null tangent from the embedded null point to the
+  // alternative's fit (TASK-168); the reconstruction uses the same rows.
+  const Eigen::MatrixXd A = transported_dwls_restriction(r.alt_model, r.alt_est, *tangent,
+                                                         *stats, parameterization);
+  auto tangent_spectrum = magmaan::robust::compute_satorra2000_from_sandwich(H, B, A);
   REQUIRE(tangent_spectrum);
   const Eigen::VectorXd eig = tangent_spectrum->eigenvalues;
   CHECK((t.eigenvalues - eig).norm() <= 1e-10 * eig.norm());
-  // Independently evaluate [H^-1 - T(T'HT)^-1T']B. Whiten by H and
-  // form the orthogonal complement instead of subtracting two nearly equal
-  // dense inverses (which loses precision in the released-scale coordinates).
+  // Independently evaluate [H^-1 - T(T'HT)^-1T']B for the transported null
+  // tangent T. Whiten by H and form the orthogonal complement instead of
+  // subtracting two nearly equal dense inverses (which loses precision in the
+  // released-scale coordinates).
   Eigen::LLT<Eigen::MatrixXd> chol(H);
   REQUIRE(chol.info() == Eigen::Success);
-  const Eigen::MatrixXd Z = chol.matrixU() * tangent->tangent;
+  const Eigen::MatrixXd Z = chol.matrixU() * magmaan::robust::restriction_null_directions(A);
   Eigen::HouseholderQR<Eigen::MatrixXd> qr(Z);
   const Eigen::MatrixXd Q = qr.householderQ() * Eigen::MatrixXd::Identity(H.rows(), H.rows());
   const Eigen::MatrixXd Y = chol.matrixU().solve(Q.rightCols(t.df));
@@ -690,7 +705,8 @@ TEST_CASE("DWLS moment nesting: Wu-Estabrook threshold steps") {
       const Eigen::MatrixXd H = K.transpose() * parts->hessian * K / N;
       const Eigen::MatrixXd L = (K.transpose() * K).ldlt().solve(K.transpose());
       const Eigen::MatrixXd B = H * (N * L * ij->vcov * L.transpose()) * H.transpose();
-      auto direct = magmaan::robust::compute_satorra2000_from_sandwich(H, B, tangent->A);
+      auto direct = magmaan::robust::compute_satorra2000_from_sandwich(H, B,
+          transported_dwls_restriction(alt, e1, *tangent, *stats, OrdinalParameterization::Theta));
       REQUIRE(direct);
       CHECK((out.lr.eigenvalues - direct->eigenvalues).norm() <= 1e-10);
     }
