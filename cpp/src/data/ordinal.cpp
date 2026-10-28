@@ -3891,6 +3891,138 @@ post_expected<std::pair<double, double>> mixed_marginal_spectrum(
   return std::pair{smallest, largest};
 }
 
+// Central-difference step for mixed moment coordinate l of
+// kappa = [thresholds; -means; variances; associations], kept inside the
+// threshold order, positive variances and the association bounds. Shared by
+// the Gamma Jacobians, the exact sampling Jacobian and the exact-Gamma
+// influence so every derivative of the first stage uses the same steps.
+struct MixedKappaPerturbation {
+  double h = 0.0;
+  Eigen::VectorXd th_p, th_m, mean_p, mean_m;
+  Eigen::MatrixXd R_p, R_m;
+};
+
+struct MixedKappaLayout {
+  Eigen::Index nth = 0;
+  Eigen::Index n_cont = 0;
+  std::vector<Eigen::Index> cont_pos;
+  std::vector<Eigen::Index> cont_var;  // inverse of cont_pos
+  std::vector<std::pair<Eigen::Index, Eigen::Index>> pairs;
+};
+
+MixedKappaLayout mixed_kappa_layout(const std::vector<std::int32_t>& ordered,
+                                    const std::vector<std::int32_t>& levels) {
+  const Eigen::Index p = static_cast<Eigen::Index>(ordered.size());
+  MixedKappaLayout out;
+  out.cont_pos.assign(static_cast<std::size_t>(p), -1);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) {
+      out.cont_var.push_back(j);
+      out.cont_pos[static_cast<std::size_t>(j)] = out.n_cont++;
+    } else {
+      out.nth += levels[static_cast<std::size_t>(j)] - 1;
+    }
+  }
+  out.pairs.reserve(static_cast<std::size_t>(p * (p - 1) / 2));
+  for (Eigen::Index j = 0; j < p; ++j)
+    for (Eigen::Index i = j + 1; i < p; ++i) out.pairs.push_back({i, j});
+  return out;
+}
+
+double mixed_kappa_step(Eigen::Index l, double h_rel,
+                        const Eigen::VectorXd& kappa,
+                        const MixedKappaLayout& layout,
+                        const std::vector<std::int32_t>& ordered,
+                        const std::vector<std::int32_t>& levels,
+                        const Eigen::VectorXd& thresholds,
+                        const Eigen::MatrixXd& R) {
+  const Eigen::Index p = static_cast<Eigen::Index>(ordered.size());
+  const Eigen::Index nth = layout.nth;
+  const Eigen::Index n_cont = layout.n_cont;
+  double h = h_rel * std::max(1.0, std::abs(kappa(l)));
+  if (l < nth) {
+    Eigen::Index start = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+      const Eigen::Index len =
+          static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+      if (l >= start && l < start + len) {
+        if (l > start) h = std::min(h, 0.25 * (thresholds(l) - thresholds(l - 1)));
+        if (l + 1 < start + len)
+          h = std::min(h, 0.25 * (thresholds(l + 1) - thresholds(l)));
+        break;
+      }
+      start += len;
+    }
+    h = std::max(h, 1e-7);
+  } else if (l < nth + n_cont) {
+    // Means keep the relative step.
+  } else if (l < nth + 2 * n_cont) {
+    const Eigen::Index var =
+        layout.cont_var[static_cast<std::size_t>(l - nth - n_cont)];
+    h = std::min(h, 0.25 * R(var, var));
+    h = std::max(h, 1e-7);
+  } else {
+    const auto [i, j] =
+        layout.pairs[static_cast<std::size_t>(l - nth - 2 * n_cont)];
+    const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+    const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+    double limit = 0.999;
+    if (oi != oj) {
+      const Eigen::Index c = oi ? j : i;
+      limit = 0.999 * std::sqrt(R(c, c));
+    } else if (!oi && !oj) {
+      limit = 0.999 * std::sqrt(R(i, i) * R(j, j));
+    }
+    const double margin = limit - std::abs(R(i, j));
+    if (margin > 1e-8) h = std::min(h, 0.25 * margin);
+    h = std::max(h, 1e-7);
+    if (margin > 0.0 && h >= margin) h = 0.5 * margin;
+  }
+  return h;
+}
+
+// Moves kappa_l by delta in place (kappa holds −mean for continuous means).
+void mixed_kappa_shift(Eigen::Index l, double delta,
+                       const MixedKappaLayout& layout,
+                       Eigen::VectorXd& thresholds, Eigen::VectorXd& mean,
+                       Eigen::MatrixXd& R) {
+  const Eigen::Index nth = layout.nth;
+  const Eigen::Index n_cont = layout.n_cont;
+  if (l < nth) {
+    thresholds(l) += delta;
+  } else if (l < nth + n_cont) {
+    mean(layout.cont_var[static_cast<std::size_t>(l - nth)]) -= delta;
+  } else if (l < nth + 2 * n_cont) {
+    const Eigen::Index var =
+        layout.cont_var[static_cast<std::size_t>(l - nth - n_cont)];
+    R(var, var) += delta;
+  } else {
+    const auto [i, j] =
+        layout.pairs[static_cast<std::size_t>(l - nth - 2 * n_cont)];
+    R(i, j) += delta;
+    R(j, i) = R(i, j);
+  }
+}
+
+MixedKappaPerturbation mixed_kappa_perturbation(
+    Eigen::Index l, double h_rel, const Eigen::VectorXd& kappa,
+    const MixedKappaLayout& layout,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds, const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R) {
+  MixedKappaPerturbation out;
+  out.h = mixed_kappa_step(l, h_rel, kappa, layout, ordered, levels,
+                           thresholds, R);
+  out.th_p = thresholds; out.th_m = thresholds;
+  out.mean_p = mean; out.mean_m = mean;
+  out.R_p = R; out.R_m = R;
+  mixed_kappa_shift(l, out.h, layout, out.th_p, out.mean_p, out.R_p);
+  mixed_kappa_shift(l, -out.h, layout, out.th_m, out.mean_m, out.R_m);
+  return out;
+}
+
 post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     const Eigen::MatrixXd& X,
     const std::vector<std::int32_t>& ordered,
@@ -3904,33 +4036,21 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
     bool sampling = false,
     bool sparse_sampling = true,
     bool return_jacobian = false,
-    double unchanged_min = kInf, double unchanged_max = 0.0) {
+    double unchanged_min = kInf, double unchanged_max = 0.0,
+    std::optional<MixedGammaAssembly>* base_out = nullptr) {
   auto base_or = observed
       ? mixed_observed_gamma_assembly_at_kappa(
             X, ordered, levels, thresholds, mean, R, false)
       : mixed_gamma_assembly_at_kappa(
             X, ordered, levels, thresholds, mean, R, false);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
-  const Eigen::Index p = X.cols();
   const Eigen::Index mdim = base_or->mdim;
   const Eigen::VectorXd kappa = mixed_moment_vector(R, mean, ordered, thresholds);
   if (kappa.size() != mdim) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_gamma_jacobian_fd: mixed moment length mismatch"));
   }
-
-  std::vector<Eigen::Index> cont_pos(static_cast<std::size_t>(p), -1);
-  Eigen::Index n_cont = 0;
-  for (Eigen::Index j = 0; j < p; ++j) {
-    if (ordered[static_cast<std::size_t>(j)] == 0) {
-      cont_pos[static_cast<std::size_t>(j)] = n_cont++;
-    }
-  }
-
-  std::vector<std::pair<Eigen::Index, Eigen::Index>> pairs;
-  pairs.reserve(static_cast<std::size_t>(p * (p - 1) / 2));
-  for (Eigen::Index j = 0; j < p; ++j)
-    for (Eigen::Index i = j + 1; i < p; ++i) pairs.push_back({i, j});
+  const MixedKappaLayout layout = mixed_kappa_layout(ordered, levels);
 
   // Construction follows the validated complete-data base assembly.
   std::optional<SamplingScoreMeans> score_means;
@@ -3939,70 +4059,15 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
   Eigen::MatrixXd D(
       sampling || diagonal_only ? mdim : static_cast<Eigen::Index>(mdim * mdim), mdim);
   for (Eigen::Index l = 0; l < mdim; ++l) {
-    Eigen::VectorXd th_p = thresholds, th_m = thresholds;
-    Eigen::VectorXd mean_p = mean, mean_m = mean;
-    Eigen::MatrixXd R_p = R, R_m = R;
-    double h = h_rel * std::max(1.0, std::abs(kappa(l)));
-    if (l < base_or->nth) {
-      Eigen::Index start = 0;
-      for (Eigen::Index j = 0; j < p; ++j) {
-        if (ordered[static_cast<std::size_t>(j)] == 0) continue;
-        const Eigen::Index len =
-            static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
-        if (l >= start && l < start + len) {
-          if (l > start) h = std::min(h, 0.25 * (thresholds(l) - thresholds(l - 1)));
-          if (l + 1 < start + len)
-            h = std::min(h, 0.25 * (thresholds(l + 1) - thresholds(l)));
-          break;
-        }
-        start += len;
-      }
-      h = std::max(h, 1e-7);
-      th_p(l) += h;
-      th_m(l) -= h;
-    } else if (l < base_or->nth + n_cont) {
-      const Eigen::Index cp = l - base_or->nth;
-      Eigen::Index var = -1;
-      for (Eigen::Index j = 0; j < p; ++j) {
-        if (cont_pos[static_cast<std::size_t>(j)] == cp) {
-          var = j;
-          break;
-        }
-      }
-      mean_p(var) -= h;
-      mean_m(var) += h;
-    } else if (l < base_or->nth + 2 * n_cont) {
-      const Eigen::Index cp = l - base_or->nth - n_cont;
-      Eigen::Index var = -1;
-      for (Eigen::Index j = 0; j < p; ++j) {
-        if (cont_pos[static_cast<std::size_t>(j)] == cp) {
-          var = j;
-          break;
-        }
-      }
-      h = std::min(h, 0.25 * R(var, var));
-      h = std::max(h, 1e-7);
-      R_p(var, var) += h;
-      R_m(var, var) -= h;
-    } else {
-      const auto [i, j] =
-          pairs[static_cast<std::size_t>(l - base_or->nth - 2 * n_cont)];
-      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
-      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
-      double limit = 0.999;
-      if (oi != oj) {
-        const Eigen::Index c = oi ? j : i;
-        limit = 0.999 * std::sqrt(R(c, c));
-      } else if (!oi && !oj) {
-        limit = 0.999 * std::sqrt(R(i, i) * R(j, j));
-      }
-      const double margin = limit - std::abs(R(i, j));
-      if (margin > 1e-8) h = std::min(h, 0.25 * margin);
-      h = std::max(h, 1e-7);
-      if (margin > 0.0 && h >= margin) h = 0.5 * margin;
-      R_p(i, j) = R_p(j, i) = R(i, j) + h;
-      R_m(i, j) = R_m(j, i) = R(i, j) - h;
-    }
+    const MixedKappaPerturbation step = mixed_kappa_perturbation(
+        l, h_rel, kappa, layout, ordered, levels, thresholds, mean, R);
+    const double h = step.h;
+    const Eigen::VectorXd& th_p = step.th_p;
+    const Eigen::VectorXd& th_m = step.th_m;
+    const Eigen::VectorXd& mean_p = step.mean_p;
+    const Eigen::VectorXd& mean_m = step.mean_m;
+    const Eigen::MatrixXd& R_p = step.R_p;
+    const Eigen::MatrixXd& R_m = step.R_m;
 
     if (score_means) {
       auto plus = score_means->evaluate(th_p, mean_p, R_p, l);
@@ -4048,7 +4113,10 @@ post_expected<Eigen::MatrixXd> mixed_gamma_jacobian_fd_impl(
       D.col(l) = vec;
     }
   }
-  if (return_jacobian) return D;
+  if (return_jacobian) {
+    if (base_out != nullptr) *base_out = std::move(*base_or);
+    return D;
+  }
   if (sampling) {
     // Differentiate the empirical estimating equations, rather than using
     // score-cross-product identities valid only at the working distribution.
@@ -4126,6 +4194,476 @@ mixed_moment_sampling_influence(
     double h_rel) {
   return mixed_gamma_jacobian_fd_impl(
       X, ordered, levels, thresholds, mean, R, h_rel, true, false, true);
+}
+
+namespace {
+
+// Exact first stage at one kappa with the data held fixed: per-case scores
+// s_i, J⁻¹ for the empirical score Jacobian J = ∂s̄/∂kappaᵀ, and the exact
+// rows g_i = −J⁻¹(s_i − s̄). Same construction as the sampling path of
+// mixed_gamma_jacobian_fd_impl, so the base rows equal
+// mixed_moment_sampling_influence.
+struct ExactFirstStageAtKappa {
+  Eigen::MatrixXd scores;
+  Eigen::MatrixXd jacobian_inverse;
+  Eigen::MatrixXd rows;
+};
+
+post_expected<ExactFirstStageAtKappa> exact_first_stage_at_kappa(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_sampling) {
+  std::optional<MixedGammaAssembly> base;
+  auto J = mixed_gamma_jacobian_fd_impl(X, ordered, levels, thresholds, mean,
+      R, h_sampling, true, false, true, true, true, kInf, 0.0, &base);
+  if (!J) return std::unexpected(J.error());
+  if (!base) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: missing score assembly"));
+  }
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(*J);
+  if (!lu.isInvertible()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: singular empirical score Jacobian"));
+  }
+  ExactFirstStageAtKappa out;
+  out.scores = std::move(base->scores);
+  const Eigen::MatrixXd centered =
+      out.scores.rowwise() - out.scores.colwise().mean();
+  out.rows = -lu.solve(centered.transpose()).transpose();
+  out.jacobian_inverse = lu.inverse();
+  if (!out.rows.allFinite() || !out.jacobian_inverse.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: non-finite exact first-stage rows"));
+  }
+  return out;
+}
+
+// Influence of diag(Gamma) for Gamma = J⁻¹ C J⁻ᵀ, C the centered score
+// covariance and J the empirical score Jacobian, both functionals of the data
+// and of kappa. Writing A = J⁻¹, a_kᵀ for row k of A, gamma_k for column k of
+// Gamma, c_i = s_i − s̄ and H_i = ∂s_i/∂kappaᵀ:
+//   at fixed kappa, IF_i(J) = H_i − J and IF_i(C) = c_i c_iᵀ − C, so
+//   IF_i(Gamma_kk) = −2 a_kᵀ(H_i − J)gamma_k + a_kᵀ(c_i c_iᵀ − C)a_k
+//                  = g_ik² + Gamma_kk − 2 a_kᵀ H_i gamma_k
+//   (a_kᵀ J = e_kᵀ and a_kᵀ c_i = −g_ik); kappa moves by IF_i(kappa) = g_i,
+//   adding Σ_l (∂Gamma_kk/∂kappa_l) g_il at fixed data.
+// The dense reference recomputes the whole exact first stage at kappa ± h e_l:
+// column l of H_i from the score difference, ∂Gamma/∂kappa_l from the Gamma
+// difference. It is simple and O(m) assemblies, retained for validation.
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+post_expected<ExactGammaDiagInfluence> exact_gamma_diag_influence_dense(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel,
+    double h_sampling) {
+  if (!(h_rel > 0.0) || !std::isfinite(h_rel) || !(h_sampling > 0.0) ||
+      !std::isfinite(h_sampling)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence requires positive finite steps"));
+  }
+  auto base = exact_first_stage_at_kappa(X, ordered, levels, thresholds, mean,
+                                         R, h_sampling);
+  if (!base) return std::unexpected(base.error());
+  const Eigen::Index n = X.rows();
+  const Eigen::Index m = base->rows.cols();
+  const Eigen::VectorXd kappa = mixed_moment_vector(R, mean, ordered, thresholds);
+  if (kappa.size() != m) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: mixed moment length mismatch"));
+  }
+  const MixedKappaLayout layout = mixed_kappa_layout(ordered, levels);
+  const double nd = static_cast<double>(n);
+
+  ExactGammaDiagInfluence out;
+  out.rows = std::move(base->rows);
+  out.gamma = out.rows.transpose() * out.rows / nd;
+  out.gamma = 0.5 * (out.gamma + out.gamma.transpose()).eval();
+  out.data_influence = out.rows.array().square().matrix();
+  out.data_influence.rowwise() += out.gamma.diagonal().transpose();
+  out.diag_jacobian.resize(m, m);
+  const Eigen::MatrixXd At = base->jacobian_inverse.transpose();
+  for (Eigen::Index l = 0; l < m; ++l) {
+    const MixedKappaPerturbation step = mixed_kappa_perturbation(
+        l, h_rel, kappa, layout, ordered, levels, thresholds, mean, R);
+    auto plus = exact_first_stage_at_kappa(X, ordered, levels, step.th_p,
+                                           step.mean_p, step.R_p, h_sampling);
+    if (!plus) return std::unexpected(plus.error());
+    auto minus = exact_first_stage_at_kappa(X, ordered, levels, step.th_m,
+                                            step.mean_m, step.R_m, h_sampling);
+    if (!minus) return std::unexpected(minus.error());
+    const double scale = 1.0 / (2.0 * step.h);
+    out.diag_jacobian.col(l) = (plus->rows.colwise().squaredNorm() -
+                                minus->rows.colwise().squaredNorm()).transpose() *
+                               (scale / nd);
+    // q(i,k) = a_kᵀ ∂s_i/∂kappa_l, accumulated against Gamma_lk.
+    const Eigen::MatrixXd q = ((plus->scores - minus->scores) * scale) * At;
+    out.data_influence.array() -=
+        2.0 * (q.array().rowwise() * out.gamma.row(l).array());
+  }
+  out.influence = out.data_influence + out.rows * out.diag_jacobian.transpose();
+  if (!out.influence.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: non-finite influence"));
+  }
+  return out;
+}
+
+#endif  // MAGMAAN_ENABLE_TEST_PROBES
+
+// Exact first-stage score units for local derivatives (complete data). Unit
+// v < p is the marginal block of variable v (its threshold scores, or its mean
+// and variance scores); unit p + q is association q. A unit's scores depend
+// only on its own kappa coordinates (`deps`): the marginal coordinates of its
+// variables and, for an association, the association itself. Unit scores
+// reproduce the columns of mixed_gamma_assembly_at_kappa; marginal score
+// columns share their indices with the kappa coordinates.
+struct ExactScoreUnits {
+  const Eigen::MatrixXd& X;
+  const std::vector<std::int32_t>& ordered;
+  const MixedKappaLayout& layout;
+  Eigen::Index p = 0;
+  Eigen::Index s1 = 0;
+  std::vector<Eigen::Index> th_start, th_len;
+  Eigen::MatrixXi categories;
+  // Ordinal-ordinal associations: cell of each case and cell counts.
+  std::vector<Eigen::VectorXi> cell_of_case;
+  std::vector<Eigen::VectorXd> cell_counts;
+  std::vector<std::vector<Eigen::Index>> columns;
+  std::vector<std::vector<Eigen::Index>> deps;
+  std::vector<std::vector<Eigen::Index>> units_of;  // units using kappa_l
+
+  ExactScoreUnits(const Eigen::MatrixXd& x,
+                  const std::vector<std::int32_t>& ord,
+                  const std::vector<std::int32_t>& levels,
+                  const MixedKappaLayout& lay)
+      : X(x), ordered(ord), layout(lay), p(x.cols()),
+        s1(lay.nth + 2 * lay.n_cont),
+        th_start(static_cast<std::size_t>(x.cols()), -1),
+        th_len(static_cast<std::size_t>(x.cols()), 0),
+        categories(Eigen::MatrixXi::Constant(x.rows(), x.cols(), -1)) {
+    Eigen::Index start = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto sj = static_cast<std::size_t>(j);
+      if (ordered[sj] == 0) continue;
+      th_start[sj] = start;
+      th_len[sj] = levels[sj] - 1;
+      start += th_len[sj];
+      for (Eigen::Index r = 0; r < X.rows(); ++r)
+        categories(r, j) = static_cast<int>(X(r, j)) - 1;
+    }
+    const Eigen::Index n_pairs = static_cast<Eigen::Index>(layout.pairs.size());
+    columns.resize(static_cast<std::size_t>(p + n_pairs));
+    deps.resize(static_cast<std::size_t>(p + n_pairs));
+    units_of.resize(static_cast<std::size_t>(s1 + n_pairs));
+    cell_of_case.resize(static_cast<std::size_t>(n_pairs));
+    cell_counts.resize(static_cast<std::size_t>(n_pairs));
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto sj = static_cast<std::size_t>(j);
+      auto& c = columns[sj];
+      if (ordered[sj] != 0) {
+        for (Eigen::Index k = 0; k < th_len[sj]; ++k) c.push_back(th_start[sj] + k);
+      } else {
+        const Eigen::Index cp = layout.cont_pos[sj];
+        c.push_back(layout.nth + cp);
+        c.push_back(layout.nth + layout.n_cont + cp);
+      }
+      deps[sj] = c;
+      for (Eigen::Index l : c) units_of[static_cast<std::size_t>(l)].push_back(j);
+    }
+    for (Eigen::Index q = 0; q < n_pairs; ++q) {
+      const auto [i, j] = layout.pairs[static_cast<std::size_t>(q)];
+      const auto u = static_cast<std::size_t>(p + q);
+      columns[u] = {s1 + q};
+      deps[u] = deps[static_cast<std::size_t>(i)];
+      const auto& dj = deps[static_cast<std::size_t>(j)];
+      deps[u].insert(deps[u].end(), dj.begin(), dj.end());
+      deps[u].push_back(s1 + q);
+      for (Eigen::Index l : deps[static_cast<std::size_t>(i)])
+        units_of[static_cast<std::size_t>(l)].push_back(p + q);
+      for (Eigen::Index l : dj) units_of[static_cast<std::size_t>(l)].push_back(p + q);
+      units_of[static_cast<std::size_t>(s1 + q)].push_back(p + q);
+      if (ordered[static_cast<std::size_t>(i)] != 0 &&
+          ordered[static_cast<std::size_t>(j)] != 0) {
+        const Eigen::Index nj = th_len[static_cast<std::size_t>(j)] + 1;
+        const Eigen::Index ni = th_len[static_cast<std::size_t>(i)] + 1;
+        Eigen::VectorXi cell(X.rows());
+        Eigen::VectorXd counts = Eigen::VectorXd::Zero(ni * nj);
+        for (Eigen::Index r = 0; r < X.rows(); ++r) {
+          cell(r) = categories(r, i) * static_cast<int>(nj) + categories(r, j);
+          counts(cell(r)) += 1.0;
+        }
+        cell_of_case[static_cast<std::size_t>(q)] = std::move(cell);
+        cell_counts[static_cast<std::size_t>(q)] = std::move(counts);
+      }
+    }
+  }
+
+  // Ordinal-ordinal association score per cell (row-major cell index), with
+  // the probability clamp and floor of the row scores.
+  Eigen::VectorXd ordinal_cell_scores(Eigen::Index i, Eigen::Index j,
+                                      const Eigen::VectorXd& thresholds,
+                                      double rho) const {
+    const auto si = static_cast<std::size_t>(i);
+    const auto sj = static_cast<std::size_t>(j);
+    const auto ti = thresholds.segment(th_start[si], th_len[si]);
+    const auto tj = thresholds.segment(th_start[sj], th_len[sj]);
+    Eigen::MatrixXd cdf, pdf;
+    ordinal_bvn_corner_cdf(ti, tj, rho, cdf);
+    ordinal_bvn_corner_pdf(ti, tj, rho, pdf);
+    const Eigen::Index ni = th_len[si] + 1;
+    const Eigen::Index nj = th_len[sj] + 1;
+    Eigen::VectorXd out(ni * nj);
+    for (Eigen::Index ci = 0; ci < ni; ++ci) {
+      for (Eigen::Index cj = 0; cj < nj; ++cj) {
+        const double probability = std::max(kProbFloor, std::clamp(
+            cdf(ci + 1, cj + 1) - cdf(ci, cj + 1) - cdf(ci + 1, cj) + cdf(ci, cj),
+            0.0, 1.0));
+        const double derivative = pdf(ci + 1, cj + 1) - pdf(ci, cj + 1) -
+                                  pdf(ci + 1, cj) + pdf(ci, cj);
+        out(ci * nj + cj) = derivative / probability;
+      }
+    }
+    return out;
+  }
+
+  // Per-case scores of unit u: n × columns[u].size().
+  post_expected<Eigen::MatrixXd> rows(Eigen::Index u,
+                                      const Eigen::VectorXd& thresholds,
+                                      const Eigen::VectorXd& mean,
+                                      const Eigen::MatrixXd& R) const {
+    const Eigen::Index n = X.rows();
+    if (u < p) {
+      const auto su = static_cast<std::size_t>(u);
+      if (ordered[su] != 0) {
+        const auto th = thresholds.segment(th_start[su], th_len[su]);
+        Eigen::MatrixXd out = Eigen::MatrixXd::Zero(n, th_len[su]);
+        for (Eigen::Index r = 0; r < n; ++r) {
+          const int c = categories(r, u);
+          const double lo = (c == 0) ? -kInf : th(c - 1);
+          const double hi = (c == th.size()) ? kInf : th(c);
+          const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+          if (c < th.size()) out(r, c) += normal_pdf(th(c)) / pr;
+          if (c > 0) out(r, c - 1) -= normal_pdf(th(c - 1)) / pr;
+        }
+        return out;
+      }
+      const double v = R(u, u);
+      Eigen::MatrixXd out(n, 2);
+      out.col(0) = (X.col(u).array() - mean(u)) / v;
+      out.col(1) = ((X.col(u).array() - mean(u)).square() - v) / (2.0 * v * v);
+      return out;
+    }
+    const Eigen::Index q = u - p;
+    const auto [i, j] = layout.pairs[static_cast<std::size_t>(q)];
+    const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+    const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+    Eigen::MatrixXd out(n, 1);
+    if (oi && oj) {
+      const Eigen::VectorXd cell = ordinal_cell_scores(i, j, thresholds, R(i, j));
+      const auto& of = cell_of_case[static_cast<std::size_t>(q)];
+      for (Eigen::Index r = 0; r < n; ++r) out(r, 0) = cell(of(r));
+    } else if (oi || oj) {
+      const Eigen::Index o = oi ? i : j;
+      const Eigen::Index c = oi ? j : i;
+      const double sd = std::sqrt(R(c, c));
+      const Eigen::VectorXd uc = (X.col(c).array() - mean(c)) / sd;
+      auto ps = polyserial_pair_scores(categories.col(o), uc, R(i, j) / sd,
+          thresholds.segment(th_start[static_cast<std::size_t>(o)],
+                             th_len[static_cast<std::size_t>(o)]));
+      if (!ps) return std::unexpected(ps.error());
+      out.col(0) = ps->rho;
+    } else {
+      auto sc = continuous_pair_normal_scores(X.col(i), X.col(j), mean(i),
+          mean(j), R(i, i), R(j, j), R(i, j));
+      if (!sc) return std::unexpected(sc.error());
+      out.col(0) = std::sqrt(R(i, i) * R(j, j)) * sc->score_contributions.col(4);
+    }
+    return out;
+  }
+
+  // Mean scores of unit u: columns[u].size().
+  post_expected<Eigen::VectorXd> means(Eigen::Index u,
+                                       const Eigen::VectorXd& thresholds,
+                                       const Eigen::VectorXd& mean,
+                                       const Eigen::MatrixXd& R) const {
+    if (u >= p) {
+      const Eigen::Index q = u - p;
+      const auto [i, j] = layout.pairs[static_cast<std::size_t>(q)];
+      if (ordered[static_cast<std::size_t>(i)] != 0 &&
+          ordered[static_cast<std::size_t>(j)] != 0) {
+        const Eigen::VectorXd cell = ordinal_cell_scores(i, j, thresholds, R(i, j));
+        Eigen::VectorXd out(1);
+        out(0) = cell.dot(cell_counts[static_cast<std::size_t>(q)]) /
+                 static_cast<double>(X.rows());
+        return out;
+      }
+    }
+    auto r = rows(u, thresholds, mean, R);
+    if (!r) return std::unexpected(r.error());
+    return Eigen::VectorXd(r->colwise().mean().transpose());
+  }
+};
+
+// Local form of the same influence. Moving kappa_l changes only the score
+// columns of the units that use kappa_l, and the empirical Jacobian only in
+// those rows, so with D_l = ∂S/∂kappa_l (nonzero on those columns) and
+// Q_l = D_l Aᵀ:
+//   data channel:  −2 Σ_l Gamma_lk Q_l(i,k)
+//   ∂Gamma_kk/∂kappa_l = −2 a_kᵀ(∂J/∂kappa_l)gamma_k − (2/n) Σ_i Q_l(i,k) g_ik,
+// where (∂J/∂kappa_l)_{jl'} = ∂²s̄_j/∂kappa_l∂kappa_l' is a four-point
+// difference of unit score means, needed only for l, l' in the unit of column
+// j. Cost is linear in the number of (unit, coordinate) incidences instead of
+// m full first stages.
+post_expected<ExactGammaDiagInfluence> exact_gamma_diag_influence_local(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel,
+    double h_sampling) {
+  if (!(h_rel > 0.0) || !std::isfinite(h_rel) || !(h_sampling > 0.0) ||
+      !std::isfinite(h_sampling)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence requires positive finite steps"));
+  }
+  auto base = exact_first_stage_at_kappa(X, ordered, levels, thresholds, mean,
+                                         R, h_sampling);
+  if (!base) return std::unexpected(base.error());
+  const Eigen::Index n = X.rows();
+  const Eigen::Index m = base->rows.cols();
+  const Eigen::VectorXd kappa = mixed_moment_vector(R, mean, ordered, thresholds);
+  if (kappa.size() != m) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: mixed moment length mismatch"));
+  }
+  const MixedKappaLayout layout = mixed_kappa_layout(ordered, levels);
+  const ExactScoreUnits units(X, ordered, levels, layout);
+  const double nd = static_cast<double>(n);
+  const Eigen::MatrixXd& A = base->jacobian_inverse;
+
+  ExactGammaDiagInfluence out;
+  out.rows = std::move(base->rows);
+  const Eigen::MatrixXd& G = out.rows;
+  out.gamma = G.transpose() * G / nd;
+  out.gamma = 0.5 * (out.gamma + out.gamma.transpose()).eval();
+  const Eigen::MatrixXd& Gamma = out.gamma;
+  out.data_influence = G.array().square().matrix();
+  out.data_influence.rowwise() += Gamma.diagonal().transpose();
+
+  Eigen::VectorXd h(m);
+  for (Eigen::Index l = 0; l < m; ++l) {
+    h(l) = mixed_kappa_step(l, h_rel, kappa, layout, ordered, levels,
+                            thresholds, R);
+  }
+  // T(l,k) = a_kᵀ(∂J/∂kappa_l)gamma_k; B(l,k) = (1/n) Σ_i Q_l(i,k) g_ik.
+  Eigen::MatrixXd T = Eigen::MatrixXd::Zero(m, m);
+  Eigen::MatrixXd B = Eigen::MatrixXd::Zero(m, m);
+  for (Eigen::Index l = 0; l < m; ++l) {
+    const auto& lunits = units.units_of[static_cast<std::size_t>(l)];
+    Eigen::Index width = 0;
+    for (Eigen::Index u : lunits)
+      width += static_cast<Eigen::Index>(units.columns[static_cast<std::size_t>(u)].size());
+    Eigen::VectorXd th_p = thresholds, th_m = thresholds;
+    Eigen::VectorXd mu_p = mean, mu_m = mean;
+    Eigen::MatrixXd R_p = R, R_m = R;
+    mixed_kappa_shift(l, h(l), layout, th_p, mu_p, R_p);
+    mixed_kappa_shift(l, -h(l), layout, th_m, mu_m, R_m);
+    Eigen::MatrixXd D(n, width);
+    Eigen::MatrixXd Asub(m, width);
+    Eigen::Index offset = 0;
+    for (Eigen::Index u : lunits) {
+      const auto& cols = units.columns[static_cast<std::size_t>(u)];
+      auto rp = units.rows(u, th_p, mu_p, R_p);
+      if (!rp) return std::unexpected(rp.error());
+      auto rm = units.rows(u, th_m, mu_m, R_m);
+      if (!rm) return std::unexpected(rm.error());
+      const Eigen::Index w = static_cast<Eigen::Index>(cols.size());
+      D.middleCols(offset, w) = (*rp - *rm) / (2.0 * h(l));
+      for (Eigen::Index c = 0; c < w; ++c)
+        Asub.col(offset + c) = A.col(cols[static_cast<std::size_t>(c)]);
+      offset += w;
+
+      // Second derivatives of this unit's score means in (kappa_l, kappa_l').
+      for (Eigen::Index l2 : units.deps[static_cast<std::size_t>(u)]) {
+        Eigen::VectorXd f[2][2];
+        for (int a = 0; a < 2; ++a) {
+          for (int b = 0; b < 2; ++b) {
+            Eigen::VectorXd th = thresholds, mu = mean;
+            Eigen::MatrixXd Rs = R;
+            mixed_kappa_shift(l, a == 0 ? h(l) : -h(l), layout, th, mu, Rs);
+            mixed_kappa_shift(l2, b == 0 ? h(l2) : -h(l2), layout, th, mu, Rs);
+            auto fm = units.means(u, th, mu, Rs);
+            if (!fm) return std::unexpected(fm.error());
+            f[a][b] = std::move(*fm);
+          }
+        }
+        const Eigen::VectorXd d2 =
+            (f[0][0] - f[0][1] - f[1][0] + f[1][1]) / (4.0 * h(l) * h(l2));
+        for (Eigen::Index c = 0; c < w; ++c) {
+          const Eigen::Index j = cols[static_cast<std::size_t>(c)];
+          T.row(l).array() +=
+              d2(c) * (A.col(j).transpose().array() * Gamma.row(l2).array());
+        }
+      }
+    }
+    const Eigen::MatrixXd Q = D * Asub.transpose();
+    out.data_influence.array() -= 2.0 * (Q.array().rowwise() * Gamma.row(l).array());
+    B.row(l) = (Q.array() * G.array()).colwise().sum() / nd;
+  }
+  out.diag_jacobian = -2.0 * (T + B).transpose();
+  out.influence = out.data_influence + G * out.diag_jacobian.transpose();
+  if (!out.influence.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "exact Gamma influence: non-finite influence"));
+  }
+  return out;
+}
+
+}  // namespace
+
+#ifdef MAGMAAN_ENABLE_TEST_PROBES
+namespace validation {
+post_expected<ExactGammaDiagInfluence> exact_gamma_diag_influence_dense_reference(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel,
+    double h_sampling) {
+  return exact_gamma_diag_influence_dense(X, ordered, levels, thresholds, mean,
+                                          R, h_rel, h_sampling);
+}
+}  // namespace validation
+#endif
+
+post_expected<ExactGammaDiagInfluence>
+mixed_exact_gamma_diag_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel,
+    double h_sampling) {
+  return exact_gamma_diag_influence_local(X, ordered, levels, thresholds, mean,
+                                          R, h_rel, h_sampling);
+}
+
+post_expected<ExactGammaDiagInfluence>
+ordinal_exact_gamma_diag_influence(
+    const Eigen::MatrixXi& int_data,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    double h_rel,
+    double h_sampling) {
+  if ((int_data.array() < 0).any()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal exact Gamma influence requires complete category data"));
+  }
+  const Eigen::MatrixXd X = (int_data.cast<double>().array() + 1.0).matrix();
+  return exact_gamma_diag_influence_local(
+      X, std::vector<std::int32_t>(static_cast<std::size_t>(int_data.cols()), 1),
+      levels, thresholds, Eigen::VectorXd::Zero(int_data.cols()), R, h_rel,
+      h_sampling);
 }
 
 namespace {

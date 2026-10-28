@@ -13,4 +13,11 @@ post_expected<Eigen::MatrixXd> mixed_sampling_influence_dense_reference(
     const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
     const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
     const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel = 1e-5);
+// Dense exact-Gamma diagonal influence: recomputes the whole exact first
+// stage per kappa coordinate. Reference for the local production path.
+post_expected<ExactGammaDiagInfluence> exact_gamma_diag_influence_dense_reference(
+    const Eigen::MatrixXd& X, const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels, const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean, const Eigen::MatrixXd& R, double h_rel = 1e-4,
+    double h_sampling = 1e-5);
 }  // namespace magmaan::data::validation

@@ -279,6 +279,111 @@ TEST_CASE("Mixed WLS Gamma influence agrees with replicated case weights") {
   }
 }
 
+// RDWLS weights are diag(Gamma_exact)⁻¹. Their influence must match
+// replicated case-weight finite differences of the implemented estimator, both
+// at the fitted kappa (data channel, including the empirical score-Jacobian
+// variation) and with kappa re-estimated (complete influence).
+TEST_CASE("Exact first-stage Gamma diagonal influence agrees with replicated case weights") {
+  const int n = 150, copies = 100;
+  for (bool mixed : {true, false}) {
+    CAPTURE(mixed);
+    Eigen::MatrixXd x = mixed_block(6720u, n);
+    std::vector<std::int32_t> ordered{1,1,1,0,0,0};
+    if (!mixed) {
+      // Recode the continuous columns into four categories: all-ordinal data.
+      for (int j = 3; j < 6; ++j)
+        for (int i = 0; i < n; ++i) {
+          const double y = x(i,j) - 0.1*j;
+          x(i,j) = 1.0 + (y > -0.8) + (y > 0.1) + (y > 0.9);
+        }
+      ordered.assign(6, 1);
+    }
+    struct Moments { Eigen::VectorXd thresholds, mean; Eigen::MatrixXd R;
+                     std::vector<std::int32_t> levels; };
+    auto estimate_moments = [&](const Eigen::MatrixXd& data) {
+      Moments out;
+      if (mixed) {
+        auto st = data::mixed_ordinal_stats_from_data({data}, {ordered}, false);
+        REQUIRE(st.has_value());
+        out = {st->thresholds[0], st->mean[0], st->R[0], st->n_levels[0]};
+      } else {
+        auto st = data::ordinal_stats_from_integer_data({data}, false);
+        REQUIRE(st.has_value());
+        out = {st->thresholds[0], Eigen::VectorXd::Zero(data.cols()), st->R[0],
+               st->n_levels[0]};
+      }
+      return out;
+    };
+    // Gamma_exact diagonal on `data` at the given moments (no re-estimation).
+    auto exact_diag = [&](const Eigen::MatrixXd& data, const Moments& mo) {
+      Eigen::MatrixXd rows;
+      if (mixed) {
+        auto r = data::mixed_moment_sampling_influence(data, ordered, mo.levels,
+            mo.thresholds, mo.mean, mo.R);
+        REQUIRE(r.has_value());
+        rows = *r;
+      } else {
+        const Eigen::MatrixXi cats = (data.array() - 1.0).cast<int>().matrix();
+        auto r = data::ordinal_moment_sampling_influence(cats, mo.levels,
+            mo.thresholds, mo.R);
+        REQUIRE(r.has_value());
+        rows = r->rows;
+      }
+      return Eigen::VectorXd(rows.colwise().squaredNorm().transpose() /
+                             static_cast<double>(data.rows()));
+    };
+    const Moments base = estimate_moments(x);
+    auto inf = mixed
+        ? data::mixed_exact_gamma_diag_influence(x, ordered, base.levels,
+              base.thresholds, base.mean, base.R)
+        : data::ordinal_exact_gamma_diag_influence(
+              (x.array() - 1.0).cast<int>().matrix(), base.levels,
+              base.thresholds, base.R);
+    REQUIRE(inf.has_value());
+    // The production path differentiates locally; the dense reference
+    // recomputes the whole exact first stage per coordinate.
+    auto dense = data::validation::exact_gamma_diag_influence_dense_reference(
+        x, ordered, base.levels, base.thresholds, base.mean, base.R);
+    REQUIRE(dense.has_value());
+    const double data_gap = (inf->data_influence - dense->data_influence).norm() /
+                            dense->data_influence.norm();
+    const double jacobian_gap = (inf->diag_jacobian - dense->diag_jacobian).norm() /
+                                dense->diag_jacobian.norm();
+    MESSAGE("local versus dense: data channel " << data_gap << ", diag Jacobian "
+            << jacobian_gap);
+    CHECK(data_gap < 1e-6);
+    CHECK(jacobian_gap < 1e-5);
+    const Eigen::VectorXd gdiag = exact_diag(x, base);
+    CHECK((inf->gamma.diagonal() - gdiag).norm() / gdiag.norm() < 1e-12);
+    // Influence rows average to zero (sum of IFs over the sample).
+    CHECK(inf->influence.colwise().mean().norm() / gdiag.norm() < 1e-6);
+    for (int row : {0, 17, 91}) {
+      CAPTURE(row);
+      Eigen::VectorXd fixed[2], refit[2];
+      for (int side = 0; side < 2; ++side) {
+        const int step = side == 0 ? -1 : 1;
+        Eigen::MatrixXd repeated(n*copies+step, x.cols());
+        int off = 0;
+        for (int i = 0; i < n; ++i)
+          for (int j = 0; j < copies+(i == row ? step : 0); ++j)
+            repeated.row(off++) = x.row(i);
+        fixed[side] = exact_diag(repeated, base);
+        refit[side] = exact_diag(repeated, estimate_moments(repeated));
+      }
+      const Eigen::VectorXd fd_fixed = (fixed[1]-fixed[0])*(n*copies/2.0);
+      const Eigen::VectorXd fd = (refit[1]-refit[0])*(n*copies/2.0);
+      const double fixed_error =
+          (fd_fixed-inf->data_influence.row(row).transpose()).norm()/fd_fixed.norm();
+      const double error =
+          (fd-inf->influence.row(row).transpose()).norm()/fd.norm();
+      MESSAGE("exact Gamma diagonal: fixed-kappa relative error " << fixed_error
+              << ", complete relative error " << error);
+      CHECK(fixed_error < 1e-5);
+      CHECK(error < 1e-5);
+    }
+  }
+}
+
 TEST_CASE("Mixed DWLS empirical IJ weight channel vanishes at exact fit") {
   const Eigen::MatrixXd x=mixed_block(6711u,300).rightCols(4);
   const std::vector<std::vector<std::int32_t>> ordered{{1,0,0,0}};

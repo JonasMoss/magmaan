@@ -35,6 +35,25 @@ Binary/five-category, skewed-threshold and one/two-group ordinal/mixed gates
 compare Jacobians, rows and Gamma at 1e-7 relative tolerance. Existing
 policy/lab delta/theta tests are unchanged.
 
+TASK-164.4 adds the estimated-weight influence of the exact first-stage Gamma,
+the weight source of RDWLS (TASK-164.2): `data::mixed_exact_gamma_diag_influence`
+and `data::ordinal_exact_gamma_diag_influence` return the exact rows,
+Gamma_exact = rowsᵀrows/n = J⁻¹CJ⁻ᵀ, and the complete per-case influence of its
+diagonal. The fixed-kappa channel is g_ik² + Gamma_kk − 2a_kᵀH_iγ_k (a_kᵀ row k
+of J⁻¹, γ_k column k of Gamma, H_i the case's score Jacobian), so it includes
+the variation of the empirical Jacobian; the kappa-movement channel is
+Σ_l(∂Gamma_kk/∂kappa_l)g_il. The OPG data-influence helper is not a substitute
+(about 100% relative error on this target). Production differentiates per score
+unit (a variable's marginal block or one association): only the units using
+kappa_l move, and ∂J/∂kappa_l uses four-point differences of unit score means.
+A dense private probe recomputes the whole exact first stage per coordinate.
+`mixed_ij_test.cpp` gates both against replicated case weights with kappa
+re-estimated, mixed and all-ordinal (fixed-kappa and complete errors below
+1.1e-6; local versus dense diagonal Jacobian 5e-7). Single-thread cost at
+N = 1000: 1.15 s for 6 + 6 variables (m = 102) and 3.3 s for 10 + 10 (m = 250),
+against 0.35 s and 1.5 s for the OPG data-plus-Jacobian pair; the dense form
+took 16 s and 122 s. Complete data only.
+
 Five-call medians with BLAS/OpenMP pinned to one thread, fresh policy caches,
 12 indicators, two equally sized groups and five ordinal categories are:
 

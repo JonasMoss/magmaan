@@ -480,6 +480,44 @@ mixed_moment_sampling_influence(
     const Eigen::MatrixXd& R,
     double h_rel = 1e-5);
 
+// Exact first-stage Gamma (the RDWLS weight source) with the per-case
+// influence of its diagonal. `rows` are the exact sampling rows g_i of
+// `mixed_moment_sampling_influence` / `ordinal_moment_sampling_influence`
+// (step `h_sampling`), and gamma = rowsᵀrows / n = J⁻¹ C J⁻ᵀ with J the
+// empirical score Jacobian and C the centered score covariance.
+// `data_influence` (n × m) is the influence of diag(gamma) at fixed kappa,
+// including the variation of J: g_ik² + gamma_kk − 2 a_kᵀ H_i gamma_k, with
+// a_kᵀ row k of J⁻¹, gamma_k column k of gamma and H_i = ∂s_i/∂kappaᵀ.
+// `diag_jacobian` (m × m) is ∂gamma_kk/∂kappa_l at fixed data (step `h_rel`).
+// `influence` = data_influence + rows · diag_jacobianᵀ is the complete
+// influence of the estimated diagonal. Complete data only.
+struct ExactGammaDiagInfluence {
+  Eigen::MatrixXd rows;
+  Eigen::MatrixXd gamma;
+  Eigen::MatrixXd data_influence;
+  Eigen::MatrixXd diag_jacobian;
+  Eigen::MatrixXd influence;
+};
+post_expected<ExactGammaDiagInfluence>
+mixed_exact_gamma_diag_influence(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::VectorXd& mean,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-4,
+    double h_sampling = 1e-5);
+// All-ordinal analogue on 0-based complete category data.
+post_expected<ExactGammaDiagInfluence>
+ordinal_exact_gamma_diag_influence(
+    const Eigen::MatrixXi& int_data,
+    const std::vector<std::int32_t>& levels,
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    double h_rel = 1e-4,
+    double h_sampling = 1e-5);
+
 // Per-case DATA-DIRECT influence of the mixed NACOV diagonal at fixed mixed
 // kappa. Pair with `mixed_gamma_diag_jacobian_fd` and
 // MixedOrdinalStats::moment_influence to form the complete estimated-weight
