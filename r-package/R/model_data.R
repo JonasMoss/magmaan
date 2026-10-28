@@ -348,6 +348,13 @@ lavaan_compare_partable <- function(x, reference, est_tolerance = NULL,
             class = "magmaan_partable_comparison")
 }
 
+#' Categorical statistics with conventional or exact first-stage Gamma
+#'
+#' Exact Gamma requires complete observations and retains exact sampling rows
+#' and diagonal-Gamma influence for RDWLS. Both first-stage inference selectors
+#' use exact rows on these stats. DWLS stats default to conventional OPG Gamma.
+#' @param gamma Gamma source: `"opg"` (default) or `"exact"` for RDWLS.
+#' @rdname categorical_gamma
 data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                        missing = c("listwise", "error", "pairwise"),
                                        pd_gamma = c("overlap", "nominal"),
@@ -358,8 +365,9 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                        h_lambda = 0.2,
                                        clip = c("hard_huber", "pseudo_huber",
                                                 "tukey_biweight", "none"),
-                                       k = NULL, full_wls_weight = TRUE) {
+                                       k = NULL, full_wls_weight = TRUE, gamma = c("opg", "exact")) {
   missing <- match.arg(missing)
+  if (match.arg(gamma) == "exact" && (missing == "pairwise" || anyNA(x))) stop("RDWLS exact Gamma requires complete observations")
   pd_gamma <- match.arg(pd_gamma)
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
@@ -447,7 +455,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
     out <- data_ordinal_stats_from_raw(
       X, robust = robust, alpha = alpha, h_kind = h_kind, h_k = h_k,
       h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k,
-      full_wls_weight = full_wls_weight
+      full_wls_weight = full_wls_weight, gamma = match.arg(gamma)
     )
   }
   out$X <- X
@@ -581,6 +589,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   out
 }
 
+#' @rdname categorical_gamma
 data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                              missing = c("listwise", "error"),
                                              polyserial = c("ml", "dpd", "huber_residual"),
@@ -588,8 +597,9 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
                                              clip = c("hard_huber", "pseudo_huber",
                                                       "tukey_biweight", "none"),
                                              k = NULL,
-                                             full_wls_weight = TRUE) {
+                                             full_wls_weight = TRUE, gamma = c("opg", "exact")) {
   missing <- match.arg(missing)
+  if (match.arg(gamma) == "exact" && (missing == "pairwise" || anyNA(x))) stop("RDWLS exact Gamma requires complete observations")
   polyserial <- match.arg(polyserial)
   clip <- match.arg(clip)
   if (is.null(k)) {
@@ -681,7 +691,7 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
   }
   out <- data_mixed_ordinal_stats_from_raw(
     X, ordered_mask, polyserial = polyserial, alpha = alpha, clip = clip, k = k,
-    full_wls_weight = full_wls_weight
+    full_wls_weight = full_wls_weight, gamma = match.arg(gamma)
   )
   out$X <- X
   out$ov_names <- ov_by_group
@@ -2416,13 +2426,13 @@ fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 # the PSD policy applies only to the fitted model covariance blocks.
 #' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_ordinal_psd <- function(
-    model, data, estimator = c("DWLS", "WLS", "ULS"),
+    model, data, estimator = c("DWLS", "RDWLS", "WLS", "ULS"),
     optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
     psd_factor = c("triangular", "square")) {
   psd_factor <- match.arg(psd_factor)
   estimator <- match.arg(toupper(as.character(estimator)[1L]),
-                         c("DWLS", "WLS", "ULS"))
+                         c("DWLS", "RDWLS", "WLS", "ULS"))
   pt <- augment_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "frontier_fit_ordinal_psd")
   fit <- frontier_fit_ordinal_psd_impl(
@@ -2497,13 +2507,13 @@ fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 # polyserial/polychoric associations, and fixed weights are retained exactly.
 #' @param psd_factor Covariance factor: triangular (default) or square.
 frontier_fit_mixed_ordinal_psd <- function(
-    model, data, estimator = c("DWLS", "WLS", "ULS"),
+    model, data, estimator = c("DWLS", "RDWLS", "WLS", "ULS"),
     optimizer = "nlopt-slsqp", control = NULL, bounds = NULL,
     start_eigen_floor = 1e-6, feasibility_tol = 1e-6,
     psd_factor = c("triangular", "square")) {
   psd_factor <- match.arg(psd_factor)
   estimator <- match.arg(toupper(as.character(estimator)[1L]),
-                         c("DWLS", "WLS", "ULS"))
+                         c("DWLS", "RDWLS", "WLS", "ULS"))
   pt <- augment_mixed_ordinal_partable(model, data)
   b <- bounds_arg(bounds, pt, caller = "frontier_fit_mixed_ordinal_psd")
   fit <- frontier_fit_mixed_ordinal_psd_impl(
@@ -2658,18 +2668,18 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     if (identical(tolower(weight), "custom") && is.null(W)) stop("custom weight requires W")
     selected <- .fixed_weight_method(weight)
     if (estimator == "ML2S") stage2_weight <- switch(selected, GLS = "nt", WLS = "adf", tolower(selected))
-    else if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) estimator <- selected
+    else if (estimator %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS")) estimator <- selected
     else stop("weight selection requires a moment-quadratic estimator or ML2S")
   }
   if (identical(estimator, "ML2S") && !is.null(W)) stop("ML2S constructs weights from Stage 1; supplied W is unavailable")
-  if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) .fixed_weight_options(estimator, W, dls_a)
+  if (estimator %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS")) .fixed_weight_options(estimator, W, dls_a)
   if (!length(estimator) || is.na(estimator)) {
     stop("fit_model(): `estimator` must be a non-missing string")
   }
   if (estimator %in% c("MLM", "MLR")) {
     stop("fit_model(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
   }
-  allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS", "DLS")
+  allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS", "RDWLS", "DLS")
   if (!estimator %in% allowed) {
     stop("fit_model(): unsupported estimator '", estimator, "'")
   }
@@ -2711,7 +2721,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   group_var <- prep$group_var
   marker_options <- options %||% control$fitting_options
   if (!is.null(marker_options) && ((estimator %in% c("ML", "FIML") && !length(spec$ordered)) ||
-      (estimator == "DWLS" && length(spec$ordered))) &&
+      (estimator %in% c("DWLS", "RDWLS") && length(spec$ordered))) &&
       covariance == "unrestricted" && is.null(cluster) && missing != "pairwise") {
     switched <- .marker_fit_spec(spec, data, marker_options, function(m, o) {
       args <- route_args
@@ -2745,10 +2755,11 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
         model_matrix_rep(spec$partable)$ov_names, spec$group_var, spec$group_labels,
         if (estimator %in% c("FIML", "ML2S")) "fiml" else missing)
     } else if (!is.null(deletion_input$deletion)) fit$deletion <- deletion_input$deletion
+    if (estimator == "RDWLS") fit$estimator <- "RDWLS"
     fit <- finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
-    if (!isTRUE(fit$ordinal) && estimator %in% c("DWLS", "WLS", "DLS") && !is.null(W)) fit$W <- W
-    if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
-      if (supplied_weight) "custom" else switch(estimator, ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+    if (!isTRUE(fit$ordinal) && estimator %in% c("DWLS", "RDWLS", "WLS", "DLS") && !is.null(W)) fit$W <- W
+    if (estimator %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS")) fit$moment_weight <-
+      if (supplied_weight) "custom" else switch(estimator, ULS = "uls", GLS = "nt", DWLS = "dwls", RDWLS = "rdwls", WLS = "adf", DLS = "dls")
     if (estimator == "DLS") fit$stage2_dls_a <- dls_a
     fit$options$psd <- psd
     source <- if (identical(estimator, "ML2S")) "saturated_fiml" else if (identical(estimator, "FIML")) "raw_observed" else if (isTRUE(fit$ordinal)) "polychoric" else if (isTRUE(fit$mixed_ordinal)) "mixed_polyserial" else if (identical(missing, "pairwise")) "pairwise_mcar" else "complete_continuous"
@@ -2771,7 +2782,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
   pairwise_moments <- is.list(data) && !is.data.frame(data) &&
     !is.null(data$pi_hat) && !is.null(data$n_pair)
   if (!is.null(options) && (!(estimator %in% c("ML", "FIML") && !ordinal_requested ||
-      estimator == "DWLS" && ordinal_requested) || psd ||
+      estimator %in% c("DWLS", "RDWLS") && ordinal_requested) || psd ||
       !is.null(barrier) || !is.null(cluster) || missing == "pairwise" || pairwise_moments))
     stop("fitting options currently require ordinary continuous ML or FIML, or ordinal/mixed DWLS")
   if (ordinal_requested) .validate_categorical_covariates(spec$partable, "fit_model")
@@ -2837,7 +2848,9 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     return(done(fit))
   }
 
-  if (ordinal_requested && estimator %in% c("ML", "GLS", "DLS", "DWLS", "WLS", "ULS")) {
+  if (estimator == "RDWLS" && (!ordinal_requested || missing == "pairwise" || is.data.frame(data) && anyNA(data)))
+    stop("RDWLS requires complete observations; pairwise data are unsupported")
+  if (ordinal_requested && estimator %in% c("ML", "GLS", "DLS", "DWLS", "RDWLS", "WLS", "ULS")) {
     if (is.data.frame(data)) {
       ov_by_group <- model_matrix_rep(spec$partable)$ov_names
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
@@ -2864,6 +2877,10 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                                          full_wls_weight = want_full_wls)
       }
     }
+    if (estimator == "RDWLS") {
+      if (missing == "pairwise" || !is.null(W)) stop("RDWLS requires complete observations and its exact Gamma weight")
+      data <- data_exact_gamma_stats_impl(data, inherits(data, "magmaan_mixed_ordinal_data"))
+    }
     if (inherits(data, "magmaan_ordinal_data")) {
       if (identical(estimator, "ML")) {
         if (!bounds_is_none(bounds) || !is.null(W)) stop("fit_model(): ordinal association ML does not accept bounds or LS weights")
@@ -2874,7 +2891,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
         else fit_ml(spec, data, optimizer = optimizer %||% "nlopt-lbfgs", control = control)))
       }
       original <- data
-      computational <- if (estimator %in% c("GLS", "DLS")) "WLS" else estimator
+      computational <- if (estimator == "RDWLS") "DWLS" else if (estimator %in% c("GLS", "DLS")) "WLS" else estimator
       if (estimator %in% c("GLS", "DLS") || !is.null(W)) {
         data <- ordinal_fixed_weight_stats_impl(data, estimator, W, dls_a)
       }
@@ -2893,7 +2910,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
       return(done(fit))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
-      if (!is.null(options) && estimator != "DWLS") stop("mixed fitting options require DWLS")
+      if (!is.null(options) && !estimator %in% c("DWLS", "RDWLS")) stop("mixed fitting options require DWLS")
       if (estimator %in% c("GLS", "DLS") || !is.null(W)) stop("fit_model(): mixed fixed-weight expansion is deferred")
       if (!is.null(barrier)) stop("fit_model(): mixed/polyserial barrier fitting is deferred")
       if (identical(estimator, "ML")) {
@@ -2907,7 +2924,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
                                                    optimizer = psd_optimizer,
                                                    control = control)))
       }
-      fit <- if (identical(estimator, "DWLS")) {
+      fit <- if (estimator %in% c("DWLS", "RDWLS")) {
         fit_dwls_mixed_ordinal(spec, data, optimizer = optimizer,
                                control = control, bounds = bounds, options = options)
       } else {
@@ -2938,7 +2955,7 @@ fit_model <- function(model, data, estimator = "ML", groups = NULL, ...,
     if ("W" %in% names(route_args)) route_args$W <- W
   }
   computational <- if (estimator %in% c("DWLS", "DLS")) "WLS" else estimator
-  if (estimator %in% c("DWLS", "WLS", "DLS") && is.null(W)) {
+  if (estimator %in% c("DWLS", "RDWLS", "WLS", "DLS") && is.null(W)) {
     W <- fixed_moment_weight_impl(partable_arg(spec), sample_stats_arg(data), estimator,
       raw_data = complete_raw_data(data), dls_a = dls_a)$W
   }

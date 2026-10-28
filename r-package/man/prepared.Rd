@@ -11,7 +11,7 @@ estimation weights and estimation. Inference is requested separately.}
 prepare_model(model, ..., prototype = NULL)
 augment_model_spec(model, categories)
 prepare_data(model, data, kind = NULL, missing = c("error", "listwise"))
-prepare_weight(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"),
+prepare_weight(data, method = c("DWLS", "RDWLS", "WLS", "ULS", "GLS", "DLS"),
                W = NULL, full = TRUE, dls_a = 0.5)
 estimate(model, data, estimator = NULL, weight = NULL,
          optimizer = NULL, control = NULL, bounds = NULL,
@@ -36,15 +36,18 @@ each fitted dataset. The returned specification records the categories.}
 data. Raw FIML data retain missingness.}
 \item{method}{Fixed weight: ULS, GLS/NT, DWLS, WLS/ADF or DLS for complete
 continuous and all-ordinal data. Lower-case weight names are also accepted.
-Mixed data retain DWLS/WLS.}
+Mixed data retain DWLS/WLS. RDWLS uses exact first-stage Gamma diagonal
+weights for complete ordinal or mixed data; no lavaan preset or compatibility
+bundle is available. DWLS keeps OPG weights.}
 \item{W}{Optional weight matrix or per-group list in model moment
 order. Otherwise empirical weights are constructed from raw observations.}
 \item{full}{For categorical data, retain full Gamma for post-fit inference.
 FALSE requests only the DWLS diagonal (or no Gamma for ULS) when W is omitted.
 GLS, DLS, WLS and supplied ordinal weights retain full Gamma.
-DWLS does not invert full Gamma.}
+DWLS does not invert full Gamma. RDWLS retains exact Gamma and its influence
+regardless of full, with a diagonal fitting weight.}
 \item{estimator}{Continuous or all-ordinal ML, ULS, GLS, DWLS, WLS or DLS;
-FIML for raw data; DWLS or WLS for mixed data. Default follows
+FIML for raw data; RDWLS for complete ordinal or mixed data; DWLS or WLS for mixed data. Default follows
 the weight, or otherwise the data kind.}
 \item{weight}{Optional prepared weight from this dataset, or a shared weight
 name: \code{"uls"}, \code{"nt"}, \code{"dwls"}, \code{"adf"}, or \code{"dls"}.

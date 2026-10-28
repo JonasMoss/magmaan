@@ -37,7 +37,7 @@ Rcpp::DataFrame policy_fit_measures_impl(Rcpp::List fit, Rcpp::LogicalVector sta
   if (s.penalized || !s.converged) {
     out = policy_fit_measures_unavailable(s.penalized ? InferenceReason::Penalized : InferenceReason::NotConverged,
         s.penalized ? std::string(penalized_detail) : "the fit did not pass its convergence verdict", ordinal || mixed, likelihood);
-  } else if ((ordinal || mixed) && estimator == "DWLS") {
+  } else if ((ordinal || mixed) && (estimator == "DWLS" || estimator == "RDWLS")) {
     Ctx ctx = ctx_from_fit(fit);
     auto est = est_from_fit(fit);
     const auto parameterization = ordinal_parameterization_from_string(

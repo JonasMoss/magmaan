@@ -593,6 +593,10 @@ frontier_ordinal_newton_audit_impl <- function(fit, theta = NULL) {
     .Call(`_magmaanlab_frontier_ordinal_newton_audit_impl`, fit, theta)
 }
 
+data_exact_gamma_stats_impl <- function(stats, mixed = FALSE) {
+    .Call(`_magmaanlab_data_exact_gamma_stats_impl`, stats, mixed)
+}
+
 policy_modification_indices_impl <- function(fit, state, raw = NULL, releases = TRUE) {
     .Call(`_magmaanlab_policy_modification_indices_impl`, fit, state, raw, releases)
 }

@@ -1258,6 +1258,12 @@ ordinary-user default.
 
 ### Validation and maintenance
 
+- [x] **M — exact first-stage Gamma RDWLS (TASK-164.2).** Core exact-Gamma
+  stats adapters and lab estimator/inference routes; complete ordinal/mixed
+  data, unchanged DWLS weights, no lavaan preset/bundle. Exact-weight, replicated
+  case-weight IJ, 0.7-3 mixed Gamma and supplied-weight point oracle gates pass.
+  Ordinary-package exposure follows separately in TASK-164.3.
+
 - [x] **S — pin the CI oracle and make live tests version-robust (TASK-164.1).**
   CI installs lavaan 0.7-2 and checks both packages before failing. Categorical
   inference uses expected bread on >= 0.7-3; bundle tests are selected by name;

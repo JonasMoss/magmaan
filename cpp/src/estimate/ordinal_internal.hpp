@@ -70,6 +70,11 @@ using robust::ScaledShiftedResult;
 using optim::OptimOptions;
 
 namespace detail_ordinal {
+// Select the retained RDWLS channel or reconstruct conventional OPG movement.
+post_expected<Eigen::MatrixXd> ordinal_gamma_diag_case_influence(
+    const data::OrdinalStats& stats, std::size_t block,
+    const Eigen::MatrixXd& sampling_rows, bool observed);
+
 post_expected<std::vector<Eigen::MatrixXd>> ordinal_sandwich_weights(const data::OrdinalStats& stats, OrdinalWeightKind kind);
 post_expected<std::vector<Eigen::MatrixXd>> ordinal_sandwich_weights(const data::MixedOrdinalStats& stats, OrdinalWeightKind kind);
 

@@ -1,5 +1,25 @@
 ### Ordinal and mixed categorical LS
 
+RDWLS uses the DWLS criterion with `diag(Gamma_exact)^-1`, where
+`Gamma_exact = rows.transpose() * rows / n` for the exact empirical
+first-stage sampling rows. `data::exact_gamma_stats` returns copied ordinal
+or mixed stats with `GammaSource::Exact`, exact NACOV, both moment-row slots
+set to the exact rows, retained complete diagonal-Gamma influence, and no
+full-WLS weight or full-Gamma influence. Other fields are preserved. It calls
+the TASK-164.4 influence producer once per block. `api::rdwls()` selects these
+stats for staged C++ fitting; low-level fitting uses `OrdinalWeightKind::DWLS`.
+Delta/theta parameterizations, groups, constraints and bounds follow DWLS.
+Missing/pairwise observations are unsupported. No lavaan preset or inference
+bundle is defined for RDWLS. DWLS keeps conventional score-crossproduct NACOV.
+
+The lab accepts `prepare_weight(data, "RDWLS")`, `estimate(..., weight =
+"RDWLS")` and `fit_model(..., estimator = "RDWLS")`. Raw/DF categorical stats
+builders accept `gamma = "exact"` (default `"opg"`). Estimated-weight IJ,
+policy global/nested inference and misspecification fit measures retain the
+exact diagonal influence instead of rebuilding OPG movement. On Exact stats,
+both `OrdinalFirstStage::OPG` and `::Exact` use the retained exact rows.
+The ordinary package surface is tracked separately in TASK-164.3.
+
 - Explicit `objective` and `objective_downward` search coordinates return
   typed `Unsupported` from ordinal/mixed LS bounded, profiled and constrained
   entry points before preparation (TASK-33.10.5.6). Legacy sample-unit and

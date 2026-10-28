@@ -708,6 +708,12 @@ EstimatorSpec twolevel_ml() {
   return out;
 }
 
+EstimatorSpec rdwls() {
+  auto out = ordinal_dwls();
+  out.kind = EstimatorKind::RDWLS;
+  return out;
+}
+
 EstimatorSpec dwls() { return ordinal_dwls(); }
 
 InformationSpec expected_information() {
@@ -736,6 +742,19 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   if (!model || !data) {
     return std::unexpected(
         make_error(ErrorStage::Fit, "fit requires non-null model and data"));
+  }
+
+  if (estimator.kind == EstimatorKind::RDWLS) {
+    if (const auto* stats = data->ordinal()) {
+      auto exact = data::exact_gamma_stats(*stats);
+      if (!exact) return std::unexpected(make_error(ErrorStage::Data, exact.error()));
+      data = std::make_shared<const Data>(Data::from_ordinal(std::move(*exact)));
+    } else if (const auto* mixed_stats = data->mixed_ordinal()) {
+      auto exact = data::exact_gamma_stats(*mixed_stats);
+      if (!exact) return std::unexpected(make_error(ErrorStage::Data, exact.error()));
+      data = std::make_shared<const Data>(Data::from_mixed_ordinal(std::move(*exact)));
+    } else return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
+        "RDWLS requires complete ordinal or mixed observations"));
   }
 
   if (is_native_fcsem(*model)) {
@@ -991,6 +1010,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     break;
   case EstimatorKind::FIML:
   case EstimatorKind::DWLS:
+  case EstimatorKind::RDWLS:
   case EstimatorKind::TwoLevelML:
     // Handled by early returns above (FIML at the FIML branch; DWLS and
     // TwoLevelML before the sample-stats requirement). Unreachable here.

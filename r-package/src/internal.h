@@ -1171,6 +1171,11 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
     for (R_xlen_t b = 0; b < nb; ++b)
       out.sampling_moment_influence.push_back(Rcpp::as<Eigen::MatrixXd>(rows[b]));
   }
+  if (x.containsElementNamed("gamma_source") && Rcpp::as<std::string>(x["gamma_source"]) == "exact") {
+    out.gamma_source = magmaan::data::GammaSource::Exact;
+    out.W_wls.clear();
+    if (out.gamma_diag_influence.size() != out.R.size()) Rcpp::stop("RDWLS requires exact Gamma diagonal influence");
+  }
   return out;
 }
 

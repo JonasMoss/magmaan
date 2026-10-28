@@ -1672,3 +1672,26 @@ TEST_CASE("api Mplus constructor carries summary data plan and label groups") {
   CHECK(result->model.names().group_labels==std::vector<std::string>{"b","a"});
   CHECK_FALSE(result->model.options().build.meanstructure);
 }
+
+TEST_CASE("api RDWLS retains exact Gamma stats without changing DWLS data") {
+  using namespace magmaan;
+  const auto model = api::model_from_lavaan(ordinal_syntax());
+  REQUIRE_MESSAGE(model.has_value(), (model.has_value() ? "" : model.error().detail));
+  const auto stats = data::ordinal_stats_from_integer_data({ordinal_block()}, false);
+  REQUIRE_MESSAGE(stats.has_value(), (stats.has_value() ? "" : stats.error().detail));
+  const auto observed = api::data_from_ordinal(*model, *stats);
+  REQUIRE_MESSAGE(observed.has_value(), (observed.has_value() ? "" : observed.error().detail));
+  const auto fit = api::fit(*model, *observed, api::rdwls());
+  REQUIRE_MESSAGE(fit.has_value(), (fit.has_value() ? "" : fit.error().detail));
+  CHECK(fit->estimator() == api::EstimatorKind::RDWLS);
+  REQUIRE(fit->data().ordinal() != nullptr);
+  CHECK(fit->data().ordinal()->gamma_source == data::GammaSource::Exact);
+  CHECK(stats->gamma_source == data::GammaSource::Opg);
+  const auto exact = data::exact_gamma_stats(*stats);
+  REQUIRE_MESSAGE(exact.has_value(), (exact.has_value() ? "" : exact.error().detail));
+  CHECK((fit->data().ordinal()->NACOV[0]-exact->NACOV[0]).norm() == 0);
+  const auto covariance = estimate::robust_ordinal_ij(fit->model().structure(),
+      fit->model().matrix_rep(), *fit->data().ordinal(), fit->estimates(),
+      estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(covariance.has_value(), (covariance.has_value() ? "" : covariance.error().detail));
+}

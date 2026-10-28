@@ -2489,6 +2489,9 @@ fit_ordinal_configured_impl(spec::LatentStructure pt,
   auto fail = [](std::string message) -> fit_expected<Estimates> {
     return std::unexpected(make_err(FitError::Kind::NumericIssue, std::move(message)));
   };
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (options.preset == version || search || acceptance || setup->starts == version || setup->marker == version))
+    return fail("RDWLS has no lavaan fitting preset");
   if (weights != OrdinalWeightKind::DWLS)
     return fail("ordinal fitting options currently support only DWLS");
   if (pt.n_levels() != 1 || pt.composite_mode != spec::CompositeMode::None ||

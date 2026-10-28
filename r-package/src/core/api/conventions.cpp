@@ -242,6 +242,9 @@ ConventionInference lavaan_inference_ordinal(spec::LatentStructure pt,
     const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,
     estimate::OrdinalParameterization parameterization,
     LavaanConvention c, const PolicyFitState& state) {
+  if (stats.gamma_source == data::GammaSource::Exact)
+    return convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "RDWLS has no lavaan compatibility convention", state);
   using estimate::OrdinalWeightKind;
   const bool compatible =
       (weight == OrdinalWeightKind::DWLS && (c == LavaanConvention::DWLS || c == LavaanConvention::WLSMV)) ||
@@ -395,6 +398,9 @@ ConventionInference lavaan_inference_mixed_ordinal(spec::LatentStructure pt,
     const estimate::Estimates& estimates, estimate::OrdinalWeightKind weight,
     estimate::OrdinalParameterization parameterization,
     LavaanConvention c, const PolicyFitState& state) {
+  if (stats.gamma_source == data::GammaSource::Exact)
+    return convention_unavailable(c, InferenceReason::UnsupportedModel,
+        "RDWLS has no lavaan compatibility convention", state);
   using estimate::OrdinalWeightKind;
   const bool compatible = weight == OrdinalWeightKind::DWLS && c == LavaanConvention::WLSMV;
   for (const auto& raw : stats.raw_data)

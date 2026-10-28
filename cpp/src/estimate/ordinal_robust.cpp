@@ -5,6 +5,37 @@ namespace magmaan::estimate {
 using namespace detail_ordinal;
 
 namespace detail_ordinal {
+post_expected<Eigen::MatrixXd> ordinal_gamma_diag_case_influence(
+    const data::OrdinalStats& stats, std::size_t b,
+    const Eigen::MatrixXd& rows, bool observed) {
+  if (stats.gamma_source == data::GammaSource::Exact || !stats.gamma_diag_influence.empty()) {
+    if (stats.gamma_diag_influence.size() != stats.R.size() ||
+        stats.gamma_diag_influence[b].rows() != rows.rows() ||
+        stats.gamma_diag_influence[b].cols() != rows.cols() ||
+        !stats.gamma_diag_influence[b].allFinite())
+      return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
+          "RDWLS requires retained exact Gamma diagonal influence"});
+    return stats.gamma_diag_influence[b];
+  }
+  auto direct = observed
+      ? data::ordinal_observed_gamma_diag_data_influence(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b])
+      : data::ordinal_gamma_diag_data_influence(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+  if (!direct) return std::unexpected(direct.error());
+  auto jacobian = observed
+      ? data::ordinal_observed_gamma_diag_jacobian_fd(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b])
+      : data::ordinal_gamma_diag_jacobian_fd(
+            stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
+  if (!jacobian) return std::unexpected(jacobian.error());
+  if (direct->rows() != rows.rows() || direct->cols() != rows.cols() ||
+      jacobian->rows() != rows.cols() || jacobian->cols() != rows.cols())
+    return std::unexpected(PostError{PostError::Kind::NumericIssue,
+        "ordinal Gamma diagonal influence shape mismatch"});
+  return (*direct + rows * jacobian->transpose()).eval();
+}
+
 Eigen::Index ordinal_sandwich_block_rows(const data::OrdinalStats& stats,
                                          std::size_t b) {
   const Eigen::Index p = stats.R[b].rows();
@@ -138,6 +169,9 @@ OrdinalRobustResult ordinal_result_from_weighted(const WeightedRobustResult& r) 
 post_expected<std::vector<bool>>
 ordinal_ij_block_missing(const data::OrdinalStats& stats,
                          OrdinalWeightKind weights) {
+  if (stats.gamma_source == data::GammaSource::Exact && weights == OrdinalWeightKind::WLS)
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS exact Gamma stats do not provide full-WLS weight influence"));
   std::vector<bool> block_has_missing(stats.R.size(), false);
   if (weights == OrdinalWeightKind::ULS) return block_has_missing;
   if (stats.int_data.size() != stats.R.size()) {
@@ -300,31 +334,13 @@ build_ordinal_ij_blocks(const data::OrdinalStats& stats,
       // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
       // fixed κ] + [κ-movement Σ_l(∂Γ̂_kk/∂κ_l)g_{i,l}]. Both need the integer
       // data; pairwise-overlap MCAR blocks use the observed-support helpers.
-      Eigen::MatrixXd IFG;  // n_b × mb: data-direct IF of Γ̂_kk (V̂ + Â variation)
-      Eigen::MatrixXd GD;   // n_b × mb: κ-movement IF of Γ̂_kk (FD of Γ̂ over κ)
-      auto inf_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_diag_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_diag_data_influence(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!inf_or.has_value()) return std::unexpected(inf_or.error());
-      IFG = std::move(*inf_or);
-      auto D_or = block_has_missing[b]
-          ? data::ordinal_observed_gamma_diag_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b])
-          : data::ordinal_gamma_diag_jacobian_fd(
-                stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-                stats.R[b]);
-      if (!D_or.has_value()) return std::unexpected(D_or.error());
-      GD.noalias() = G * D_or->transpose();
+      auto gamma_if = ordinal_gamma_diag_case_influence(stats, b, G, block_has_missing[b]);
+      if (!gamma_if) return std::unexpected(gamma_if.error());
       correction = Eigen::MatrixXd::Zero(G.rows(), mb);
       for (Eigen::Index k = 0; k < mb; ++k) {
         const double gkk = stats.NACOV[b](k, k);
         if (!(gkk > 0.0)) continue;
-        const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
+        const Eigen::VectorXd if_k = gamma_if->col(k);
         correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
       }
     } else if (estimated_weight && weights == OrdinalWeightKind::WLS) {
@@ -956,6 +972,10 @@ build_mixed_ordinal_ij_blocks(const data::MixedOrdinalStats& stats,
     const Eigen::MatrixXd& Delta_full, OrdinalWeightKind weights,
     OrdinalParameterization parameterization, bool estimated_weight,
     bool require_exact_sampling) {
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (stats.gamma_diag_influence.size() != stats.R.size() || weights == OrdinalWeightKind::WLS))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires retained exact diagonal influence and DWLS weights"));
   const bool has_diag_gamma_if = stats.gamma_diag_influence.size() == stats.R.size();
   const bool has_full_gamma_if = stats.gamma_full_influence.size() == stats.R.size();
   if (stats.moment_influence.size() != stats.R.size())
@@ -1117,6 +1137,10 @@ robust_mixed_ordinal_ij(spec::LatentStructure pt,
         "robust_mixed_ordinal_ij: per-case influence functions unavailable; "
         "recompute mixed ordinal stats (moment_influence is required for the IJ)"));
   }
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (stats.gamma_diag_influence.size() != stats.R.size() || weights == OrdinalWeightKind::WLS))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires retained exact diagonal influence and DWLS weights"));
   const bool has_diag_gamma_if =
       stats.gamma_diag_influence.size() == stats.R.size();
   const bool has_full_gamma_if =
@@ -1215,6 +1239,10 @@ mixed_ordinal_rbm_parts(spec::LatentStructure pt,
         "mixed_ordinal_rbm_parts: per-case influence functions unavailable; "
         "recompute mixed ordinal stats (moment_influence is required for RBM)"));
   }
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (stats.gamma_diag_influence.size() != stats.R.size() || weights == OrdinalWeightKind::WLS))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires retained exact diagonal influence and DWLS weights"));
   const bool has_diag_gamma_if =
       stats.gamma_diag_influence.size() == stats.R.size();
   const bool has_full_gamma_if =

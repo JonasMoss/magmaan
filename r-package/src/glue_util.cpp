@@ -414,9 +414,9 @@ magmaan::inference::ModificationIndexOptions modification_options_from(
 magmaan::estimate::OrdinalWeightKind ordinal_weight_from_estimator(
     const std::string& estimator, const char* call) {
   if (estimator == "ULS") return magmaan::estimate::OrdinalWeightKind::ULS;
-  if (estimator == "DWLS") return magmaan::estimate::OrdinalWeightKind::DWLS;
+  if (estimator == "DWLS" || estimator == "RDWLS") return magmaan::estimate::OrdinalWeightKind::DWLS;
   if (estimator == "WLS") return magmaan::estimate::OrdinalWeightKind::WLS;
-  Rcpp::stop("magmaan: %s requires an ordinal ULS/DWLS/WLS fit", call);
+  Rcpp::stop("magmaan: %s requires an ordinal ULS/DWLS/RDWLS/WLS fit", call);
 }
 
 magmaan::measures::frontier::reliability::OmegaTarget
@@ -983,6 +983,13 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
     out.attr("moment_nobs") = moment_nobs;
     out.attr("moment_overlap_nobs") = overlap;
   }
+  if (!s.gamma_diag_influence.empty())
+    out["gamma_diag_influence"] = Rcpp::wrap(s.gamma_diag_influence);
+  if (s.gamma_source == magmaan::data::GammaSource::Exact) {
+    out["gamma_source"] = "exact";
+    out["sampling_moment_influence"] = Rcpp::wrap(s.sampling_moment_influence);
+    out["gamma_diag_influence"] = Rcpp::wrap(s.gamma_diag_influence);
+  }
   out.attr("class") = Rcpp::CharacterVector::create("magmaan_ordinal_data", "list");
   return out;
 }
@@ -1011,7 +1018,7 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
     threshold_level[b] = lev;
     NACOV[b] = Rcpp::wrap(s.NACOV[bi]);
     W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
-    W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
+    W_wls[b] = bi < s.W_wls.size() ? Rcpp::wrap(s.W_wls[bi]) : Rcpp::wrap(Eigen::MatrixXd(0, 0));
     moment_influence[b] = bi < s.moment_influence.size()
         ? Rcpp::wrap(s.moment_influence[bi])
         : Rcpp::wrap(Eigen::MatrixXd(0, 0));
@@ -1044,6 +1051,11 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
       Rcpp::_["raw_data"] = raw_data,
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
+  if (s.gamma_source == magmaan::data::GammaSource::Exact) {
+    out["gamma_source"] = "exact";
+    out["sampling_moment_influence"] = Rcpp::wrap(s.sampling_moment_influence);
+    out["gamma_diag_influence"] = Rcpp::wrap(s.gamma_diag_influence);
+  }
   out.attr("class") = Rcpp::CharacterVector::create("magmaan_mixed_ordinal_data", "list");
   return out;
 }
@@ -1356,6 +1368,19 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     if (rows.size() != nb) Rcpp::stop("sampling_moment_influence has incompatible block count");
     for (R_xlen_t b = 0; b < nb; ++b)
       out.sampling_moment_influence.push_back(Rcpp::as<Eigen::MatrixXd>(rows[b]));
+  }
+  if (x.containsElementNamed("gamma_diag_influence")) {
+    out.gamma_diag_influence = Rcpp::as<std::vector<Eigen::MatrixXd>>(x["gamma_diag_influence"]);
+    if (out.gamma_diag_influence.size() != out.R.size())
+      Rcpp::stop("gamma_diag_influence has incompatible block count");
+    const bool empty = std::all_of(out.gamma_diag_influence.begin(), out.gamma_diag_influence.end(),
+        [](const auto& rows) { return rows.size() == 0; });
+    if (empty) out.gamma_diag_influence.clear();
+  }
+  if (x.containsElementNamed("gamma_source") && Rcpp::as<std::string>(x["gamma_source"]) == "exact") {
+    out.gamma_source = magmaan::data::GammaSource::Exact;
+    out.W_wls.clear();
+    if (out.gamma_diag_influence.size() != out.R.size()) Rcpp::stop("RDWLS requires exact Gamma diagonal influence");
   }
   return out;
 }

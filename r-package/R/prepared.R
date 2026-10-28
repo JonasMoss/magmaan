@@ -128,18 +128,25 @@ prepare_data <- function(model, data, kind = NULL, missing = c("error", "listwis
 #'
 #' For categorical data full=TRUE also retains Gamma for existing post-fit
 #' inference functions. full=FALSE prepares only the diagonal needed by DWLS.
+#' RDWLS uses the diagonal inverse of exact first-stage Gamma for complete
+#' ordinal/mixed data, retaining exact Gamma, sampling rows and diagonal
+#' influence even when full=FALSE. Its fitting weight remains diagonal.
+#' It has no lavaan preset or compatibility bundle. DWLS keeps OPG weights.
 #' Fixed weights use source-specific NT/empirical Gamma, or W in model moment order.
 #' Continuous diagonal W blocks are owning numeric vectors of weight entries
 #' (not square roots); full blocks remain matrices. W accepts either form,
 #' or a list of blocks. Native prepared handles are process-local; serialize
 #' W and prepare a new handle after loading it.
 #' @rdname prepared
-prepare_weight <- function(data, method = c("DWLS", "WLS", "ULS", "GLS", "DLS"), W = NULL, full = TRUE,
+prepare_weight <- function(data, method = c("DWLS", "RDWLS", "WLS", "ULS", "GLS", "DLS"), W = NULL, full = TRUE,
                            dls_a = 0.5) {
   stopifnot(inherits(data, "magmaan_prepared_data"))
   if (identical(tolower(method[1L]), "custom") && is.null(W)) stop("custom weight requires W")
   method <- .fixed_weight_method(tolower(method[1L]))
   .fixed_weight_options(method, W, dls_a)
+  if (method == "RDWLS" && (!data$kind %in% c("ordinal", "mixed") ||
+      any(data$deletion$per_group$rows_deleted > 0)))
+    stop("RDWLS requires complete ordinal or mixed observations")
   if (length(full) != 1L || is.na(full) || !is.logical(full)) stop("prepare_weight(): full must be TRUE or FALSE")
   prepared <- prepared_weight_impl(data$native, method, W, full, data$model$native, dls_a)
   .prepared_object(native = prepared$native, data = data, method = method, full = full,
@@ -164,7 +171,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   if (is.character(weight)) {
     if (identical(tolower(weight), "custom")) stop("custom weight requires prepare_weight(data, W = ...)")
     weight <- prepare_weight(data, .fixed_weight_method(weight), dls_a = dls_a)
-    if (is.null(estimator) || toupper(estimator) %in% c("ULS", "GLS", "DWLS", "WLS", "ADF", "DLS")) estimator <- weight$method
+    if (is.null(estimator) || toupper(estimator) %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "ADF", "DLS")) estimator <- weight$method
   }
   if (!is.null(weight)) {
     stopifnot(inherits(weight, "magmaan_prepared_weight"))
@@ -178,14 +185,14 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
     list(message = "estimate(): ML2S is not supported by prepared handles; use fit_model()", call = NULL),
     class = c("magmaan_unsupported_estimator", "error", "condition")))
   if (identical(estimator, "ADF")) estimator <- "WLS"
-  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "GLS", "DWLS", "WLS", "DLS"),
-                    mixed = c("DWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS", "DLS"))
+  allowed <- switch(data$kind, raw = "FIML", ordinal = c("ML", "ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS"),
+                    mixed = c("DWLS", "RDWLS", "WLS"), c("ML", "ULS", "GLS", "WLS", "DWLS", "RDWLS", "DLS"))
   if (data$kind == "mixed" && identical(estimator, "ULS"))
     stop("estimate(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
   if (length(estimator) != 1L || !estimator %in% allowed) stop("estimate(): unsupported estimator for this data kind")
   # Default fits retain categorical Gamma for later reporting, including ULS.
   # Explicit full = FALSE weights remain available for estimation-only callers.
-  if (is.null(weight) && (estimator %in% c("DWLS", "WLS", "DLS") ||
+  if (is.null(weight) && (estimator %in% c("DWLS", "RDWLS", "WLS", "DLS") ||
       (data$kind == "ordinal" && estimator == "ULS") ||
       (data$kind == "ordinal" && estimator == "GLS"))) weight <- prepare_weight(data, estimator, dls_a = dls_a)
   if (!is.null(bounds) && (!is.list(bounds) || is.character(bounds)))
@@ -195,7 +202,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   barrier <- covariance_options$barrier
   marker_options <- options %||% control$fitting_options
   if (!is.null(marker_options) && ((estimator == "ML" && data$kind == "moments") || estimator == "FIML" ||
-      (estimator == "DWLS" && data$kind %in% c("ordinal", "mixed"))) && covariance == "unrestricted") {
+      (estimator %in% c("DWLS", "RDWLS") && data$kind %in% c("ordinal", "mixed"))) && covariance == "unrestricted") {
     switched <- .marker_fit(model, data, marker_options, function(m, o) {
       ctl <- control
       if (!is.null(ctl$fitting_options)) ctl$fitting_options <- NULL
@@ -227,7 +234,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   }
   if (!is.null(options)) {
     if (!(estimator %in% c("ML", "FIML") && model$kind == "moments" ||
-          estimator == "DWLS" && model$kind %in% c("ordinal", "mixed")) || covariance != "unrestricted")
+          estimator %in% c("DWLS", "RDWLS") && model$kind %in% c("ordinal", "mixed")) || covariance != "unrestricted")
       stop("fitting options currently require ordinary continuous ML or FIML, or ordinal/mixed DWLS")
     control <- .fitting_control(options, control, optimizer)
     optimizer <- NULL
@@ -244,11 +251,12 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
                              class = c("magmaan_complete_data", "list"))
   }
   fit <- .retain_deletion(fit, data)
+  if (estimator == "RDWLS") fit$estimator <- "RDWLS"
   fit <- finalize_magmaan_fit(fit, spec, estimator,
                       if (data$kind == "raw") "fiml" else data$missing, "none", "none")
-  if (estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) fit$moment_weight <-
+  if (estimator %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS")) fit$moment_weight <-
     if (!is.null(weight) && isTRUE(weight$supplied)) "custom" else switch(estimator,
-      ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+      ULS = "uls", GLS = "nt", DWLS = "dwls", RDWLS = "rdwls", WLS = "adf", DLS = "dls")
   if (estimator == "DLS") fit$stage2_dls_a <- weight$dls_a
   source <- switch(data$kind, ordinal = "polychoric", mixed = "mixed_polyserial", raw = "raw_observed", "complete_continuous")
   fit <- .finish_covariance_fit(fit, source, covariance, barrier,
@@ -257,7 +265,7 @@ estimate <- function(model, data, estimator = NULL, weight = NULL,
   fit$options$barrier <- barrier
   fit$options$psd <- covariance == "psd"
   if (!is.null(weight) && isTRUE(weight$supplied)) route_args$W <-
-    if (data$kind == "moments") weight$W else if (estimator == "DWLS") weight$stats$W_dwls else weight$stats$W_wls
+    if (data$kind == "moments") weight$W else if (estimator %in% c("DWLS", "RDWLS")) weight$stats$W_dwls else weight$stats$W_wls
   # A native weight handle cannot be replayed by fit_model(); record its method
   # and any supplied matrix in the ordinary fitter's argument vocabulary.
   if (!"estimator" %in% names(route_args) || !is.null(weight)) route_args$estimator <- estimator

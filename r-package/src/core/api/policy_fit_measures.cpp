@@ -400,7 +400,7 @@ PolicyFitMeasures policy_fit_measures(const Fit& fit) {
   const auto& est = fit.estimates();
   const auto ordinal = fit.data().ordinal();
   const auto mixed = fit.data().mixed_ordinal();
-  if (fit.estimator() == EstimatorKind::DWLS) {
+  if ((fit.estimator() == EstimatorKind::DWLS || fit.estimator() == EstimatorKind::RDWLS)) {
     if (ordinal) return policy_fit_measures(pt, rep, *ordinal, est, state, fit.estimator_spec().ordinal_parameterization);
     if (mixed) return policy_fit_measures(pt, rep, *mixed, est, state, fit.estimator_spec().ordinal_parameterization);
   }

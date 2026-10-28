@@ -1,8 +1,8 @@
 # Covariance domain and penalty are distinct internal choices. The friendly
 # policy selects one; legacy psd= remains a compatible spelling.
 .fixed_weight_method <- function(weight) {
-  key <- match.arg(tolower(weight), c("uls", "nt", "gls", "dwls", "wls", "adf", "dls", "custom"))
-  switch(key, uls = "ULS", nt = "GLS", gls = "GLS", dwls = "DWLS", dls = "DLS", "WLS")
+  key <- match.arg(tolower(weight), c("uls", "nt", "gls", "dwls", "rdwls", "wls", "adf", "dls", "custom"))
+  switch(key, rdwls = "RDWLS", uls = "ULS", nt = "GLS", gls = "GLS", dwls = "DWLS", dls = "DLS", "WLS")
 }
 
 .fixed_weight_options <- function(method, W = NULL, dls_a = 0.5) {
@@ -65,9 +65,9 @@
   composition$discrepancy <- if (identical(source, "saturated_fiml")) {
     switch(fit$stage2_weight %||% "nt", nt = "ML", uls = "ULS", dwls = "DWLS", "WLS")
   } else fit$estimator
-  if (fit$estimator %in% c("ULS", "GLS", "DWLS", "WLS", "DLS")) {
+  if (fit$estimator %in% c("ULS", "GLS", "DWLS", "RDWLS", "WLS", "DLS")) {
     composition$weight <- fit$moment_weight %||% switch(fit$estimator,
-        ULS = "uls", GLS = "nt", DWLS = "dwls", WLS = "adf", DLS = "dls")
+        ULS = "uls", GLS = "nt", DWLS = "dwls", RDWLS = "rdwls", WLS = "adf", DLS = "dls")
     composition$weight_frozen <- TRUE
     if (identical(composition$weight, "dls")) composition$dls_a <- fit$stage2_dls_a
   }

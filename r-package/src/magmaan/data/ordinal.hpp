@@ -13,10 +13,16 @@
 
 namespace magmaan::data {
 
+// Opg is the conventional DWLS NACOV; Exact is the RDWLS sampling covariance.
+enum class GammaSource { Opg, Exact };
+
 // All ordinal covariance-like matrices use the same moment order:
 // thresholds first, then lower-triangle polychorics by columns
 // (rho_10, rho_20, ..., rho_p0, rho_21, ...).
 struct OrdinalStats {
+  GammaSource gamma_source = GammaSource::Opg;
+  // Complete per-case influence of diag(NACOV), retained by RDWLS.
+  std::vector<Eigen::MatrixXd> gamma_diag_influence;
   std::vector<Eigen::MatrixXd> R;
   std::vector<Eigen::VectorXd> thresholds;
   std::vector<std::vector<std::int32_t>> threshold_ov;
@@ -37,7 +43,7 @@ struct OrdinalStats {
   std::vector<Eigen::MatrixXd> moment_influence;
 
   // Optional complete-data empirical score-Jacobian sampling rows, distinct
-  // from OPG moment_influence. Used only when Exact first stage is selected.
+  // from OPG moment_influence (identical on GammaSource::Exact stats). Used only when Exact first stage is selected.
   std::vector<Eigen::MatrixXd> sampling_moment_influence;
 
   // 0-based integer category data (n_b × p), one matrix per block, -1 for
@@ -70,6 +76,7 @@ struct OrdinalStats {
 // thresholds, negative continuous means, continuous variances, then all
 // lower-triangle covariance/correlation entries by columns.
 struct MixedOrdinalStats {
+  GammaSource gamma_source = GammaSource::Opg;
   std::vector<Eigen::MatrixXd> R;
   std::vector<Eigen::VectorXd> mean;
   std::vector<std::vector<std::int32_t>> ordered;
@@ -111,6 +118,11 @@ struct MixedOrdinalStats {
   // one.
   std::vector<Eigen::MatrixXd> raw_data;
 };
+
+// RDWLS adapters require complete observations. Both OPG and Exact inference
+// selectors use the retained exact rows on these stats. Other fields are preserved.
+post_expected<OrdinalStats> exact_gamma_stats(const OrdinalStats& stats);
+post_expected<MixedOrdinalStats> exact_gamma_stats(const MixedOrdinalStats& stats);
 
 // Observed all-ordinal moment metadata without Gamma/NACOV or fit weights.
 // This is the non-breaking split point for cache-aware ordinal fitting: legacy

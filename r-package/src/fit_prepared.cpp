@@ -577,9 +577,9 @@ Rcpp::List policy_inference_dwls_impl(Rcpp::List fit, Rcpp::LogicalVector state,
   if (fit_state.penalized) {
     out = magmaan::api::policy_unavailable(InferenceReason::Penalized,
                                            std::string(magmaan::api::penalized_detail));
-  } else if (!ordinal || text("estimator") != "DWLS" ||
+  } else if (!ordinal || (text("estimator") != "DWLS" && text("estimator") != "RDWLS") ||
              (!computational.empty() && computational != "DWLS") ||
-             (!recipe.empty() && recipe != "dwls")) {
+             (!recipe.empty() && recipe != "dwls" && recipe != "rdwls")) {
     out = magmaan::api::policy_unavailable(InferenceReason::UnsupportedModel,
         "the categorical inference policy covers plain ordinal or mixed DWLS fits");
   } else {
@@ -629,9 +629,9 @@ Rcpp::List policy_nested_dwls_impl(Rcpp::List fit_H1, Rcpp::List fit_H0,
         (fit.containsElementNamed("mixed_ordinal") && Rcpp::as<bool>(fit["mixed_ordinal"]));
     const std::string computational = text(fit, "ordinal_computational_weight");
     const std::string recipe = text(fit, "moment_weight");
-    if (!ordinal || text(fit, "estimator") != "DWLS" ||
+    if (!ordinal || (text(fit, "estimator") != "DWLS" && text(fit, "estimator") != "RDWLS") ||
         (!computational.empty() && computational != "DWLS") ||
-        (!recipe.empty() && recipe != "dwls")) {
+        (!recipe.empty() && recipe != "dwls" && recipe != "rdwls")) {
       Rcpp::stop("the categorical nested policy covers plain ordinal or mixed DWLS fits");
     }
   }

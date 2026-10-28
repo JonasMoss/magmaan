@@ -308,6 +308,7 @@ enum class EstimatorKind : std::uint8_t {
   GLS,
   WLS,
   DWLS,
+  RDWLS,
   TwoLevelML,   // two-level (multilevel) normal-theory ML; see estimate::twolevel
 };
 
@@ -351,6 +352,7 @@ EstimatorSpec uls();
 EstimatorSpec gls();
 EstimatorSpec wls(estimate::gmm::Weight weight);
 EstimatorSpec ordinal_dwls();
+EstimatorSpec rdwls();
 EstimatorSpec ordinal_wls();
 EstimatorSpec dwls();
 EstimatorSpec twolevel_ml();

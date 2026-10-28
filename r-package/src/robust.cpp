@@ -61,10 +61,10 @@ Rcpp::List test_moments_pair_to_list(
 }
 
 magmaan::estimate::OrdinalWeightKind ordinal_weight_from_string(const std::string& s) {
-  if (s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
+  if (s == "RDWLS" || s == "rdwls" || s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
   if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
   if (s == "ULS" || s == "uls") return magmaan::estimate::OrdinalWeightKind::ULS;
-  Rcpp::stop("magmaan: `weight` must be 'DWLS', 'WLS' or 'ULS' (got '%s')", s);
+  Rcpp::stop("magmaan: `weight` must be 'DWLS', 'RDWLS', 'WLS' or 'ULS' (got '%s')", s);
 }
 
 // One shared reader (glue_util.cpp) restores every field ordinal_stats_to_r
@@ -240,7 +240,7 @@ std::string ordinal_fit_weight(Rcpp::List fit, const char* caller) {
 
 void require_dwls_fit(Rcpp::List fit, const char* caller) {
   const std::string weight = ordinal_fit_weight(fit, caller);
-  if (!(weight == "DWLS" || weight == "dwls")) {
+  if (!(weight == "RDWLS" || weight == "rdwls" || weight == "DWLS" || weight == "dwls")) {
     Rcpp::stop("magmaan: %s is defined for DWLS fits only (got '%s')",
                caller, weight);
   }

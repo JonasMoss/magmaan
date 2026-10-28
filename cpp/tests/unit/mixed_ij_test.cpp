@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
+#include "../oracle.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -193,6 +194,101 @@ TEST_CASE("Mixed DWLS IJ agrees with replicated case-weight finite differences")
         for (int i=0;i<n;++i)
           for (int j=0;j<copies+(i==row ? step : 0);++j) repeated.row(off++)=x.row(i);
         auto st=data::mixed_ordinal_stats_from_data({repeated},ordered,false);
+        REQUIRE(st.has_value());
+        perturbed[side]=std::move(*st);
+        auto refit=estimate::fit_mixed_ordinal_bounded(m.pt,m.rep,perturbed[side],{},
+            OrdinalWeightKind::DWLS,fit->theta,estimate::Backend::NloptLbfgs,tight(),parameterization);
+        REQUIRE(refit.has_value());
+        polish(m,perturbed[side],*refit,parameterization);
+        theta[side]=refit->theta;
+      }
+      const Eigen::VectorXd derivative=(theta[1]-theta[0])*(copies/2.0);
+      const Eigen::VectorXd moment_fd=(perturbed[1].moments[0]-perturbed[0].moments[0])*(n*copies/2.0);
+      // Marginal sample mean and ML variance have exact empirical
+      // derivatives, independent of any normal-information approximation.
+      Eigen::VectorXd marginal(6);
+      for (int j=0;j<3;++j) {
+        const double residual=x(row,j+3)-stats->mean[0](j+3);
+        marginal(j)=-residual;
+        marginal(j+3)=residual*residual-stats->R[0](j+3,j+3);
+      }
+      CHECK((moment_fd.segment(6,6)-marginal).norm()/marginal.norm() < 1e-6);
+      const double moment_error=(moment_fd-sampling->row(row).transpose()).norm()/moment_fd.norm();
+      const Eigen::VectorXd gamma_fd=(perturbed[1].NACOV[0].diagonal()-
+          perturbed[0].NACOV[0].diagonal())*(n*copies/2.0);
+      const double gamma_error=(gamma_fd-gamma_if.row(row).transpose()).norm()/gamma_fd.norm();
+      // Isolate the selected row so its covariance is the outer product of
+      // its predicted parameter derivative (the API does not expose rows).
+      auto isolated=*stats;
+      isolated.sampling_moment_influence={Eigen::MatrixXd::Zero(n,sampling->cols())};
+      isolated.sampling_moment_influence[0].row(row)=sampling->row(row);
+      isolated.gamma_diag_influence={Eigen::MatrixXd::Zero(n,gamma_if.cols())};
+      isolated.gamma_diag_influence[0].row(row)=gamma_if.row(row);
+      auto ij=estimate::robust_mixed_ordinal_ij(m.pt,m.rep,isolated,*fit,
+          OrdinalWeightKind::DWLS,parameterization);
+      REQUIRE(ij.has_value());
+      const Eigen::MatrixXd fd_outer=derivative*derivative.transpose();
+      const double error=(ij->vcov-fd_outer).norm()/fd_outer.norm();
+      MESSAGE("case-weight outer-product relative error " << error << ", Gamma row error " << gamma_error << ", moment row error " << moment_error);
+      // The public IJ returns covariance, so recover the rank-one row up to
+      // its unobservable sign before testing parameter-level agreement.
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen(ij->vcov);
+      REQUIRE(eigen.info() == Eigen::Success);
+      Eigen::VectorXd predicted=eigen.eigenvectors().col(derivative.size()-1)*
+          std::sqrt(std::max(0.0,eigen.eigenvalues()(derivative.size()-1)));
+      if (predicted.dot(derivative)<0) predicted=-predicted;
+      CHECK((predicted-derivative).norm()/derivative.norm() < 1e-5);
+      CHECK(error < 2e-5);
+      CHECK(gamma_error < 1e-5);
+      CHECK(moment_error < 1e-5);
+    }
+  }
+}
+
+TEST_CASE("Mixed RDWLS IJ agrees with replicated case-weight finite differences") {
+  // Integer replication implements empirical case weights independently of
+  // the influence formulas. +/- one copy is a central weight step 1/copies.
+  const int n=150, copies=100;
+  const auto x=mixed_block(6700u,n);
+  const std::vector<std::vector<std::int32_t>> ordered{{1,1,1,0,0,0}};
+  auto stats=data::mixed_ordinal_stats_from_data({x},ordered,false);
+  REQUIRE(stats.has_value());
+  stats = data::exact_gamma_stats(*stats);
+  REQUIRE(stats.has_value());
+  const auto& rows = stats->moment_influence[0];
+  post_expected<Eigen::MatrixXd> sampling = rows;
+  const Eigen::MatrixXd gamma_if = stats->gamma_diag_influence[0];
+  CHECK((stats->NACOV[0] - rows.transpose()*rows/n).norm() < 1e-12);
+  CHECK((stats->W_dwls[0].diagonal().array()*stats->NACOV[0].diagonal().array()-1).abs().maxCoeff() < 1e-12);
+  CHECK(stats->W_wls.empty());
+  const auto m=mixed_model(1);
+  for (auto parameterization : {OrdinalParameterization::Delta,OrdinalParameterization::Theta}) {
+    auto fit=test::fit_mixed_ordinal_bounded(m.pt,m.rep,*stats,{},OrdinalWeightKind::DWLS,
+        estimate::Backend::NloptLbfgs,tight(),parameterization);
+    REQUIRE(fit.has_value());
+    polish(m,*stats,*fit,parameterization);
+    CHECK(estimate::fit_verdict(*fit).status == estimate::FitCheck::Passed);
+    auto forced = *stats;
+    forced.gamma_source = data::GammaSource::Opg;
+    auto same = test::fit_mixed_ordinal_bounded(m.pt,m.rep,forced,{},OrdinalWeightKind::DWLS,
+        estimate::Backend::NloptLbfgs,tight(),parameterization);
+    REQUIRE(same.has_value());
+    polish(m,forced,*same,parameterization);
+    CHECK((same->theta-fit->theta).norm() < 1e-10);
+
+    for (int row : {0,17,91}) {
+      CAPTURE(row); CAPTURE(static_cast<int>(parameterization));
+      Eigen::VectorXd theta[2];
+      data::MixedOrdinalStats perturbed[2];
+      for (int side=0;side<2;++side) {
+        const int step=side==0 ? -1 : 1;
+        Eigen::MatrixXd repeated(n*copies+step,x.cols());
+        int off=0;
+        for (int i=0;i<n;++i)
+          for (int j=0;j<copies+(i==row ? step : 0);++j) repeated.row(off++)=x.row(i);
+        auto st=data::mixed_ordinal_stats_from_data({repeated},ordered,false);
+        REQUIRE(st.has_value());
+        st = data::exact_gamma_stats(*st);
         REQUIRE(st.has_value());
         perturbed[side]=std::move(*st);
         auto refit=estimate::fit_mixed_ordinal_bounded(m.pt,m.rep,perturbed[side],{},
@@ -671,4 +767,76 @@ TEST_CASE("Mixed estimated-weight MI reconstructs observed projection and augmen
       }
     }
   }
+}
+
+TEST_CASE("RDWLS exact Gamma agrees with lavaan 0.7-3 mixed diagonal") {
+  const auto fixture = test::load_json_fixture("rdwls_gamma_073.json");
+  REQUIRE_FALSE(fixture.is_discarded());
+  const auto x = test::matrix_from_json(fixture["X"]);
+  auto stats = data::mixed_ordinal_stats_from_data({x}, {{1,1,1,0,0,0}}, false);
+  REQUIRE(stats.has_value());
+  auto exact = data::exact_gamma_stats(*stats);
+  REQUIRE(exact.has_value());
+  const auto& rows = exact->moment_influence[0];
+  CHECK((exact->NACOV[0] - rows.transpose()*rows/x.rows()).norm() < 1e-12);
+  double max_relative = 0;
+  // Threshold and polychoric entries retain lavaan's OPG convention. Gate
+  // the continuous means/variances/covariances and polyserial entries only.
+  for (int k = 6; k < 27; ++k) {
+    if (k == 12 || k == 13 || k == 17) continue;
+    const double expected = fixture["gamma_diag"][static_cast<std::size_t>(k)].get<double>();
+    max_relative = std::max(max_relative, std::abs(exact->NACOV[0](k,k)/expected-1));
+  }
+  MESSAGE("lavaan 0.7-3 exact Gamma maximum relative difference " << max_relative);
+  CHECK(max_relative < 1e-6);
+}
+
+TEST_CASE("RDWLS all-ordinal stats preserve metadata and both sampling selectors") {
+  auto x = mixed_block(6720u, 300).leftCols(4).eval();
+  x.col(3) = (1.0 + (x.col(3).array() > -0.5).cast<double>() +
+             (x.col(3).array() > 0.5).cast<double>()).matrix();
+  auto stats = data::ordinal_stats_from_integer_data({x}, false);
+  REQUIRE(stats.has_value());
+  auto exact = data::exact_gamma_stats(*stats);
+  REQUIRE(exact.has_value());
+  CHECK(exact->gamma_source == data::GammaSource::Exact);
+  CHECK(exact->n_obs == stats->n_obs);
+  CHECK(exact->threshold_ov == stats->threshold_ov);
+  CHECK(exact->threshold_level == stats->threshold_level);
+  CHECK((exact->R[0]-stats->R[0]).norm() == 0);
+  CHECK((exact->thresholds[0]-stats->thresholds[0]).norm() == 0);
+  const auto& rows = exact->moment_influence[0];
+  CHECK((exact->NACOV[0]-rows.transpose()*rows/300).norm() < 1e-12);
+  CHECK((exact->W_dwls[0].diagonal().array()*exact->NACOV[0].diagonal().array()-1).abs().maxCoeff() < 1e-12);
+  auto parsed = parse::Parser::parse(
+      "f =~ x1 + .9*x2 + x3 + x4\n"
+      "x1 | t1+t2\nx2 | t1+t2\nx3 | t1+t2\nx4 | t1+t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n");
+  REQUIRE(parsed.has_value());
+  auto pt = spec::build(*parsed);
+  REQUIRE(pt.has_value());
+  auto rep = model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  for (auto par : {OrdinalParameterization::Delta, OrdinalParameterization::Theta}) {
+    auto fit = test::fit_ordinal_bounded(*pt,*rep,*exact,{},OrdinalWeightKind::DWLS,
+        estimate::Backend::NloptLbfgs,tight(),par);
+    REQUIRE(fit.has_value());
+    auto opg = estimate::robust_ordinal_ij(*pt,*rep,*exact,*fit,OrdinalWeightKind::DWLS,par);
+    auto sampling = estimate::robust_ordinal_ij(*pt,*rep,*exact,*fit,OrdinalWeightKind::DWLS,
+        par,nullptr,estimate::OrdinalFirstStage::Exact);
+    REQUIRE(opg.has_value()); REQUIRE(sampling.has_value());
+    CHECK((opg->vcov-sampling->vcov).norm() < 1e-12);
+    auto full = *exact;
+    full.W_wls = {exact->NACOV[0].inverse()};
+    auto unsupported = estimate::robust_ordinal_ij(*pt,*rep,full,*fit,OrdinalWeightKind::WLS,par);
+    REQUIRE_FALSE(unsupported.has_value());
+    CHECK(unsupported.error().kind == PostError::Kind::UnsupportedInference);
+    CHECK(unsupported.error().detail.find("RDWLS") != std::string::npos);
+
+  }
+  stats->int_data[0](0,0) = -1;
+  auto missing = data::exact_gamma_stats(*stats);
+  REQUIRE_FALSE(missing.has_value());
+  CHECK(missing.error().kind == PostError::Kind::UnsupportedInference);
+  CHECK(missing.error().detail.find("RDWLS") != std::string::npos);
 }

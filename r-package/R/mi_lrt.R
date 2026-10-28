@@ -140,9 +140,9 @@ modification_indices_lrt <- function(fit, data,
 .lrt_profile_obj <- function(rel, fit, data_list, weight = NULL,
                              eig_tol = 1e-10) {
   est <- toupper(fit$estimator %||% "ML")
-  if (isTRUE(fit$ordinal) && est == "DWLS") {
+  if (isTRUE(fit$ordinal) && est %in% c("DWLS", "RDWLS")) {
     infer_ordinal_profile_lrt(rel, fit, fit$ordinal_stats, eig_tol)
-  } else if (isTRUE(fit$mixed_ordinal) && est == "DWLS") {
+  } else if (isTRUE(fit$mixed_ordinal) && est %in% c("DWLS", "RDWLS")) {
     infer_mixed_ordinal_profile_lrt(rel, fit, fit$mixed_ordinal_stats, eig_tol)
   } else if (est %in% c("ULS", "GLS", "WLS")) {
     infer_continuous_ls_profile_lrt(rel, fit, data_list, weight = weight,

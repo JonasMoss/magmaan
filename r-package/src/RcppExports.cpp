@@ -2156,6 +2156,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_exact_gamma_stats_impl
+Rcpp::List data_exact_gamma_stats_impl(Rcpp::List stats, bool mixed);
+RcppExport SEXP _magmaanlab_data_exact_gamma_stats_impl(SEXP statsSEXP, SEXP mixedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type stats(statsSEXP);
+    Rcpp::traits::input_parameter< bool >::type mixed(mixedSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_exact_gamma_stats_impl(stats, mixed));
+    return rcpp_result_gen;
+END_RCPP
+}
 // policy_modification_indices_impl
 Rcpp::DataFrame policy_modification_indices_impl(Rcpp::List fit, Rcpp::LogicalVector state, SEXP raw, bool releases);
 RcppExport SEXP _magmaanlab_policy_modification_indices_impl(SEXP fitSEXP, SEXP stateSEXP, SEXP rawSEXP, SEXP releasesSEXP) {
@@ -4933,6 +4945,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_frontier_fit_mixed_ordinal_psd_impl", (DL_FUNC) &_magmaanlab_frontier_fit_mixed_ordinal_psd_impl, 9},
     {"_magmaanlab_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaanlab_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaanlab_frontier_ordinal_newton_audit_impl", (DL_FUNC) &_magmaanlab_frontier_ordinal_newton_audit_impl, 2},
+    {"_magmaanlab_data_exact_gamma_stats_impl", (DL_FUNC) &_magmaanlab_data_exact_gamma_stats_impl, 2},
     {"_magmaanlab_policy_modification_indices_impl", (DL_FUNC) &_magmaanlab_policy_modification_indices_impl, 4},
     {"_magmaanlab_policy_mi_alternative_impl", (DL_FUNC) &_magmaanlab_policy_mi_alternative_impl, 7},
     {"_magmaanlab_prepared_model_impl", (DL_FUNC) &_magmaanlab_prepared_model_impl, 3},

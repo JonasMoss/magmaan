@@ -10,14 +10,17 @@ data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted"
                                         h_lambda = 0.2,
                                         clip = c("hard_huber", "pseudo_huber",
                                                  "tukey_biweight", "none"),
-                                        k = NULL, full_wls_weight = TRUE) {
+                                        k = NULL, full_wls_weight = TRUE, gamma = c("opg", "exact")) {
+  gamma <- match.arg(gamma)
+  if (gamma == "exact" && anyNA(X, recursive = TRUE)) stop("RDWLS exact Gamma requires complete observations")
+  if (gamma == "exact") full_wls_weight <- FALSE
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
   clip <- match.arg(clip)
   if (is.null(k)) {
     k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
   }
-  switch(
+  out <- switch(
     robust,
     ml = data_ordinal_stats_from_raw_impl(X, full_wls_weight = full_wls_weight),
     none = data_ordinal_stats_from_raw_impl(X, full_wls_weight = full_wls_weight),
@@ -27,7 +30,9 @@ data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted"
     huber_residual = data_ordinal_stats_huber_residual_from_raw_impl(
       X, clip = clip, k = k)
   )
+  if (gamma == "exact") data_exact_gamma_stats_impl(out) else out
 }
+
 data_ordinal_stats_h_weighted_from_raw <- data_ordinal_stats_h_weighted_from_raw_impl
 data_ordinal_stats_dpd_from_raw <- data_ordinal_stats_dpd_from_raw_impl
 data_ordinal_stats_huber_residual_from_raw <- data_ordinal_stats_huber_residual_from_raw_impl
@@ -38,13 +43,16 @@ data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
                                               clip = c("hard_huber", "pseudo_huber",
                                                        "tukey_biweight", "none"),
                                               k = NULL,
-                                              full_wls_weight = TRUE) {
+                                              full_wls_weight = TRUE, gamma = c("opg", "exact")) {
+  gamma <- match.arg(gamma)
+  if (gamma == "exact" && anyNA(X, recursive = TRUE)) stop("RDWLS exact Gamma requires complete observations")
+  if (gamma == "exact") full_wls_weight <- FALSE
   polyserial <- match.arg(polyserial)
   clip <- match.arg(clip)
   if (is.null(k)) {
     k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
   }
-  switch(
+  out <- switch(
     polyserial,
     ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask, full_wls_weight),
     dpd = data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
@@ -52,7 +60,9 @@ data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
     huber_residual = data_mixed_ordinal_stats_huber_residual_from_raw_impl(
       X, ordered_mask, clip = clip, k = k)
   )
+  if (gamma == "exact") data_exact_gamma_stats_impl(out, TRUE) else out
 }
+
 data_shrink_mixed_ordinal_stats <- data_shrink_mixed_ordinal_stats_impl
 data_mixed_ordinal_stats_observed_from_raw <- data_mixed_ordinal_stats_observed_from_raw_impl
 data_mixed_ordinal_stats_hybrid_fiml_from_raw <- data_mixed_ordinal_stats_hybrid_fiml_from_raw_impl

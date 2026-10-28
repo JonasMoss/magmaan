@@ -165,8 +165,10 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
   const auto& d = get<Data>(data_ptr, "magmaan_prepared_data");
   Weight w; w.method = method;
   Rcpp::List W_blocks;
-  if (method != "DWLS" && method != "WLS" && method != "ULS" && method != "GLS" && method != "DLS")
-    Rcpp::stop("magmaan: weight method must be ULS, GLS, DWLS, WLS or DLS");
+  if (method != "RDWLS" && method != "DWLS" && method != "WLS" && method != "ULS" && method != "GLS" && method != "DLS")
+    Rcpp::stop("magmaan: weight method must be ULS, GLS, DWLS, RDWLS, WLS or DLS");
+  if (method == "RDWLS" && ((d.kind != "ordinal" && d.kind != "mixed") || !Rf_isNull(W)))
+    Rcpp::stop("RDWLS requires categorical complete data and its exact Gamma weight");
   if (d.kind == "ordinal" || d.kind == "mixed") {
     if (d.kind == "mixed" && (method == "GLS" || method == "DLS" || !Rf_isNull(W)))
       Rcpp::stop("magmaan: mixed fixed-weight expansion is deferred");
@@ -177,7 +179,7 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
     if (d.kind == "ordinal") {
       if (method == "ULS" && !full) {
         w.ordinal = d.ordinal;
-      } else if (full || !Rf_isNull(W) || method == "WLS" || method == "GLS" || method == "DLS") {
+      } else if (method == "RDWLS" || full || !Rf_isNull(W) || method == "WLS" || method == "GLS" || method == "DLS") {
         auto s = data::ordinal_stats_from_integer_data(d.raw.X, method == "WLS" && Rf_isNull(W));
         if (!s) stop_post(s.error());
         w.ordinal = std::move(*s);
@@ -201,11 +203,17 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
         w.ordinal = std::move(*s);
         w.cache = data::ordinal_gamma_cache_from_stats(w.ordinal);
       }
+      if (method == "RDWLS") {
+        auto exact = data::exact_gamma_stats(w.ordinal);
+        if (!exact) stop_post(exact.error());
+        w.ordinal = std::move(*exact);
+        w.cache = data::ordinal_gamma_cache_from_stats(w.ordinal);
+      }
       w.ordinal.ov_names = d.names;
     } else {
       if (method == "ULS" && !full) {
         w.mixed = d.mixed;
-      } else if (full || method == "WLS") {
+      } else if (method == "RDWLS" || full || method == "WLS") {
         auto s = data::mixed_ordinal_stats_from_data(d.raw.X, d.mixed.ordered, method == "WLS");
         if (!s) stop_post(s.error());
         w.mixed = std::move(*s);
@@ -215,6 +223,12 @@ Rcpp::List weight(SEXP data_ptr, std::string method, SEXP W, bool full,
         if (!ws) stop_post(ws.error());
         w.mixed = d.mixed; copy_weights(ws->gamma_cache, w.mixed);
         w.cache = std::move(ws->gamma_cache);
+      }
+      if (method == "RDWLS") {
+        auto exact = data::exact_gamma_stats(w.mixed);
+        if (!exact) stop_post(exact.error());
+        w.mixed = std::move(*exact);
+        w.cache = data::ordinal_gamma_cache_from_stats(w.mixed);
       }
       w.mixed.ov_names = d.names;
     }
@@ -383,7 +397,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
   const auto bnd = bounds_from_nullable(bounds);
   auto plan = data::ordinal_weight_plan(data::OrdinalWorkspacePurpose::FitOnly,
       method == "ULS" ? data::OrdinalEstimatorKind::ULS :
-      method == "DWLS" ? data::OrdinalEstimatorKind::DWLS : data::OrdinalEstimatorKind::WLS,
+      (method == "DWLS" || method == "RDWLS") ? data::OrdinalEstimatorKind::DWLS : data::OrdinalEstimatorKind::WLS,
       m.parameterization == "theta" ? data::OrdinalMomentParameterization::Theta :
                                       data::OrdinalMomentParameterization::Delta);
   auto cache = w ? w->cache : data::OrdinalGammaCache{};
@@ -430,7 +444,7 @@ Rcpp::List fit(SEXP model_ptr, SEXP data_ptr, SEXP weight_ptr, std::string metho
     const auto label = method == "GLS" || method == "DLS" ? "WLS" : method.c_str();
     auto out = ordinal_fit_result(ctx, s, *e, &starts, label, m.parameterization.c_str());
     if (method != "ML") out["ordinal_computational_weight"] =
-        method == "GLS" || method == "DLS" ? "WLS" : method;
+        method == "RDWLS" ? "DWLS" : method == "GLS" || method == "DLS" ? "WLS" : method;
     if (e->association) {
       // Fit-only preparation omits diagnostic cases. Association inference
       // needs the same complete Stage-1 rows, in zero-based category units.

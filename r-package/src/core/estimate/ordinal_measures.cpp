@@ -47,7 +47,7 @@ post_expected<Stats> misspec_first_stage(const Stats& input) {
   // Only the influence channel changes; fitted weights remain the OPG NACOV
   // weights actually used by the estimator. Its movement uses the exact rows.
   if constexpr (std::is_same_v<Stats, data::MixedOrdinalStats>) {
-    if (!stats.gamma_diag_influence.empty()) {
+    if (stats.gamma_source != data::GammaSource::Exact && !stats.gamma_diag_influence.empty()) {
       if (stats.raw_data.size() != blocks)
         return std::unexpected(PostError{PostError::Kind::UnsupportedInference,
             "exact estimated-weight fit measures require raw data to rebuild OPG Gamma movement"});
@@ -683,31 +683,9 @@ ordinal_dwls_profile_rmsea_core(spec::LatentStructure pt,
     // Per-case influence of γ̂ = diag(Γ̂): data-direct sandwich at fixed κ plus
     // the κ-movement channel Σ_l (∂Γ̂_kk/∂κ_l) g_{i,l}. Stack [g_i | IF_i(γ)]
     // so the cross-product is the joint NACOV Γ_x of (u, γ).
-    auto ifg_or = block_has_missing[b]
-        ? data::ordinal_observed_gamma_diag_data_influence(
-              stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-              stats.R[b])
-        : data::ordinal_gamma_diag_data_influence(
-              stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-              stats.R[b]);
-    if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
-    auto jac_or = block_has_missing[b]
-        ? data::ordinal_observed_gamma_diag_jacobian_fd(
-              stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-              stats.R[b])
-        : data::ordinal_gamma_diag_jacobian_fd(
-              stats.int_data[b], stats.n_levels[b], stats.thresholds[b],
-              stats.R[b]);
-    if (!jac_or.has_value()) return std::unexpected(jac_or.error());
-    if (ifg_or->rows() != G.rows() || ifg_or->cols() != mb ||
-        jac_or->rows() != mb || jac_or->cols() != mb) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "ordinal_dwls_profile_rmsea: gamma influence shape mismatch in "
-          "block " + std::to_string(b)));
-    }
-    Eigen::MatrixXd if_gamma = *ifg_or;            // n_b × mb
-    if_gamma.noalias() += G * jac_or->transpose();  // + κ-movement channel
-
+    auto gamma_if = ordinal_gamma_diag_case_influence(stats, b, G, block_has_missing[b]);
+    if (!gamma_if) return std::unexpected(gamma_if.error());
+    const auto& if_gamma = *gamma_if;
     Eigen::MatrixXd H(G.rows(), 2 * mb);
     H.leftCols(mb) = G;
     H.rightCols(mb) = if_gamma;
@@ -879,6 +857,7 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                bool srmr_denominator,
                                double conf_level,
                                double eig_tol, OrdinalFirstStage first_stage) {
+  if (input_stats.gamma_source == data::GammaSource::Exact) first_stage = OrdinalFirstStage::Exact;
   data::OrdinalStats selected;
   if (first_stage == OrdinalFirstStage::Exact) {
     auto exact = misspec_first_stage(input_stats);
@@ -1090,29 +1069,9 @@ ordinal_crmr_misspec_inference(spec::LatentStructure pt,
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "ordinal_crmr_misspec_inference: moment_influence shape mismatch"));
     }
-    auto ifg_or = block_has_missing[bb]
-        ? data::ordinal_observed_gamma_diag_data_influence(
-              stats.int_data[bb], stats.n_levels[bb], stats.thresholds[bb],
-              stats.R[bb])
-        : data::ordinal_gamma_diag_data_influence(
-              stats.int_data[bb], stats.n_levels[bb], stats.thresholds[bb],
-              stats.R[bb]);
-    if (!ifg_or.has_value()) return std::unexpected(ifg_or.error());
-    auto jac_or = block_has_missing[bb]
-        ? data::ordinal_observed_gamma_diag_jacobian_fd(
-              stats.int_data[bb], stats.n_levels[bb], stats.thresholds[bb],
-              stats.R[bb])
-        : data::ordinal_gamma_diag_jacobian_fd(
-              stats.int_data[bb], stats.n_levels[bb], stats.thresholds[bb],
-              stats.R[bb]);
-    if (!jac_or.has_value()) return std::unexpected(jac_or.error());
-    if (ifg_or->rows() != Gmat.rows() || ifg_or->cols() != mb ||
-        jac_or->rows() != mb || jac_or->cols() != mb) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "ordinal_crmr_misspec_inference: gamma influence shape mismatch"));
-    }
-    Eigen::MatrixXd if_gamma = *ifg_or;
-    if_gamma.noalias() += Gmat * jac_or->transpose();
+    auto gamma_if = ordinal_gamma_diag_case_influence(stats, bb, Gmat, block_has_missing[bb]);
+    if (!gamma_if) return std::unexpected(gamma_if.error());
+    const auto& if_gamma = *gamma_if;
     Eigen::MatrixXd H(Gmat.rows(), 2 * mb);
     H.leftCols(mb) = Gmat;
     H.rightCols(mb) = if_gamma;
@@ -1169,6 +1128,7 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
                                      bool srmr_denominator,
                                      double conf_level,
                                      double eig_tol, OrdinalFirstStage first_stage) {
+  if (input_stats.gamma_source == data::GammaSource::Exact) first_stage = OrdinalFirstStage::Exact;
   data::MixedOrdinalStats selected;
   if (first_stage == OrdinalFirstStage::Exact) {
     auto exact = misspec_first_stage(input_stats);
@@ -1188,6 +1148,10 @@ mixed_ordinal_crmr_misspec_inference(spec::LatentStructure pt,
         "mixed_ordinal_crmr_misspec_inference: per-case influence functions "
         "are required"));
   }
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (stats.gamma_diag_influence.size() != stats.R.size()))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires retained exact diagonal influence and DWLS weights"));
   const bool has_diag_gamma_if =
       stats.gamma_diag_influence.size() == stats.R.size();
   if (!has_diag_gamma_if && stats.raw_data.size() != stats.R.size()) {
@@ -1450,7 +1414,7 @@ ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                 bool estimated_weight,
                                 double conf_level,
                                 double eig_tol, OrdinalFirstStage first_stage) {
-  if (first_stage == OrdinalFirstStage::Exact) {
+  if (first_stage == OrdinalFirstStage::Exact && stats.gamma_source != data::GammaSource::Exact) {
     auto selected = misspec_first_stage(stats);
     if (!selected) return std::unexpected(selected.error());
     return ordinal_rmsea_misspec_inference(pt, rep, *selected, est, parameterization, estimated_weight, conf_level, eig_tol, OrdinalFirstStage::OPG);
@@ -1589,6 +1553,7 @@ mixed_ordinal_rmsea_misspec_inference(spec::LatentStructure pt,
                                       bool estimated_weight,
                                       double conf_level,
                                       double eig_tol, OrdinalFirstStage first_stage) {
+  if (input_stats.gamma_source == data::GammaSource::Exact) first_stage = OrdinalFirstStage::Exact;
   data::MixedOrdinalStats selected;
   if (first_stage == OrdinalFirstStage::Exact) {
     auto exact = misspec_first_stage(input_stats);
@@ -1719,7 +1684,7 @@ ordinal_cfi_tli_misspec_inference(spec::LatentStructure pt,
                                   bool estimated_weight,
                                   double conf_level,
                                   double eig_tol, OrdinalFirstStage first_stage) {
-  if (first_stage == OrdinalFirstStage::Exact) {
+  if (first_stage == OrdinalFirstStage::Exact && stats.gamma_source != data::GammaSource::Exact) {
     auto selected = misspec_first_stage(stats);
     if (!selected) return std::unexpected(selected.error());
     return ordinal_cfi_tli_misspec_inference(pt, rep, *selected, est, parameterization, estimated_weight, conf_level, eig_tol, OrdinalFirstStage::OPG);
@@ -1950,6 +1915,7 @@ mixed_ordinal_cfi_tli_misspec_inference(
     bool estimated_weight,
     double conf_level,
     double eig_tol, OrdinalFirstStage first_stage) {
+  if (input_stats.gamma_source == data::GammaSource::Exact) first_stage = OrdinalFirstStage::Exact;
   data::MixedOrdinalStats selected;
   if (first_stage == OrdinalFirstStage::Exact) {
     auto exact = misspec_first_stage(input_stats);
@@ -2321,6 +2287,10 @@ mixed_ordinal_dwls_profile_rmsea(spec::LatentStructure pt,
         "mixed_ordinal_dwls_profile_rmsea: per-case influence functions are "
         "required"));
   }
+  if (stats.gamma_source == data::GammaSource::Exact &&
+      (stats.gamma_diag_influence.size() != stats.R.size()))
+    return std::unexpected(make_post_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires retained exact diagonal influence and DWLS weights"));
   const bool has_diag_gamma_if =
       stats.gamma_diag_influence.size() == stats.R.size();
   if (!has_diag_gamma_if && stats.raw_data.size() != stats.R.size()) {

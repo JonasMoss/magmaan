@@ -8,6 +8,11 @@
 
 # magmaanlab 0.2.2
 
+- Added RDWLS for complete ordinal and mixed data: DWLS with exact first-stage
+  Gamma diagonal weights and their estimated-weight influence. This is not
+  LISREL's RDWLS (DWLS with robust inference). DWLS retains its OPG weights.
+  RDWLS has no lavaan fitting preset or compatibility inference bundle.
+
 - Restored fit/model caches now check native pointer addresses rather than
   platform-specific display strings, rebuilding safely on macOS and Windows.
 

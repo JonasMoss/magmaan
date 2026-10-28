@@ -4667,6 +4667,61 @@ ordinal_exact_gamma_diag_influence(
 }
 
 namespace {
+template<class Stats>
+post_expected<Stats> exact_gamma_stats_impl(const Stats& input) {
+  const auto nb = input.R.size();
+  if (nb == 0 || input.n_obs.size() != nb || input.n_levels.size() != nb ||
+      input.thresholds.size() != nb)
+    return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+        "RDWLS requires complete first-stage statistics"));
+  if constexpr (std::is_same_v<Stats, OrdinalStats>) {
+    if (input.int_data.size() != nb || !input.pairwise_gamma.empty())
+      return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+          "RDWLS requires complete integer data; pairwise data are unsupported"));
+  } else {
+    if (input.raw_data.size() != nb || input.ordered.size() != nb || input.mean.size() != nb)
+      return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+          "RDWLS requires complete mixed raw data"));
+  }
+  Stats out = input;
+  out.NACOV.clear(); out.W_dwls.clear(); out.W_wls.clear();
+  out.moment_influence.clear(); out.sampling_moment_influence.clear();
+  out.gamma_diag_influence.clear();
+  if constexpr (std::is_same_v<Stats, MixedOrdinalStats>) out.gamma_full_influence.clear();
+  for (std::size_t b = 0; b < nb; ++b) {
+    post_expected<ExactGammaDiagInfluence> exact;
+    if constexpr (std::is_same_v<Stats, OrdinalStats>) {
+      if (input.int_data[b].rows() != input.n_obs[b] || (input.int_data[b].array() < 0).any())
+        return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+            "RDWLS requires complete observations"));
+      exact = ordinal_exact_gamma_diag_influence(input.int_data[b], input.n_levels[b], input.thresholds[b], input.R[b]);
+    } else {
+      if (input.raw_data[b].rows() != input.n_obs[b] || !input.raw_data[b].allFinite())
+        return std::unexpected(make_err(PostError::Kind::UnsupportedInference,
+            "RDWLS requires complete observations"));
+      exact = mixed_exact_gamma_diag_influence(input.raw_data[b], input.ordered[b], input.n_levels[b], input.thresholds[b], input.mean[b], input.R[b]);
+    }
+    if (!exact) return std::unexpected(exact.error());
+    if (!(exact->gamma.diagonal().array() > 0).all() || !exact->gamma.allFinite())
+      return std::unexpected(make_err(PostError::Kind::NumericIssue, "RDWLS requires positive finite Gamma diagonal"));
+    out.W_dwls.push_back(exact->gamma.diagonal().cwiseInverse().asDiagonal());
+    out.NACOV.push_back(std::move(exact->gamma));
+    out.sampling_moment_influence.push_back(exact->rows);
+    out.moment_influence.push_back(std::move(exact->rows));
+    out.gamma_diag_influence.push_back(std::move(exact->influence));
+  }
+  out.gamma_source = GammaSource::Exact;
+  return out;
+}
+}
+post_expected<OrdinalStats> exact_gamma_stats(const OrdinalStats& stats) {
+  return exact_gamma_stats_impl(stats);
+}
+post_expected<MixedOrdinalStats> exact_gamma_stats(const MixedOrdinalStats& stats) {
+  return exact_gamma_stats_impl(stats);
+}
+
+namespace {
 
 // Local mixed moment indices map back to [thresholds; -means; variances;
 // associations]. Continuous mean/variance changes affect every incident pair,

@@ -315,7 +315,7 @@ policy_inference <- function(fit, data = NULL) {
     return(out)
   }
 
-  if ((isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(estimator, "DWLS")) {
+  if ((isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && estimator %in% c("DWLS", "RDWLS")) {
     out <- tryCatch(policy_inference_dwls_impl(fit, state,
       .policy_context(fit, "dwls", function() prepare_policy_dwls_impl(fit))), error = function(e) e)
     if (inherits(out, "error"))
@@ -387,7 +387,7 @@ policy_nested <- function(fit_H1, fit_H0, data = NULL) {
     return(out)
   }
   dwls <- vapply(list(fit_H1, fit_H0), function(fit)
-    (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && identical(toupper(fit$estimator %||% ""), "DWLS"), logical(1))
+    (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) && toupper(fit$estimator %||% "") %in% c("DWLS", "RDWLS"), logical(1))
   if (all(dwls)) {
     if (!identical(fit_H1$ordinal_stats, fit_H0$ordinal_stats) ||
         !identical(fit_H1$mixed_ordinal_stats, fit_H0$mixed_ordinal_stats))

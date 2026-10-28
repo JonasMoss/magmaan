@@ -812,6 +812,11 @@ Rcpp::List frontier_fit_ordinal_psd_impl(
   ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  if (estimator == "RDWLS" && stats.gamma_source != magmaan::data::GammaSource::Exact) {
+    auto exact = magmaan::data::exact_gamma_stats(stats);
+    if (!exact) stop_post(exact.error());
+    stats = std::move(*exact);
+  }
   auto prep_or = magmaan::estimate::prepare_ordinal_partable(
       ctx.pt, stats, parameterization, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
@@ -860,7 +865,12 @@ Rcpp::List fit_ordinal_barrier_impl(
   ctx.pt.group_equal = group_equal_attr(partable);
   const auto parameterization_name = ordinal_parameterization_attr(partable);
   const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
-  const auto stats = ordinal_stats_from_arg(ordinal_stats);
+  auto stats = ordinal_stats_from_arg(ordinal_stats);
+  if (estimator == "RDWLS" && stats.gamma_source != magmaan::data::GammaSource::Exact) {
+    auto exact = magmaan::data::exact_gamma_stats(stats);
+    if (!exact) stop_post(exact.error());
+    stats = std::move(*exact);
+  }
   const bool ml = estimator == "ML";
   if (ml) {
     auto valid = magmaan::estimate::validate_ordinal_association_model(ctx.pt, &ctx.names.row_user);
@@ -1195,6 +1205,11 @@ Rcpp::List frontier_fit_mixed_ordinal_psd_impl(
   ctx.names = std::move(parsed.names);
   magmaan::data::MixedOrdinalStats stats =
       mixed_ordinal_stats_from_arg(mixed_stats);
+  if (estimator == "RDWLS" && stats.gamma_source != magmaan::data::GammaSource::Exact) {
+    auto exact = magmaan::data::exact_gamma_stats(stats);
+    if (!exact) stop_post(exact.error());
+    stats = std::move(*exact);
+  }
   auto prep_or = magmaan::estimate::prepare_mixed_ordinal_partable(
       ctx.pt, stats, parameterization, &starts, &ctx.names.row_user);
   if (!prep_or.has_value()) stop_fit(prep_or.error());
@@ -1325,4 +1340,27 @@ Rcpp::List frontier_ordinal_newton_audit_impl(
       Rcpp::_["theta"] = Rcpp::wrap(point),
       Rcpp::_["construction_status"] = std::string(magmaan::estimate::to_string(source.status)),
       Rcpp::_["construction_detail"] = source.detail);
+}
+
+// Convert complete first-stage statistics to the RDWLS exact-Gamma contract.
+// [[Rcpp::export]]
+Rcpp::List data_exact_gamma_stats_impl(Rcpp::List stats, bool mixed = false) {
+  if (stats.hasAttribute("pd_gamma")) Rcpp::stop("RDWLS does not support pairwise data");
+  Rcpp::List converted;
+  if (mixed) {
+    auto out = magmaan::data::exact_gamma_stats(mixed_ordinal_stats_from_arg(stats));
+    if (!out) stop_post(out.error());
+    converted = mixed_ordinal_stats_to_r(*out);
+  } else {
+    auto out = magmaan::data::exact_gamma_stats(ordinal_stats_from_arg(stats));
+    if (!out) stop_post(out.error());
+    converted = ordinal_stats_to_r(*out);
+  }
+  Rcpp::List out = Rcpp::clone(stats);
+  for (const char* name : {"NACOV", "W_dwls", "W_wls", "moment_influence",
+      "sampling_moment_influence", "gamma_diag_influence", "gamma_source"})
+    out[name] = converted[name];
+  if (mixed) out["gamma_full_influence"] = converted["gamma_full_influence"];
+  Rf_copyMostAttrib(stats, out);
+  return out;
 }
