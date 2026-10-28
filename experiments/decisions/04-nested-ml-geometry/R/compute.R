@@ -55,7 +55,8 @@ geometry_draw <- function(cell, rep, seed) {
     i0 <- magmaanlab::prepare_inference(f0, shared); i1 <- magmaanlab::prepare_inference(f1, shared)
     hyp <- list(exact = magmaanlab::prepare_hypothesis(i0, i1, restriction = 'exact'),
                 invariant = magmaanlab::prepare_hypothesis(i0, i1, restriction = 'invariant'))
-    policy <- anova(h1, h0)
+    # anova() reports one row per test and reference (long format).
+    policy <- as.data.frame(anova(h1, h0, references = c('sb', 'peba4')))
     for (i in seq_len(nrow(rows))) {
       tryCatch({
         h <- hyp[[if (rows$restriction[i] == 'none') 'invariant' else rows$restriction[i]]]
@@ -64,8 +65,9 @@ geometry_draw <- function(cell, rep, seed) {
         rows$statistic[i] <- q$statistic; rows$df[i] <- q$df
         if (q$df != 6) stop('restriction df differs from registered six')
         rows$p_sb[i] <- p$p_value[1]; rows$p_peba4[i] <- p$p_value[2]
-        at <- if (rows$test[i] == 'score') which(policy$test == 'score') else which(policy$test != 'score')
-        rows$policy_p_sb[i] <- policy$p.sb[at]; rows$policy_p_peba4[i] <- policy$p.peba4[at]
+        same <- if (rows$test[i] == 'score') policy$test == 'score' else policy$test != 'score'
+        rows$policy_p_sb[i] <- policy$pvalue[same & policy$reference == 'sb']
+        rows$policy_p_peba4[i] <- policy$pvalue[same & policy$reference == 'peba4']
         if (rows$geometry[i] == 'observed' && rows$restriction[i] != 'exact') {
           rows$policy_gap[i] <- max(abs(c(rows$p_sb[i]-rows$policy_p_sb[i],
             rows$p_peba4[i]-rows$policy_p_peba4[i])))
