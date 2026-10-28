@@ -1,3 +1,11 @@
+# magmaanlab (development version)
+
+- Pairwise-deletion ordinal statistics keep their Gamma convention
+  (`pd_gamma = "overlap"`) and moment supports when passed back to inference.
+  Robust tests, FMG tests and nested tests on pairwise-missing ordinal data no
+  longer refuse the missing category codes. All C++ routes now share one
+  ordinal statistics reader.
+
 # magmaanlab 0.2.2
 
 - Restored fit/model caches now check native pointer addresses rather than

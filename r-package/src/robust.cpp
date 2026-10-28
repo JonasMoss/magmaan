@@ -7,6 +7,7 @@
 // eigensolve several ways. Shared plumbing lives in internal.h.
 
 #include "internal.h"
+#include "glue_internal.h"
 #include "gamma_arg.h"
 #include "ntml_snapshot.h"
 
@@ -66,62 +67,9 @@ magmaan::estimate::OrdinalWeightKind ordinal_weight_from_string(const std::strin
   Rcpp::stop("magmaan: `weight` must be 'DWLS', 'WLS' or 'ULS' (got '%s')", s);
 }
 
-magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
-  const char* what = "ordinal_stats";
-  for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
-                         "NACOV", "W_dwls", "W_wls", "nobs", "n_levels"}) {
-    if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
-  }
-  Rcpp::List Rl(x["R"]), thl(x["thresholds"]), ovl(x["threshold_ov"]),
-      levl(x["threshold_level"]), NAl(x["NACOV"]),
-      Wdl(x["W_dwls"]), Wfl(x["W_wls"]), nlevl(x["n_levels"]);
-  Rcpp::IntegerVector nobs(x["nobs"]);
-  const bool has_mi = x.containsElementNamed("moment_influence");
-  Rcpp::List mil = has_mi ? Rcpp::List(x["moment_influence"]) : Rcpp::List();
-  const bool has_id = x.containsElementNamed("int_data");
-  Rcpp::List idl = has_id ? Rcpp::List(x["int_data"]) : Rcpp::List();
-  const bool has_mb = x.containsElementNamed("moment_bread");
-  Rcpp::List mbl = has_mb ? Rcpp::List(x["moment_bread"]) : Rcpp::List();
-  const R_xlen_t nb = Rl.size();
-  magmaan::data::OrdinalStats out;
-  out.R.reserve(static_cast<std::size_t>(nb));
-  out.thresholds.reserve(static_cast<std::size_t>(nb));
-  out.threshold_ov.reserve(static_cast<std::size_t>(nb));
-  out.threshold_level.reserve(static_cast<std::size_t>(nb));
-  out.NACOV.reserve(static_cast<std::size_t>(nb));
-  out.W_dwls.reserve(static_cast<std::size_t>(nb));
-  out.W_wls.reserve(static_cast<std::size_t>(nb));
-  out.n_obs.reserve(static_cast<std::size_t>(nb));
-  out.n_levels.reserve(static_cast<std::size_t>(nb));
-  for (R_xlen_t b = 0; b < nb; ++b) {
-    out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
-    out.thresholds.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(thl[b])));
-    Rcpp::IntegerVector ov(ovl[b]), lev(levl[b]);
-    std::vector<std::int32_t> ov0(static_cast<std::size_t>(ov.size()));
-    std::vector<std::int32_t> lev0(static_cast<std::size_t>(lev.size()));
-    for (R_xlen_t k = 0; k < ov.size(); ++k) {
-      ov0[static_cast<std::size_t>(k)] = ov[k] - 1;
-      lev0[static_cast<std::size_t>(k)] = lev[k];
-    }
-    out.threshold_ov.push_back(std::move(ov0));
-    out.threshold_level.push_back(std::move(lev0));
-    out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
-    out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
-    out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
-    if (has_mi)
-      out.moment_influence.push_back(
-          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mil[b])));
-    if (has_id)
-      out.int_data.push_back(
-          Rcpp::as<Eigen::MatrixXi>(Rcpp::IntegerMatrix(idl[b])));
-    if (has_mb)
-      out.moment_bread.push_back(
-          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mbl[b])));
-    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
-    out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
-  }
-  return out;
-}
+// One shared reader (glue_util.cpp) restores every field ordinal_stats_to_r
+// writes, including the pairwise Gamma convention.
+using magmaanr::fitglue::ordinal_stats_from_arg;
 
 [[maybe_unused]] Rcpp::List
 satorra_bentler_to_list(const magmaan::robust::SatorraBentlerResult& r) {

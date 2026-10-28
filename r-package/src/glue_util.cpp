@@ -1298,6 +1298,59 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
   }
+  // ordinal_stats_to_r writes 0 x 0 bread blocks when none were computed;
+  // keep the C++ convention of an empty vector in that case.
+  if (x.containsElementNamed("moment_bread")) {
+    Rcpp::List mbl(x["moment_bread"]);
+    bool complete = mbl.size() == nb;
+    for (R_xlen_t b = 0; complete && b < nb; ++b)
+      complete = Rcpp::NumericMatrix(mbl[b]).size() > 0;
+    if (complete) {
+      for (R_xlen_t b = 0; b < nb; ++b)
+        out.moment_bread.push_back(
+            Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(mbl[b])));
+    }
+  }
+  // Pairwise-deletion stats carry their Gamma convention and moment supports
+  // as attributes (ordinal_stats_to_r). Restore them so inference sees the
+  // stats the builder produced; without pairwise_gamma = "overlap" the robust
+  // routes refuse the missing category codes in int_data.
+  if (x.hasAttribute("pd_gamma")) {
+    out.pairwise_gamma = Rcpp::as<std::string>(x.attr("pd_gamma"));
+    for (const char* nm : {"moment_support_i", "moment_support_j",
+                           "moment_nobs", "moment_overlap_nobs"}) {
+      if (!x.hasAttribute(nm)) Rcpp::stop("magmaan: pairwise ordinal_stats is missing attribute %s", nm);
+    }
+    Rcpp::List si(x.attr("moment_support_i")), sj(x.attr("moment_support_j")),
+        mn(x.attr("moment_nobs")), ov(x.attr("moment_overlap_nobs"));
+    if (si.size() != nb || sj.size() != nb || mn.size() != nb || ov.size() != nb)
+      Rcpp::stop("magmaan: pairwise ordinal_stats attributes have incompatible block count");
+    for (R_xlen_t b = 0; b < nb; ++b) {
+      Rcpp::IntegerVector bi(si[b]), bj(sj[b]);
+      Rcpp::NumericVector bn(mn[b]);
+      if (bj.size() != bi.size() || bn.size() != bi.size())
+        Rcpp::stop("magmaan: pairwise ordinal_stats support lengths differ in block %d",
+                   static_cast<int>(b + 1));
+      std::vector<std::int32_t> i0(static_cast<std::size_t>(bi.size()));
+      std::vector<std::int32_t> j0(static_cast<std::size_t>(bi.size()));
+      std::vector<std::int64_t> n0(static_cast<std::size_t>(bi.size()));
+      for (R_xlen_t k = 0; k < bi.size(); ++k) {
+        const auto sk = static_cast<std::size_t>(k);
+        i0[sk] = bi[k] - 1;
+        j0[sk] = bj[k] == NA_INTEGER ? -1 : bj[k] - 1;
+        n0[sk] = static_cast<std::int64_t>(std::llround(bn[k]));
+      }
+      out.moment_support_i.push_back(std::move(i0));
+      out.moment_support_j.push_back(std::move(j0));
+      out.moment_n_obs.push_back(std::move(n0));
+      const Eigen::MatrixXd counts =
+          Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(ov[b]));
+      out.moment_overlap_n_obs.push_back(
+          counts.unaryExpr([](double v) {
+            return static_cast<std::int64_t>(std::llround(v));
+          }));
+    }
+  }
   if (x.containsElementNamed("sampling_moment_influence")) {
     Rcpp::List rows(x["sampling_moment_influence"]);
     if (rows.size() != nb) Rcpp::stop("sampling_moment_influence has incompatible block count");
