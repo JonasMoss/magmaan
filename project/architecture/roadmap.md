@@ -340,6 +340,15 @@ SAM/FC-SEM expansion does not authorize deleting their existing surfaces.
 
 ## Current State
 
+2026-10-28: RDWLS, DWLS weighted by the inverse diagonal of the exact
+first-stage Gamma (not LISREL's RDWLS; lavaan 0.7-3 moved only the continuous
+and polyserial entries of its mixed DWLS weight to exact Gamma), is available for complete ordered and mixed data in the C++ core
+(`api::rdwls()`, `data::exact_gamma_stats`), magmaanlab (`estimator`/`weight =
+"RDWLS"`) and the ordinary package (`magmaan(estimator = "RDWLS")`). Inference
+follows the DWLS policy with the exact diagonal's own case influence
+(TASK-164.4). DWLS keeps its conventional weights and stays the default;
+missing data and lavaan bundles are refused (TASK-164.2, TASK-164.3).
+
 2026-10-28: the ordinary nested LR reference no longer depends on how the
 models are identified (TASK-168). The exact restriction map, like lavaan's
 `A.method = "exact"`, applies parameter-nesting rows at the larger model's fit,
