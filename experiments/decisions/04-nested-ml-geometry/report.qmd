@@ -14,6 +14,7 @@ execute:
 | Choice | Current value | Status | Evidence |
 |---|---|---|---|
 | Nested ML LR spectrum | Observed information at the larger model | Adopted by principle; confirmed | Production 2026-10-03: expected drifts under strong misspecification (11–16% at nominal 5%), observed approaches 5% as N grows |
+| Nested ML LR restriction rows | Null tangent carried to the larger fit (identification-invariant) | Adopted by principle (TASK-168); calibrated | Rerun 2026-10-28 on the same draws: equal to exact rows with normal data, 6.3–7.9% instead of 10.0–10.7% with skewed data at N = 100 |
 | Nested ML score projection | Observed sensitivity, expected metric | Adopted by principle; conservative at N = 100 per group | Production 2026-10-03: 2–3% at N = 100, 3.6–5.7% at N = 300; finite-sample follow-up open |
 | Nested ML restricted-mean meat | Exact likelihood rows at the larger fit | Adopted; calibrated, no flag | Structured-mean production 2026-10-05: 108,000 draws, no failures; never worse than the pre-66 meat by the registered rule |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
@@ -49,6 +50,16 @@ The LR tests over-reject with skewed data at N = 100 in every geometry
 draws (strong cells) produced no LR test: the larger model converged to a worse
 local optimum than the restricted model (lavaan reaches the same endpoints), so
 the difference statistic is negative and the policy reports a typed failure.
+
+**The identification-invariant LR rows calibrate at least as well as the exact
+rows.** The 2026-10-28 rerun repeats the production draws with the policy's
+carried restriction rows (TASK-168) beside the exact ones, which lavaan's
+`A.method = "exact"` uses and which shift with marker versus std.lv. With
+normal data the observed-geometry LR-PEBA4 rates agree within 0.3 points.
+With skewed data the carried rows remove much of the over-rejection: 6.5%,
+6.3% and 7.9% instead of 10.0%, 10.7% and 10.2% at N = 100 (correct, mild,
+strong), and 5.1–6.8% instead of 6.6–8.6% at N = 300. Size-adjusted power is
+comparable. The exact-row arms reproduce the 2026-10-03 rates exactly.
 
 **With unmodeled group mean differences, the corrected LR meat calibrates at
 least as well as the old one.** In the structured-mean production (108,000
@@ -101,6 +112,58 @@ p-value critical values and size-adjusted power are in the run's summary CSVs.
 Production has 2000 null and 1000 power replicates per cell (36000 draws).
 Both fits use ordinary default ML estimation and library convergence verdicts;
 the quadratics reuse one shared prepared inference dataset.
+
+## Identification-invariant LR rows (2026-10-28 rerun, TASK-168)
+
+The [amendment of 2026-10-28](criteria/nested_geometry.md) makes the policy's
+LR restriction rows carry the null tangent from the embedded null point to the
+larger model's fit, in that fit's expected-information moment metric, instead
+of reusing the parameter-nesting rows there. The rerun keeps the registered
+cells and production seeds, so every draw matches the 2026-10-03 run. Score
+quadratics do not use the rows. It ran per cell on simbox (six workers, about
+15 minutes) and was combined with `modal/combine.R`.
+
+```{r}
+rerun <- file.path('results', 'nested-geometry', 'production-2026-10-28')
+if (!file.exists(file.path(rerun, 'rates.csv')))
+  stop('Rerun results absent; see the 2026-10-28 amendment.')
+r2 <- read.csv(file.path(rerun, 'rates.csv'))
+lr <- r2[r2$test == 'lr' & r2$method == 'peba4', ]
+lr$arm <- paste(lr$geometry, lr$restriction, sep = '_')
+w2 <- reshape(lr[, c('cell_id', 'n', 'distribution', 'larger', 'role', 'arm', 'rejection',
+                     'size_adjusted_power')],
+  idvar = c('cell_id', 'n', 'distribution', 'larger', 'role'), timevar = 'arm', direction = 'wide')
+w2 <- w2[order(w2$role, match(w2$larger, c('correct', 'mild', 'strong')), w2$distribution, w2$n), ]
+nul <- w2[w2$role == 'null', ]
+knitr::kable(data.frame(`Larger model` = nul$larger, Data = nul$distribution, `N per group` = nul$n,
+  `Expected, exact (%)` = round(100 * nul$rejection.expected_exact, 2),
+  `Observed, exact (%)` = round(100 * nul$rejection.observed_exact, 2),
+  `Observed, carried (%)` = round(100 * nul$rejection.observed_invariant, 2),
+  `Expected, carried (%)` = round(100 * nul$rejection.expected_invariant, 2), check.names = FALSE),
+  caption = 'LR-PEBA4 null rejection at nominal 5%, 2,000 replicates per cell. The policy arm is observed with carried rows; expected with exact rows is lavaan\'s Satorra (2000).')
+pow <- w2[w2$role == 'power', ]
+knitr::kable(data.frame(`Larger model` = pow$larger, Data = pow$distribution, `N per group` = pow$n,
+  `Observed, exact (%)` = round(100 * pow$size_adjusted_power.observed_exact, 1),
+  `Observed, carried (%)` = round(100 * pow$size_adjusted_power.observed_invariant, 1), check.names = FALSE),
+  caption = 'Size-adjusted LR-PEBA4 power, 1,000 replicates per cell (critical p-value from the matching null cell).')
+gaps <- read.csv(file.path(rerun, 'restriction_gaps.csv'))
+gaps <- gaps[gaps$geometry == 'observed' & gaps$role == 'null', ]
+knitr::kable(data.frame(`Larger model` = gaps$larger, Data = gaps$distribution, `N per group` = gaps$n,
+  `Median gap` = signif(gaps$median_absolute_peba4_gap, 2), `Maximum gap` = signif(gaps$max_absolute_peba4_gap, 2),
+  `Changed decisions` = gaps$changed_peba4_decisions, check.names = FALSE),
+  caption = 'Absolute LR-PEBA4 p-value differences between carried and exact rows, observed geometry, null cells, and decisions at 5% that change.')
+c2 <- read.csv(file.path(rerun, 'checks.csv'))
+knitr::kable(data.frame(Draws = c2$draws, `Failed draws` = c2$failed_draws,
+  `Failed arms` = c2$failed_arms, `Maximum policy gap` = c2$max_policy_gap,
+  `Registered rule` = read.csv(file.path(rerun, 'decisions.csv'))$status, check.names = FALSE))
+```
+
+The registered rule again reads `reconsider_observed`, from the same five
+score arms as before (cells 1, 5 and 9). The policy LR arm has no qualifying
+loss. The 28 failed arms are the seven strong-cell draws whose difference
+statistic is negative, now counted in four LR arms instead of two. Under
+skewness the carried rows' improvement exceeds what their O(n^-1/2) difference
+from the exact rows would suggest; the study does not isolate its source.
 
 ## Population misfit and geometry gaps (pilot)
 
@@ -174,7 +237,10 @@ quarto render report.qmd
 
 The production run of 2026-10-03 used
 `nice -n 10 Rscript run_experiment.R --production --workers 4 --run-id production-2026-10-03`
-(about 18 minutes on four local cores).
+(about 18 minutes on four local cores). The 2026-10-28 rerun ran each cell as
+`Rscript run_experiment.R --production --cell ID --workers 1 --out-dir DIR` on
+simbox (six cells at a time) and was combined with
+`MAGMAAN_EXECUTOR=simbox Rscript modal/combine.R --lane nested-geometry --mode production --run-dir RUN`.
 Each run uses a fresh output directory and separate mode seeds. Raw batches
 stay local; frozen pilot summaries and source/native fingerprints provide
 pricing provenance. Earlier failed smoke attempts remain local diagnostics.

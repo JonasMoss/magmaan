@@ -350,8 +350,11 @@ expected (Gauss-Newton) moment metric and use its complement. The rows agree
 with the exact ones when the null holds at the fit, and marker and std.lv now
 give the same p-values on every route. The lab's `prepare_hypothesis()` gains
 `restriction = c("invariant", "exact")`; `"exact"` keeps lavaan parity.
-decisions/04 is rerun with carried-row arms; calibration of the DWLS, FIML and
-association routes rests on their earlier exact-row evidence plus that rerun.
+decisions/04, rerun on its production draws with carried-row arms, shows ML
+LR-PEBA4 size unchanged with normal data and improved with skewed data (6.3-7.9%
+instead of 10.0-10.7% at N = 100 per group), at comparable size-adjusted power.
+The DWLS, FIML and association routes keep their earlier exact-row calibration
+evidence; they have not been rerun.
 
 2026-10-15: frontier PSD fitting offers an opt-in full square covariance factor
 (`PsdFitOptions::factor`, magmaanlab `psd_factor = "square"`), whose lifted local
