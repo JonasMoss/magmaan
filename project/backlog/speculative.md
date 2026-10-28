@@ -403,6 +403,26 @@ decision study shows that a correction is calibrated under misspecification
 and non-normality with the robust spectrum, not only for the normal-theory
 statistic the classical factors were derived for.
 
+### Identification-invariant nested restriction
+
+**Gap:** the exact restriction map (lab `A.method = "exact"`, also used by the
+ordinary nested LR policy) evaluates the larger model's Jacobian at its own
+estimate with restriction rows from the parameter nesting. Those rows are
+coordinate-free only on the null, so the reference spectrum shifts with
+identification; lavaan 0.7.2's `A.method = "exact"` behaves the same way
+(TASK-168). With H0 true the shift is noise-sized: in 500 normal draws of a
+three-factor CFA with one equality (`~/.cache/magmaan-logs/task-168/`), the
+ordinary LR p-values for marker and std.lv differ by a median of 0.0034
+(n = 100) and 0.0012 (n = 300), rejection rates at .05 match (0.066/0.064,
+0.048/0.052), and the few changed conclusions go both ways.
+**Available:** `A.method = "delta"` (lavaan's default) is invariant; the LR
+statistic itself is always invariant.
+**Build if:** a user reports conclusions that change with identification, or
+the nested policies are recalibrated anyway. Then take the null tangent from
+the embedding, fit it into the larger model's tangent at its estimate (delta
+form, keeping observed information at H1), keep `"exact"` as the lavaan
+option, and gate marker against std.lv across estimators.
+
 ### Nonlinear equality constraints in the ordinary inference policy
 
 **Gap:** the misspecification-robust ordinary policy (ML, FIML, LS, DWLS) for
