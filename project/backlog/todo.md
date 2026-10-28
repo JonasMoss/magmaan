@@ -1262,7 +1262,9 @@ ordinary-user default.
   stats adapters and lab estimator/inference routes; complete ordinal/mixed
   data, unchanged DWLS weights, no lavaan preset/bundle. Exact-weight, replicated
   case-weight IJ, 0.7-3 mixed Gamma and supplied-weight point oracle gates pass.
-  Ordinary-package exposure follows separately in TASK-164.3.
+  Ordinary-package exposure is complete (TASK-164.3): explicit RDWLS for
+  complete ordered/mixed data, DWLS policy inference and reporting, with
+  missing-data and lavaan-compatibility refusals.
 
 - [x] **S — pin the CI oracle and make live tests version-robust (TASK-164.1).**
   CI installs lavaan 0.7-2 and checks both packages before failing. Categorical

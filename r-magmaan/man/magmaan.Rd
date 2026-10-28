@@ -31,10 +31,10 @@ ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
 to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.}
 
 \item{estimator}{\code{"ML"}, \code{"FIML"}, \code{"ML2S"}, \code{"GLS"} or \code{"ULS"} for
-continuous variables; \code{"DWLS"}, \code{"WLS"}, \code{"ULS"} or association \code{"ML"} for
+continuous variables; \code{"DWLS"}, \code{"RDWLS"}, \code{"WLS"}, \code{"ULS"} or association \code{"ML"} for
 ordered variables. Omission selects ML for continuous variables and DWLS
-for ordered variables. Association ML requires complete rows; other
-estimators except FIML and ML2S delete incomplete rows listwise.}
+for ordered variables. Association ML and RDWLS require complete rows;
+other estimators except FIML and ML2S delete incomplete rows listwise.}
 
 \item{covariance}{The covariance policy: \code{"unrestricted"}, \code{"psd"} (every
 model-implied covariance matrix positive semidefinite), or \code{"barrier"} or
@@ -77,6 +77,9 @@ for the resolved settings, attempts and \code{marker_switch} table. The marker r
 reads each route's saturated H1 covariance. Conditional-x residual H1 and
 composite adaptation are unsupported. Fitting computes magmaan's inference policy;
 reporting methods can select an explicit lavaan inference convention.
+RDWLS uses exact first-stage Gamma diagonal weights on complete ordered or mixed
+data, with the DWLS inference policy. This is not LISREL's RDWLS.
+No lavaan compatibility bundle is available for RDWLS.
 The policy covers complete-data ML, observed-data FIML and ordinal or mixed DWLS. DWLS
 reports one global test, the fit-function statistic (equal to its score
 statistic), and marks the likelihood-ratio test \code{"inapplicable"}; its

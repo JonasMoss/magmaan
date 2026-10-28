@@ -1,5 +1,10 @@
 # magmaan (development version)
 
+- `magmaan(estimator = "RDWLS")` fits complete ordered or mixed data using
+  exact first-stage Gamma diagonal weights and the DWLS inference policy.
+  DWLS remains the default. Missing data and lavaan compatibility bundles
+  are refused. This is not LISREL's RDWLS (DWLS with robust inference).
+
 - Nested likelihood-ratio tests from `anova()` no longer depend on how the
   models are identified: marker and std.lv fits give the same p-values for ML,
   FIML, ordinal and mixed DWLS, and association ML. The reference law now uses

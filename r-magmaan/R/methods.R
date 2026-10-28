@@ -207,7 +207,8 @@ nobs.magmaan <- function(object, ...) {
 }
 
 .estimator_label <- function(fit) {
-  paste0(fit$estimator, .covariance_label(fit$covariance))
+  paste0(fit$estimator, if (identical(fit$estimator, "RDWLS")) " (exact first-stage Gamma weights)" else "",
+         .covariance_label(fit$covariance))
 }
 
 .covariance_label <- function(covariance) {
@@ -559,7 +560,7 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
   rows <- lapply(c("score", "lr"), function(component) {
     t <- res[[component]]
     label <- if (component == "score") "score" else
-      if (identical(t$label, "fit_function_difference") || fits[[1L]]$estimator == "DWLS")
+      if (identical(t$label, "fit_function_difference") || fits[[1L]]$estimator %in% c("DWLS", "RDWLS"))
         "fit_function_difference" else "lr"
     .policy_test_rows(t, label, references)
   })

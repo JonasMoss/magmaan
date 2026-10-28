@@ -18,7 +18,10 @@ builders accept `gamma = "exact"` (default `"opg"`). Estimated-weight IJ,
 policy global/nested inference and misspecification fit measures retain the
 exact diagonal influence instead of rebuilding OPG movement. On Exact stats,
 both `OrdinalFirstStage::OPG` and `::Exact` use the retained exact rows.
-The ordinary package surface is tracked separately in TASK-164.3.
+The ordinary package accepts `magmaan(estimator = "RDWLS")` for complete
+ordered and mixed data, using the same policy inference and reporting routes
+as DWLS. Missing data and lavaan compatibility bundles are refused. DWLS
+remains the default (TASK-164.3).
 
 - Explicit `objective` and `objective_downward` search coordinates return
   typed `Unsupported` from ordinal/mixed LS bounded, profiled and constrained

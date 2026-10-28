@@ -486,8 +486,10 @@ release-score work across the remaining estimator/weight families is tracked
 in the [completion matrix](../backlog/todo.md#mi-and-release-score-completion-020).
 
 `estimator` names only the estimator. Continuous data: ML, FIML, ML2S, GLS,
-ULS and WLS. Variables declared in `ordered`: DWLS, WLS, ULS and association
+ULS and WLS. Variables declared in `ordered`: DWLS, RDWLS, WLS, ULS and association
 ML. Omission selects DWLS for ordered models and ML for continuous models.
+RDWLS uses exact first-stage Gamma diagonal weights for complete ordered or
+mixed data and the DWLS inference policy; lavaan compatibility is unavailable.
 The data type is declared by `ordered`, never inferred from the estimator.
 Normal-theory ML on category scores means not declaring them ordered; explicit
 ML with all indicators ordered fits the polychoric correlations with the

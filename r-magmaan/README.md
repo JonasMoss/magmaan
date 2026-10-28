@@ -128,3 +128,9 @@ versions <- vapply(c("magmaan", "magmaanlab"),
 Fits may be saved with `saveRDS()` and reused under the same matched package
 versions. Their internal lab fields are a development interface; cross-version
 saved-fit compatibility is not promised.
+
+For complete ordered or mixed data, `estimator = "RDWLS"` uses the inverse
+diagonal of exact first-stage Gamma as its weight, with the DWLS policy
+covariance and global/nested tests. DWLS remains the default and retains its
+conventional weights. RDWLS refuses missing data and `lavaan_compat` bundles;
+it is not LISREL's RDWLS (DWLS with robust inference).

@@ -32,6 +32,8 @@
 fit_measures <- function(fit, lavaan_compat = NULL) {
   if (!inherits(fit, "magmaan"))
     stop("fit_measures(): supply a magmaan() fit", call. = FALSE)
+  if (identical(fit$estimator, "RDWLS"))
+    .check_lavaan_compat(fit, lavaan_compat, "fit_measures()")
   if (!is.null(lavaan_compat))
     return(magmaanlab::convention_fit_measures(as_lab_fit(fit), lavaan_compat))
   out <- magmaanlab::policy_fit_measures(as_lab_fit(fit))

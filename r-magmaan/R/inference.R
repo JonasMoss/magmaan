@@ -31,6 +31,8 @@ infer <- function(fit, lavaan_compat = NULL) {
   choices <- c("ML", "MLM", "MLR", "DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS")
   if (is.null(lavaan_compat)) return(NULL)
   lavaan_compat <- .check_choice(lavaan_compat, "lavaan_compat", choices, caller = caller)
+  if (identical(fit$estimator, "RDWLS"))
+    stop(paste0(caller, ": lavaan_compat is unavailable for RDWLS; no lavaan estimator matches its exact first-stage Gamma weights"), call. = FALSE)
   compatible <- if (isTRUE(fit$lab$mixed_ordinal)) {
     c("DWLS", "WLSMV", "WLSM", "ULS", "ULSMV", "WLS")
   } else if (isTRUE(fit$lab$ordinal)) {
@@ -226,7 +228,7 @@ infer <- function(fit, lavaan_compat = NULL) {
                 statistic = NA_real_, df = NA_integer_)
     }
     label <- if (component == "global_lr") "lr" else
-      if (identical(t$label, "fit_function") || fit$estimator == "DWLS") "fit_function" else "score"
+      if (identical(t$label, "fit_function") || fit$estimator %in% c("DWLS", "RDWLS")) "fit_function" else "score"
     .policy_test_rows(t, label, references)
   })
   .bind_test_rows(rows)

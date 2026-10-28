@@ -7,7 +7,7 @@
 # the ordinary API in project/design/r-interface-vision.md.
 
 .continuous_estimators <- c("ML", "FIML", "ML2S", "GLS", "ULS", "WLS")
-.ordered_estimators <- c("DWLS", "WLS", "ULS", "ML")
+.ordered_estimators <- c("DWLS", "RDWLS", "WLS", "ULS", "ML")
 
 # lavaan names that bundle an estimator with a standard-error or test correction,
 # mapped to the plain estimator magmaan() accepts instead.
@@ -283,10 +283,10 @@ print.magmaan_model <- function(x, ...) {
 #'   ML/MLR use ML on complete data or FIML with missing data; WLSMV corresponds
 #'   to DWLS with ordered outcomes. Inference follows magmaan's ordinary policy.
 #' @param estimator `"ML"`, `"FIML"`, `"ML2S"`, `"GLS"` or `"ULS"` for
-#'   continuous variables; `"DWLS"`, `"WLS"`, `"ULS"` or association `"ML"` for
+#'   continuous variables; `"DWLS"`, `"RDWLS"`, `"WLS"`, `"ULS"` or association `"ML"` for
 #'   ordered variables. Omission selects ML for continuous variables and DWLS
-#'   for ordered variables. Association ML requires complete rows; other
-#'   estimators except FIML and ML2S delete incomplete rows listwise.
+#'   for ordered variables. Association ML and RDWLS require complete rows;
+#'   other estimators except FIML and ML2S delete incomplete rows listwise.
 #' @param covariance The covariance policy: `"unrestricted"`, `"psd"` (every
 #'   model-implied covariance matrix positive semidefinite), or `"barrier"` or
 #'   [barrier()] (a penalized estimate in the interior of the PSD domain;
@@ -324,6 +324,9 @@ print.magmaan_model <- function(x, ...) {
 #'   reads each route's saturated H1 covariance. Conditional-x residual H1 and
 #'   composite adaptation are unsupported. Fitting computes magmaan's inference policy;
 #'   reporting methods can select an explicit lavaan inference convention.
+#'   RDWLS uses exact first-stage Gamma diagonal weights on complete ordered or mixed
+#'   data, with the DWLS inference policy. This is not LISREL's RDWLS.
+#'   No lavaan compatibility bundle is available for RDWLS.
 #'   The policy covers complete-data ML, observed-data FIML and ordinal or mixed DWLS. DWLS
 #'   reports one global test, the fit-function statistic (equal to its score
 #'   statistic), and marks the likelihood-ratio test `"inapplicable"`; its
@@ -463,6 +466,9 @@ magmaan <- function(model, data,
       stop(.association_scope_error("association ML requires complete rows"))
   }
 
+  if (estimator == "RDWLS" && anyNA(data[c(model$observed, model$group)]))
+    stop("magmaan(): RDWLS requires complete ordinal or mixed data; missing and pairwise data are unsupported", call. = FALSE)
+
   # barrier(0) maximizes the unpenalized likelihood: it is the unrestricted fit.
   effective <- covariance$policy
   if (identical(effective, "barrier") && covariance$lambda == 0) effective <- "unrestricted"
@@ -471,7 +477,7 @@ magmaan <- function(model, data,
                          engine = length(engine) > 0L)
   engine$starts <- start$starts
   if (length(engine) && (!(estimator %in% c("ML", "FIML") && !length(model$ordered) ||
-                         estimator == "DWLS" && length(model$ordered)) ||
+                         estimator %in% c("DWLS", "RDWLS") && length(model$ordered)) ||
                          !identical(effective, "unrestricted"))) {
     stop("magmaan(): options$optimizer, options$convergence, options$marker, options$preset and ",
          "options$start = \"lavaan-0.7.2\" are available for continuous ML or FIML, or ordinal or complete mixed DWLS ",
@@ -617,11 +623,11 @@ as_lab_fit <- function(fit) {
     stop(sprintf(paste0(
       "magmaan(): estimator = \"%s\" treats every variable as continuous. ",
       "Construct the model without `ordered` to fit it to these items as ",
-      "continuous, or use DWLS, WLS, ULS or ML for ordered variables."), estimator),
+      "continuous, or use DWLS, RDWLS, WLS, ULS or ML for ordered variables."), estimator),
       call. = FALSE)
   }
-  if (!has_ordered && identical(estimator, "DWLS")) {
-    stop("magmaan(): DWLS is for ordered variables; declare them with magmaan_model(ordered = )",
+  if (!has_ordered && estimator %in% c("DWLS", "RDWLS")) {
+    stop(paste0("magmaan(): ", estimator, " is for ordered variables; declare them with magmaan_model(ordered = )"),
          call. = FALSE)
   }
   if (!has_ordered && identical(estimator, "WLS")) {
