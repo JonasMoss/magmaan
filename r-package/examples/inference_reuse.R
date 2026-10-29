@@ -13,7 +13,8 @@ f1 <- fit_model(syntax,x,meanstructure=TRUE,control=control)
 f0 <- fit_model(paste(syntax,'a == b',sep='\n'),x,meanstructure=TRUE,control=control)
 d <- prepare_inference_data(f1,x)
 g1 <- prepare_inference(f1,d); g0 <- prepare_inference(f0,d)
-h <- prepare_hypothesis(g0,g1)
+# Exact restrictions, to match the restriction_map comparators below.
+h <- prepare_hypothesis(g0,g1,restriction='exact')
 for (g in list(g0,g1)) {
   q <- inference_quadratic(g,'score')
   old <- project_scores(score_components(g, sensitivity = "expected"))

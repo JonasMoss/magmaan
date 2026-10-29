@@ -622,9 +622,9 @@ retains its separate observed-information comparator.
 2026-10-29 (TASK-172): global score sensitivity now uses pattern-conditional
 expected information by the scope exception. The expected metric, uncentered
 casewise meat and SB/PEBA4 references remain; nested score, global LR, robust
-MI/releases and parameter covariance retain their previous geometry. Complete-data
-FIML also changes at finite samples: expected and observed sensitivity agree
-asymptotically under the null, not exactly at a fitted misspecified sample.
+MI/releases and parameter covariance retain their previous geometry.
+Complete-data FIML also changes in finite samples, because expected and
+observed sensitivity agree only asymptotically under the null.
 For the six-indicator HS CFA (single group), the score statistic changes from
 21.3058985 to 24.4876339, with maximum eigenvalue change 0.1663642.
 

@@ -618,7 +618,7 @@ ownership reserved for TASK-33.3. Existing fitting defaults are unchanged.
 
 [Parser and model construction](capabilities/parser.md) supports the scoped Mplus frontend, data plans, growth models and nonlinear all-ordinal lab equalities, with explicit ordinary fitting refusals and corpus gates (TASK-54.2). Unsupported routes retain rule-specific errors.
 
-[FIML](capabilities/fiml.md) composes the ordinary random-x policy through observed bread and casewise scores, alongside explicit lavaan ML/MLR reporting bundles. Global and nested score tests use observed sensitivity with an expected metric; later reference choices remain recorded above (TASK-97).
+[FIML](capabilities/fiml.md) composes the ordinary random-x policy through observed bread and casewise scores, alongside explicit lavaan ML/MLR reporting bundles. The global score test uses pattern-conditional expected sensitivity and metric (scope exception 2026-10-29, TASK-172); nested score tests use observed sensitivity with an expected metric; later reference choices remain recorded above (TASK-97).
 
 [Robust-test conventions](capabilities/robust_test_naming.md) make misspecification-robust geometry and estimated-weight inference the generic lab defaults. Named compatibility and diagnostic routes remain explicit.
 

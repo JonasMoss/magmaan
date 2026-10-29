@@ -7,7 +7,8 @@ C = explicit named compatibility/convention recipe to retain; Q = decision neede
 A row marked R does not certify the entire function. Correct-model GOF permits
 expected geometry with complete data, but not normal-theory meat under arbitrary
 nonnormal sampling; FIML global score uses expected sensitivity by the scope
-exception of 2026-10-29. Nested and covariance components cannot assume structural correctness. Expected score metric may stay.
+exception of 2026-10-29. Nested and covariance components cannot assume
+structural correctness. Expected score metric may stay.
 
 ## Coverage and counting
 
