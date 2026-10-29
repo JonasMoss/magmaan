@@ -6,7 +6,7 @@ namespace magmaan {
 
 inline constexpr int version_major = 0;
 inline constexpr int version_minor = 2;
-inline constexpr int version_patch = 2;
+inline constexpr int version_patch = 3;
 
 std::string_view version() noexcept;
 

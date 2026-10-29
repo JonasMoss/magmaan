@@ -160,6 +160,9 @@ macOS numeric-text conversion. Both packages track GitHub releases in the
 [r-universe registry](https://github.com/JonasMoss/jonasmoss.r-universe.dev);
 portable source-package CI checks Linux, macOS and Windows against current R
 dependencies, alongside the pinned lavaan oracle gate.
+The 0.2.3 release switches the ordinary FIML global score test to expected
+sensitivity (scope exception 2026-10-29) and ships RDWLS and
+identification-invariant nested LR restrictions.
 **0.2.0 delivers the adopted ordinary API, lavaan-compatible fitting, primary
 inference and MI/release-score completion**: `options = list(preset =
 "lavaan-0.7.2")` extends to linear equality constraints, FIML and all-ordinal

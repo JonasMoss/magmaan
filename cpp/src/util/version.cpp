@@ -3,7 +3,7 @@
 namespace magmaan {
 
 std::string_view version() noexcept {
-  return "0.2.2";
+  return "0.2.3";
 }
 
 }

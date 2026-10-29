@@ -1,4 +1,4 @@
-# magmaanlab (development version)
+# magmaanlab 0.2.3
 
 - `global_score_flip_test()` now defaults to expected sensitivity for FIML;
   observed sensitivity remains selectable.

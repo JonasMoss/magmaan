@@ -1,10 +1,12 @@
-# magmaan (development version)
+# magmaan 0.2.3
 
 - The FIML global score test now uses expected rather than observed
   sensitivity, so its statistics and p-values change, also with complete
   data. Observed sensitivity made the test severely conservative at moderate
-  and high degrees of freedom (study research/44). Nested tests are
-  unchanged.
+  and high degrees of freedom (study research/44). Expected sensitivity is
+  consistent with complete data and data missing completely at random, but
+  not under MAR, where it tends to be conservative with normal data. Nested
+  tests are unchanged.
 
 - `magmaan(estimator = "RDWLS")` fits complete ordered or mixed data using
   exact first-stage Gamma diagonal weights and the DWLS inference policy.
