@@ -2,7 +2,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 script <- sub("^--file=", "", grep("^--file=", commandArgs(), value = TRUE)[1L])
 root <- dirname(normalizePath(script, mustWork = TRUE))
-lanes <- c("sem" = "global/run_sem_models.R", "screen" = "global/run_experiment.R", "two-stage" = "two-stage/run_experiment.R", "legacy-mlr" = "legacy-mlr/run_experiment.R")
+lanes <- c("policy" = "policy/run_policy.R", "sem" = "global/run_sem_models.R", "screen" = "global/run_experiment.R", "two-stage" = "two-stage/run_experiment.R", "legacy-mlr" = "legacy-mlr/run_experiment.R")
 checks <- c("crossing" = "global/check_lrt_score_crossing.R", "pseudo-null" = "global/investigate_pseudonull_information.R", "pseudo-target" = "global/estimate_pseudotrue_shadow.R", "h1-quadratic" = "global/smoke_fiml_h1_quadratic.R", "ml2s-rls" = "global/smoke_ml2s_rls.R", "mlr-parity" = "global/validate_mlr_lavaan.R", "power-calibration" = "global/calibrate_power.R")
 usage <- function() cat("Usage: Rscript run_experiment.R --lane NAME [lane options]\n",
   "Lanes: ", paste(names(lanes), collapse = ", "), "\n",
@@ -20,6 +20,13 @@ if (kind == "--lane" && name == "sem" && "--smoke" %in% args) {
   args <- args[args != "--smoke"]
   defaults <- c("--reps"="1","--n"="120","--flips"="9","--cores"="1",
     "--max-cells"="1","--seed-base"="2026102044")
+  for (key in names(defaults)) if (!key %in% args) args <- c(args,key,defaults[[key]])
+}
+if (kind == "--lane" && name == "policy" && "--smoke" %in% args) {
+  args <- args[args != "--smoke"]
+  defaults <- c("--reps"="2", "--n"="200", "--models"="one_factor_6,two_factor_fmg_10,three_factor_15",
+    "--distributions"="normal", "--missingness"="mcar_30,mar_30", "--workers"="2",
+    "--seed-base"="2026102999", "--results-dir"="/tmp/fiml-policy-smoke")
   for (key in names(defaults)) if (!key %in% args) args <- c(args,key,defaults[[key]])
 }
 if (!length(args)) args <- "--help"
