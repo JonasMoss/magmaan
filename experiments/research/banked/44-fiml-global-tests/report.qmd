@@ -169,9 +169,15 @@ knitr::kable(do.call(rbind, lapply(seq_len(nrow(models)), function(i) {
 ```
 
 Observed sensitivity becomes conservative as df grows, on complete normal data
-as well. A plausible mechanism, not separately verified: estimation noise in
-the observed Hessian enters the nuisance projection and inflates the reference
-covariance by a relative amount of order q/N (q free parameters). For the
+as well. The mechanism is the nuisance projection. With the expected metric
+fixed, the projection built from the expected sensitivity makes the matrix
+inverted in the score quadratic smallest, in the positive-semidefinite order,
+among all projections off the model tangent. Any other sensitivity therefore
+gives a smaller statistic on the same fit. In the 2026-10-29 run the
+observed-H0 statistic was at most the expected-H0 statistic on all 59,804
+fits with both available. Observed sensitivity is consistent, so the loss
+comes from estimation noise in the Hessian: of relative order q/N (q free
+parameters), and larger the more directions are tested. For the
 three-factor model q/N is about .24, and an inflation of 16–24% gives
 0.06–0.3% rejection at df 87. The nonnormal df-9 cells (up to 9.5%) show this
 is not the whole story. The archived complete-data ML geometry study found the
