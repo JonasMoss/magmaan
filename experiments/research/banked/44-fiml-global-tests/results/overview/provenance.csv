@@ -9,3 +9,6 @@
 "results/global/ml2s-rls-smoke/summary.csv","fb828d636a893b0e473b4331fbf5b4ce"
 "results/legacy-mlr/metadata.csv","5a19974aac7c2f16b2eb2826f084255c"
 "results/two-stage/metadata.csv","b8fca37256069e23efc5c11c3f8891e8"
+"results/policy/2026-10-29-policy/rates.csv","9e1ecd98cb103345358a55b92b560239"
+"results/policy/2026-10-29-policy/statistics.csv","48088af890b51fa236237ddd676178d2"
+"results/policy/2026-10-29-policy/metadata.csv","3415a9ffe5306ed48288711dfa8151b3"

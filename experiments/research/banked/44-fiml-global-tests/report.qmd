@@ -31,6 +31,16 @@ fits at N=200, observed-H0 pEBA4 rejected 0.0–0.7% at df 87 and 0.2–5.7% at
 df 34, where expected-H0 rejected 3.3–5.7%. No further run is queued; a
 finite-sample correction of the observed reference is a banked idea.
 
+An ordinary-package run on 2026-10-29 shows that the price is large at
+practical N. It made 60,000 `magmaan()` FIML fits of five latent models, with
+normal or IG2 data, 30% MCAR or MAR, and N = 200, 500 and 1,000. With df 34–87
+and normal data, the policy score pEBA4 rejected 0.0–0.1% at N=200 and
+1.0–2.5% at N=1,000, under MCAR and MAR alike. Expected-H0 on the same fits
+rejected 2.6–5.5% in every identified-null cell except the IG2 growth model,
+normal MAR included. Its MAR inconsistency, clear on the pseudo-null, did not
+show in these latent designs. The policy statistic itself is shrunk: on
+average it was 0.62–0.87 of the LR statistic at N=200 and 0.90–0.97 at N=1,000.
+
 The representative 55-cell SEM panel ran **expected** sensitivity, since it
 predates observed sensitivity. There, FIML score pEBA4 rejected 1.4–7.4%,
 against 4.8–36.0% for LR pEBA4 and 4.8–89.2% for the scalar-robust comparator.
@@ -168,6 +178,64 @@ is not the whole story. The archived complete-data ML geometry study found the
 same collapse (0% at p=40). Every finite-sample failure seen so far is
 conservative except that df-9 VM2 cell.
 
+### Ordinary package across latent models, MCAR and MAR
+
+The 2026-10-29 run fitted every replication with ordinary
+`magmaan(estimator = "FIML")` at its defaults and read the policy tests from
+`summary()`. On the same fit it computed lavaan's MLR statistic
+(`lavaan_compat = "MLR"`, Yuan–Bentler scaling) and expected-H0 and
+observed-H1 score diagnostics. The five pilot models were crossed with normal
+or IG2 data, 30% MCAR or Savalei–Bentler MAR, and N = 200, 500 and 1,000, with
+1,000 replications per cell. The score and LR columns use pEBA4. IG2 with MAR is
+excluded below as estimand stress.
+
+```{r}
+pr <- read_overview("policy_rates")
+pr <- pr[pr$analysis_region == "identified_null", ]
+pr$condition <- paste(ifelse(pr$distribution == "normal", "Normal", "IG2"),
+  ifelse(pr$missingness == "mar_30", "MAR", "MCAR"))
+trio <- function(z, arm, ref) {
+  z <- z[z$arm == arm & z$reference == ref, ]
+  paste(sprintf("%.1f", 100 * z$rejection_rate[order(z$n)]), collapse = " / ")
+}
+keys <- unique(pr[order(pr$expected_df,
+  match(pr$condition, c("Normal MCAR", "Normal MAR", "IG2 MCAR"))),
+  c("model_id", "expected_df", "condition")])
+knitr::kable(do.call(rbind, lapply(seq_len(nrow(keys)), function(i) {
+  z <- pr[pr$model_id == keys$model_id[i] & pr$condition == keys$condition[i], ]
+  data.frame(Model = keys$model_id[i], df = keys$expected_df[i],
+    Data = keys$condition[i], `Policy score` = trio(z, "score", "peba4"),
+    `Expected-H0 score` = trio(z, "expH0_exp", "peba4"),
+    LR = trio(z, "lr", "peba4"), MLR = trio(z, "mlr", "yuan.bentler.mplus"),
+    check.names = FALSE)
+})), caption = "Rejection (%) at N = 200 / 500 / 1,000")
+```
+
+The policy score's conservatism grows with df and fades slowly with N; at df
+87 it is still about 1% at N=1,000. The policy LR over-rejects at N=200
+(up to 17.9%) and rejects 4.2–7.4% at N=1,000 outside the IG2 growth model. MLR is badly liberal with IG2
+data (12.0–21.3% at N=1,000 for df 34–87). Expected-H0 stays within
+2.6–5.5% in these cells, apart from the IG2 growth model. Observed-H1
+sensitivity was conservative too. With its own metric it rejected 0.0–1.9%
+with IG2 data (1.5–7.5% with normal data); with the expected metric it rejected
+0.0–4.3% in every identified-null cell. It is not a substitute for the robust
+LR test here. The policy statistic
+matched the observed-H0/expected-metric diagnostic on every fit.
+
+The IG2 growth model is liberal for every score geometry and for the LR
+(policy score 13.0–14.8%, expected-H0 5.4–8.3%, LR 8.6–9.5%) and does not
+improve by N=1,000. Its cause is unexamined. In the IG2-MAR stress cells
+the one-factor and bifactor models show every test's rejection growing with
+N (policy score 10.1% to 33.5% and 2.5% to 12.2%). That is the signature of a
+Gaussian-FIML pseudo-target outside the model, not a size error.
+
+Of 60,000 fits, 178 did not converge, 174 of them bifactor fits at N=200.
+Rates condition on converged fits. Eighteen converged IG2-MAR fits at N=200
+had a singular observed sensitivity, and the policy reports no score test for
+them. The run took 33 minutes on four simbox workers (2.2 CPU-hours). Full
+cell rates are in `results/overview/policy_rates.csv`, statistic means and
+ratios in `policy_statistics.csv`.
+
 ### Two-stage statistic versus reference law
 
 The retained ML2S diagnostic compares the ML discrepancy and residual
@@ -205,11 +273,14 @@ outputs are single ten-replication nonnormal-MAR cells. Neither supports a
 method ranking. Reopen either only for a named paper question with a frozen
 null and new substantive run. No older grid is queued by this consolidation.
 
-Evidence limits of the adopted geometry: the sensitivity panel has no MAR
-cells and a single N; latent-model nonnormal-MAR validity rests on the
+Evidence limits of the adopted geometry: its latent-model MAR evidence is
+the 2026-10-29 run's normal 30% Savalei–Bentler MAR, where the expected
+geometry's error is mild; latent-model nonnormal-MAR validity rests on the
 four-variable pseudo-null; and observed-sensitivity nested evidence is the
-df=1 normal family of the score-centering decision study (5.0–6.5%). The panel
-ran magmaan 0.0.1 code of 2026-09-03 (`sensitivity_panel_metadata.csv`).
+df=1 normal family of the score-centering decision study (5.0–6.5%). The
+sensitivity panel ran magmaan 0.0.1 code of 2026-09-03
+(`sensitivity_panel_metadata.csv`); the 2026-10-29 run used magmaan and
+magmaanlab 0.2.2 (`policy_metadata.csv`).
 The prospective SEM design (`design/prospective_sem.md`) is not queued.
 
 The study is banked. Reopen it for a finite-sample correction of the observed
@@ -239,6 +310,17 @@ Rscript run_experiment.R --lane sem --smoke --models one_factor_6 \
   --results-dir /tmp/fiml-global-fresh
 Rscript run_experiment.R --lane two-stage --help
 Rscript run_experiment.R --lane legacy-mlr --help
+```
+
+The ordinary-package run (cell IDs and seeds depend on the `--n` list, so
+repeat it exactly):
+
+```sh
+Rscript run_experiment.R --lane policy --smoke
+Rscript run_experiment.R --lane policy \
+  --models one_factor_6,two_factor_fmg_10,three_factor_15,bifactor_12,linear_growth_5 \
+  --distributions normal,ig2 --missingness mcar_30,mar_30 --n 200,500,1000 \
+  --reps 1000 --workers 4 --run-id 2026-10-29-policy
 ```
 
 `--lane screen` selects the completed affine control. `--check` selects the

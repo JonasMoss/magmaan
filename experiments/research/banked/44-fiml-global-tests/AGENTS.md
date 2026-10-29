@@ -14,7 +14,10 @@ Reports read only this study's results. Core/bindings own SEM primitives.
 
 The study is banked (2026-10-02). Observed-H0 sensitivity with the expected
 metric is the adopted ordinary FIML score geometry; expected-H0 is a
-diagnostic, inconsistent under MAR. The prospective SEM design is unfinished
+diagnostic, inconsistent under MAR. The 2026-10-29 policy lane
+(`lanes/policy/`, ordinary `magmaan()` fits) found the adopted geometry
+strongly conservative at df 34–87 up to N=1000; the policy question is on the
+board (TASK-171), not settled here. The prospective SEM design is unfinished
 and not queued; reopen only under the report's trigger, and freeze source
 adaptations, observation laws, estimator-level pseudo-nulls and numerical
 screening before any publication run.

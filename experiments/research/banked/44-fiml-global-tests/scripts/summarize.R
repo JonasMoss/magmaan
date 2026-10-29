@@ -71,11 +71,24 @@ legacy <- do.call(rbind,lapply(c("legacy-mlr","two-stage"),function(lane) {
   data.frame(lane=lane,reps=v[["reps"]],cell_filter=v[["cells_filter"]],
     scope="single smoke cell; nonnormal MAR stress, not calibration evidence")
 }))
+# Ordinary-policy lane: magmaan() FIML fits with paired diagnostic geometries.
+policy_run <- "policy/2026-10-29-policy"
+policy_rates <- read_result(paste0(policy_run,"/rates.csv"))
+policy_rates <- policy_rates[,c("cell_id","model_id","expected_df","distribution",
+  "missingness","analysis_region","n","arm","reference","attempted","fit_ok",
+  "usable","rejection_rate")]
+policy_stats <- read_result(paste0(policy_run,"/statistics.csv"))
+policy_stats <- policy_stats[,c("cell_id","model_id","expected_df","distribution",
+  "missingness","analysis_region","n","mean_score_stat","mean_lr_stat",
+  "mean_expH0_exp_stat","mean_score_over_lr","mean_obsH0_over_expH0",
+  "policy_matches_obsH0")]
+policy_meta <- read_result(paste0(policy_run,"/metadata.csv"))
 dir.create(out,recursive=TRUE,showWarnings=FALSE)
 artifacts <- list(sem_cells=cells,sem_overview=overview,pseudo_null=pseudo,
                   ml2s_bases=bases,legacy_scope=legacy,sem_metadata=meta,
                   sensitivity_panel=panel,sensitivity_panel_metadata=panel_meta,
-                  pseudo_null_grid=pseudo_grid)
+                  pseudo_null_grid=pseudo_grid,policy_rates=policy_rates,
+                  policy_statistics=policy_stats,policy_metadata=policy_meta)
 for (name in names(artifacts)) write.csv(artifacts[[name]],file.path(out,paste0(name,".csv")),row.names=FALSE)
 write.csv(data.frame(source=sub(paste0(root,"/"),"",sources,fixed=TRUE),
   md5=unname(tools::md5sum(sources))),file.path(out,"provenance.csv"),row.names=FALSE)
