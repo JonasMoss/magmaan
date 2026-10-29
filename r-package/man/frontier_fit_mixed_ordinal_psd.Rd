@@ -3,7 +3,7 @@
 \title{Experimental fitting route: frontier_fit_mixed_ordinal_psd}
 \description{Fits the named objective through an explicit experimental covariance-domain route. PSD variants constrain covariance blocks; multiinfo variants apply the selected barrier target. Inference remains a separate operation.}
 \usage{
-frontier_fit_mixed_ordinal_psd(model, data, estimator = c("DWLS", "WLS", "ULS"), optimizer = "nlopt-slsqp", control = NULL,
+frontier_fit_mixed_ordinal_psd(model, data, estimator = c("DWLS", "RDWLS", "WLS", "ULS"), optimizer = "nlopt-slsqp", control = NULL,
     bounds = NULL, start_eigen_floor = 1e-06, feasibility_tol = 1e-06, psd_factor = c("triangular",
         "square"))
 }
