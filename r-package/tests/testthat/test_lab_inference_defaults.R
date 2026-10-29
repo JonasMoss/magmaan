@@ -56,7 +56,13 @@ test_that("Q-route decisions use explicit meats, breads and supported policy law
   expect_equal(fiml_nested$eigenvalues, fiml_policy$lr$eigenvalues)
   expect_equal(fiml_nested$p_scaled, fiml_policy$lr$p_sb)
   expect_identical(fiml_nested$method, "policy")
-  expect_identical(global_score_flip_test(f1, n_flips = 3L)$sensitivity, "observed")
+  expect_identical(global_score_flip_test(f1, n_flips = 3L)$sensitivity, "expected")
+  primitive <- magmaan_core$inference_global_score_flip_test(f1, f1$raw_data, n_flips = 3L)
+  explicit <- global_score_flip_test(f1, n_flips = 3L,
+    sensitivity = "expected", metric = "expected")
+  expect_identical(primitive$sensitivity, "expected")
+  expect_identical(primitive$statistic_effective, explicit$statistic_effective)
+  expect_identical(primitive$eigenvalues, explicit$eigenvalues)
   expect_identical(global_score_flip_test(h1, d, n_flips = 3L)$sensitivity, "expected")
   fit <- fit_model(syntax, d, estimator = "GLS")
   expect_error(magmaan_core$infer_continuous_ls_robust(fit, as.matrix(d)),

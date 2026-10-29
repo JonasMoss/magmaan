@@ -53,8 +53,8 @@ reports the ingredient build count. Ordinary `vcov`, `summary` and `anova`
 consume these same policy results without adding another fitting route.
 Covariance uses observed deviance Hessian bread and empirical casewise score
 meat (`fiml_score_meat_bread`), the lavaan-gated MLR sandwich. Global score
-uses `global_score_components` with observed-H0 sensitivity and the
-pattern-conditional expected metric, direct saturated-moment casewise scores
+uses `global_score_components` with pattern-conditional expected sensitivity and
+metric (scope exception 2026-10-29), direct saturated-moment casewise scores
 at model-implied moments, and uncentered empirical score cross-products.
 Nested score uses `nested_score_components` with observed sensitivity and
 expected metric; its casewise parameter scores are evaluated at the embedded
@@ -618,6 +618,15 @@ Identified numerical failures remain typed table rows. Ordinary lab FIML MI
 retains its separate observed-information comparator.
 
 #### Dated changes
+
+2026-10-29 (TASK-172): global score sensitivity now uses pattern-conditional
+expected information by the scope exception. The expected metric, uncentered
+casewise meat and SB/PEBA4 references remain; nested score, global LR, robust
+MI/releases and parameter covariance retain their previous geometry. Complete-data
+FIML also changes at finite samples: expected and observed sensitivity agree
+asymptotically under the null, not exactly at a fitted misspecified sample.
+For the six-indicator HS CFA (single group), the score statistic changes from
+21.3058985 to 24.4876339, with maximum eigenvalue change 0.1663642.
 
 2026-10-03: the ordinary FIML policy is composed for single-level random-x
 models with affine equalities, one or more groups. Covariance is the

@@ -269,7 +269,7 @@ inference_score_flip_test_model <- function(partable_H1, fit_H0, raw, n_flips = 
     .Call(`_magmaanlab_inference_score_flip_test_model`, partable_H1, fit_H0, raw, n_flips, seed, calibration, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity)
 }
 
-inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "auto", metric = "expected") {
+inference_global_score_flip_test <- function(fit, raw, n_flips = 999L, seed = 1.0, multiplier = "rademacher", two_point_skewness = 1.0, center_multiplier_scores = FALSE, multiplier_studentization = "none", sensitivity = "expected", metric = "expected") {
     .Call(`_magmaanlab_inference_global_score_flip_test`, fit, raw, n_flips, seed, multiplier, two_point_skewness, center_multiplier_scores, multiplier_studentization, sensitivity, metric)
 }
 

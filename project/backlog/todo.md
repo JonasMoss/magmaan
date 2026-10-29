@@ -554,6 +554,9 @@ ordinary API exposes barrier fitting experimentally as
 
 #### ML and FIML
 
+- [x] **TASK-172**: FIML global score uses expected sensitivity under the
+  2026-10-29 scope exception; nested and covariance geometry stay unchanged.
+
 - [x] **S/M — PEBA4-only ML/FIML defaults (TASK-97).** Decision 2026-10-06:
   global and nested score/LR select PEBA4; SB remains an explicit comparator
   through `references = c("sb", "peba4")`. Only score/PEBA4 is recommended.

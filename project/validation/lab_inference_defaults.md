@@ -6,8 +6,8 @@ R = robust already (for the listed argument only); F = generic default to flip;
 C = explicit named compatibility/convention recipe to retain; Q = decision needed.
 A row marked R does not certify the entire function. Correct-model GOF permits
 expected geometry with complete data, but not normal-theory meat under arbitrary
-nonnormal sampling; MAR FIML requires observed geometry. Nested and covariance
-components cannot assume structural correctness. Expected score metric may stay.
+nonnormal sampling; FIML global score uses expected sensitivity by the scope
+exception of 2026-10-29. Nested and covariance components cannot assume structural correctness. Expected score metric may stay.
 
 ## Coverage and counting
 
@@ -43,7 +43,7 @@ Final classes: R=132, F=0, C=43, Q=0. Historical phase-one counts: R=48, F=46, C
 | `inference_score_tests_robust` | `estimated_weight` | `TRUE` | R | Sampling influence of fitted weights; no correct-model assumption | TRUE includes weight estimation; does not repair another non-robust default | [RcppExports.R](../../r-package/R/RcppExports.R) |
 | `inference_score_flip_test` | `sensitivity` | `"observed"` | R | Nested restriction at pseudo-true value; larger model may be wrong | Use observed sensitivity/bread; LS estimated weights additionally need IJ law | [RcppExports.R](../../r-package/R/RcppExports.R) |
 | `inference_score_flip_test_model` | `sensitivity` | `"observed"` | R | Nested restriction at pseudo-true value; larger model may be wrong | Use observed sensitivity/bread; LS estimated weights additionally need IJ law | [RcppExports.R](../../r-package/R/RcppExports.R) |
-| `inference_global_score_flip_test` | `sensitivity` | `observed FIML / expected complete` | R | Global correct-model GOF, or reusable covariance/nested geometry | MAR FIML uses observed sensitivity; complete-data global correct-model null permits expected | [RcppExports.R](../../r-package/R/RcppExports.R) |
+| `inference_global_score_flip_test` | `sensitivity` | `"expected"` | R | Global correct-model GOF, or reusable covariance/nested geometry | FIML global score uses expected by the scope.md exception of 2026-10-29; observed remains selectable | [RcppExports.R](../../r-package/R/RcppExports.R) |
 | `inference_global_score_flip_test` | `metric` | `"expected"` | R | Score quadratic metric; no model-correctness restriction | Expected metric allowed with matching empirical spectrum (caller matrix otherwise) | [RcppExports.R](../../r-package/R/RcppExports.R) |
 | `measures_reliability_cov` | `gamma` | `NULL` | R | Sampling covariance / nested spectrum | NULL derives empirical Gamma from raw_data; absent raw data is an error; explicit Gamma remains available | [RcppExports.R](../../r-package/R/RcppExports.R) |
 | `measures_reliability_omega_multidim` | `gamma` | `NULL` | R | Sampling covariance / nested spectrum | NULL derives empirical Gamma from raw_data; absent raw data is an error; explicit Gamma remains available | [RcppExports.R](../../r-package/R/RcppExports.R) |
@@ -170,7 +170,7 @@ Final classes: R=132, F=0, C=43, Q=0. Historical phase-one counts: R=48, F=46, C
 | `infer_robust_se_raw_fit` | `moments` | `"auto"` | R | Pseudo-true parameter covariance / Wald or interval; no correct-model assumption | Auto selects exact uncentered likelihood projections for empirical ML SE/score meats; explicit structured/unstructured retain moment-weight comparators; LS dispatch retains fitting-weight influence within its stated contract; see gates below | [model_data.R](../../r-package/R/model_data.R) |
 | `infer_robust_se_raw_fit` | `cov` | `"empirical"` | R | Pseudo-true parameter covariance / Wald or interval; no correct-model assumption | Empirical meat already; bread/weight caveats remain | [model_data.R](../../r-package/R/model_data.R) |
 | `score_flip_test` | `sensitivity` | `c("observed", "expected")` | R | Nested restriction at pseudo-true value; larger model may be wrong | Use observed sensitivity/bread; LS estimated weights additionally need IJ law | [nested_test.R](../../r-package/R/nested_test.R) |
-| `global_score_flip_test` | `sensitivity` | `observed FIML / expected complete` | R | Global correct-model GOF, or reusable covariance/nested geometry | MAR FIML uses observed sensitivity; complete-data global correct-model null permits expected | [nested_test.R](../../r-package/R/nested_test.R) |
+| `global_score_flip_test` | `sensitivity` | `"expected"` | R | Global correct-model GOF, or reusable covariance/nested geometry | FIML global score uses expected by the scope.md exception of 2026-10-29; observed remains selectable | [nested_test.R](../../r-package/R/nested_test.R) |
 | `global_score_flip_test` | `metric` | `c("expected", "observed", "observed-h1")` | R | Score quadratic metric; no model-correctness restriction | Expected metric allowed with matching empirical spectrum (caller matrix otherwise) | [nested_test.R](../../r-package/R/nested_test.R) |
 | `nested_score_test` | `sensitivity` | `c("observed", "expected")` | R | Nested restriction at pseudo-true value; larger model may be wrong | Use observed sensitivity/bread; LS estimated weights additionally need IJ law | [nested_test.R](../../r-package/R/nested_test.R) |
 | `robust_nested_lrt` | `gamma` | `c("empirical", "unbiased", "NT", "both")` | R | Moment/score covariance for covariance, nested or global reference | Empirical meat; robustness still depends on geometry and estimated weights | [nested_test.R](../../r-package/R/nested_test.R) |

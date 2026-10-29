@@ -1,5 +1,8 @@
 # magmaanlab (development version)
 
+- `global_score_flip_test()` now defaults to expected sensitivity for FIML;
+  observed sensitivity remains selectable.
+
 - `prepare_hypothesis()` gains `restriction = c("invariant", "exact")`. The
   default, now also the ordinary policy's, carries the null tangent to the
   larger model's fit, so nested LR references no longer change between marker

@@ -860,7 +860,7 @@ static PolicyInference policy_inference_fiml_cached(spec::LatentStructure pt,
   }
   using namespace inference::frontier;
   fiml_score(global_score_components(pt, rep, raw, pack, estimates,
-      {ScoreSensitivity::ObservedInformation, ScoreMetric::ExpectedInformation}), out.score);
+      {ScoreSensitivity::ExpectedInformation, ScoreMetric::ExpectedInformation}), out.score);
   auto h1 = fiml_h1_moments(raw, pack);
   if (!h1) {
     set_unavailable(out.lr, InferenceReason::NumericFailure, h1.error().detail);

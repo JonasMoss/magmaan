@@ -154,7 +154,7 @@ TEST_CASE("policy score contracts: stationarity raw meat and projection") {
     // At the embedded null the nonzero score makes centering observable.
     CHECK((centered->meat-projected->meat).norm()>1e-6);
     inference::frontier::ScoreGeometryOptions geometry;
-    geometry.sensitivity=inference::frontier::ScoreSensitivity::ObservedInformation;
+    geometry.sensitivity=inference::frontier::ScoreSensitivity::ExpectedInformation;
     auto global=inference::frontier::global_score_components(alt.pt,alt.rep,raw,*pack,ea,geometry); REQUIRE(global);
     auto gp=inference::frontier::project_scores(*global,true,false); REQUIRE(gp);
     auto spectrum=inference::frontier::score_spectrum(*gp); REQUIRE(spectrum);

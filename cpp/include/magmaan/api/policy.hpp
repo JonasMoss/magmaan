@@ -240,8 +240,8 @@ std::size_t policy_ingredient_builds(const MixedDwlsPolicyFit& fit);
 PolicyInference policy_inference_ml(robust::frontier::NTMLFit& fit,
                                     const PolicyFitState& state);
 
-// Observed-data FIML. Score sensitivity is observed at H0, its metric is
-// pattern-conditional expected information, and its meat consists of direct
+// Observed-data FIML. Score sensitivity and metric are pattern-conditional
+// expected information (scope.md exception 2026-10-29). Its meat is direct
 // casewise likelihood scores at H0. Global LR uses saturated observed H1.
 PolicyInference policy_inference_fiml(spec::LatentStructure pt,
     const model::MatrixRep& rep, const data::RawData& raw,

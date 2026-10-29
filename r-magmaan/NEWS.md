@@ -1,5 +1,11 @@
 # magmaan (development version)
 
+- FIML global score test p-values now use expected sensitivity. The previous
+  observed-H0 sensitivity was severely conservative at moderate and high df
+  in research/44. This also changes finite-sample complete-data FIML scores;
+  the two sensitivities agree asymptotically under the null. Nested tests are
+  unchanged.
+
 - `magmaan(estimator = "RDWLS")` fits complete ordered or mixed data using
   exact first-stage Gamma diagonal weights and the DWLS inference policy.
   DWLS remains the default. Missing data and lavaan compatibility bundles

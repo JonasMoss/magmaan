@@ -180,7 +180,8 @@ score_flip_test <- function(fit_H1, fit_H0, data = NULL,
 #' @param data Raw fitting data for complete-data ML. FIML and ML2S use
 #'   `fit$raw_data`.
 #' @param sensitivity Nuisance-projection bread. `"expected"` uses the fitted
-#'   H0 Fisher information, `"observed"` uses the realized H0 Hessian, and
+#'   H0 Fisher information (the default for every estimator, including FIML
+#'   by the scope exception of 2026-10-29), `"observed"` uses the realized H0 Hessian, and
 #'   `"observed-shrink-light"` and `"observed-shrink-sqrt"` shrink that Hessian
 #'   toward expected Fisher information using a predeclared function of the
 #'   nuisance-tangent dimension divided by sample size. Both weights vanish
@@ -213,7 +214,6 @@ global_score_flip_test <- function(
     metric = c("expected", "observed", "observed-h1")) {
   multiplier <- match.arg(multiplier)
   multiplier_studentization <- match.arg(multiplier_studentization)
-  if (missing(sensitivity) && identical(toupper(fit$estimator), "FIML")) sensitivity <- "observed"
   sensitivity <- match.arg(sensitivity)
   metric <- match.arg(metric)
   estimator <- toupper(fit$estimator %||% "ML")

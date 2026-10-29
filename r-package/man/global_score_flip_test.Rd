@@ -45,7 +45,8 @@ diagnostic using the per-draw meat
 \verb{sum(w_i^2 u_i u_i')}. \code{"none"} retains the expected-information metric.}
 
 \item{sensitivity}{Nuisance-projection bread. \code{"expected"} uses the fitted
-H0 Fisher information, \code{"observed"} uses the realized H0 Hessian, and
+H0 Fisher information (the default for every estimator, including FIML
+by the scope exception of 2026-10-29), \code{"observed"} uses the realized H0 Hessian, and
 \code{"observed-shrink-light"} and \code{"observed-shrink-sqrt"} shrink that Hessian
 toward expected Fisher information using a predeclared function of the
 nuisance-tangent dimension divided by sample size. Both weights vanish
@@ -78,5 +79,3 @@ saturated moment dimension minus the tangent rank. This is the general
 goodness-of-fit counterpart to
 \code{\link[=score_flip_test]{score_flip_test()}}, which instead releases specified affine restrictions.
 }
-
-\details{The default sensitivity is observed for FIML under MAR and expected for complete-data global goodness-of-fit under the correct-model null. Explicit sensitivity and metric choices remain available.}
