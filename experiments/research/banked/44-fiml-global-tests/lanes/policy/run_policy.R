@@ -264,21 +264,20 @@ cat(sum(existing), "/", length(jobs), " chunks reused\n", sep = "")
 if (!opts$summarize_only && any(!existing)) {
   prepare_models()
   pending <- which(!existing)
-  for (batch in split(pending, ceiling(seq_along(pending) / opts$workers))) {
-    parallel::mclapply(batch, function(index) {
-      job <- jobs[[index]]
-      elapsed <- proc.time()[["elapsed"]] - launch[["elapsed"]]
-      if (elapsed > 60 * opts$time_budget_minutes) return(NULL)
-      cat(sprintf("chunk %d/%d cell %d elapsed %.1fs\n", index, length(jobs), job$cell$cell_id, elapsed))
-      rows <- do.call(rbind, lapply(seq.int(job$a, job$b), function(rep_id) one_rep(job$cell, rep_id)))
-      temporary <- paste0(job$path, ".tmp")
-      write_csv(rows, temporary)
-      if (!file.rename(temporary, job$path)) stop("Cannot finalize chunk: ", job$path)
-      TRUE
-    }, mc.cores = opts$workers, mc.preschedule = FALSE) -> completed
-    if (any(vapply(completed, inherits, logical(1), "try-error"))) stop("Chunk worker failed")
-    if (proc.time()[["elapsed"]] - launch[["elapsed"]] > 60 * opts$time_budget_minutes) break
-  }
+  # One dynamic schedule: chunk costs differ by ~50x across cells, so lock-step
+  # batches would idle workers. Late chunks see the budget and return at once.
+  parallel::mclapply(pending, function(index) {
+    job <- jobs[[index]]
+    elapsed <- proc.time()[["elapsed"]] - launch[["elapsed"]]
+    if (elapsed > 60 * opts$time_budget_minutes) return(NULL)
+    cat(sprintf("chunk %d/%d cell %d elapsed %.1fs\n", index, length(jobs), job$cell$cell_id, elapsed))
+    rows <- do.call(rbind, lapply(seq.int(job$a, job$b), function(rep_id) one_rep(job$cell, rep_id)))
+    temporary <- paste0(job$path, ".tmp")
+    write_csv(rows, temporary)
+    if (!file.rename(temporary, job$path)) stop("Cannot finalize chunk: ", job$path)
+    TRUE
+  }, mc.cores = opts$workers, mc.preschedule = FALSE) -> completed
+  if (any(vapply(completed, inherits, logical(1), "try-error"))) stop("Chunk worker failed")
 }
 chunks <- lapply(jobs[vapply(jobs, function(job) file.exists(job$path), logical(1))], valid_chunk)
 rows <- if (length(chunks)) do.call(rbind, chunks) else {
@@ -303,6 +302,9 @@ for (j in seq_len(nrow(grid))) {
     refs <- if (arm == "mlr") "yuan.bentler.mplus" else if (arm %in% names(arms)) c("sb", "peba4") else c("std", "sb", "peba4")
     for (ref in refs) {
       p <- z[[if (arm == "mlr") "p_mlr" else paste0("p_", arm, "_", ref)]]
+      # Every arm conditions on the same converged fits; diagnostics could
+      # otherwise return p-values on fits the policy refuses.
+      p[!z$fit_ok] <- NA_real_
       rates[[length(rates) + 1L]] <- cbind(descriptors, arm = arm, reference = ref,
         attempted = nrow(z), fit_ok = sum(z$fit_ok), usable = sum(is.finite(p)),
         rejection_rate = mean_finite(ifelse(is.finite(p), as.numeric(p <= .05), NA_real_)))
