@@ -82,7 +82,7 @@ options. What it demands depends on what each component's null asserts.
 | --- | --- | --- |
 | Parameter covariance, Wald tests and intervals | Nothing about model correctness: the target is the pseudo-true $\theta(P)$ | Sandwich with observed-information bread and empirical score or moment meat; estimated-weight influence for data-dependent weights (DWLS, GLS, WLS) |
 | Nested tests (score, likelihood ratio, fit-function difference) | The restriction holds at the larger model's pseudo-true value; the larger model may be wrong | Observed-information sensitivity and spectra; estimated-weight laws for least-squares estimators (the DWLS parameter-space estimated-weight IJ law). Fixed-weight or expected-information versions are comparators only |
-| Global goodness-of-fit tests | The model is correct | Consistency is needed only under that null. With complete data, the expected normal-theory information is the limit of the observed Hessian there, even for nonnormal data, so it is admissible and simulations choose. Under MAR missingness the pattern-conditional expected information is not the Hessian even for a correct model, so FIML uses observed information |
+| Global goodness-of-fit tests | The model is correct | Consistency is needed only under that null. With complete data, the expected normal-theory information is the limit of the observed Hessian there, even for nonnormal data, so it is admissible and simulations choose. Under MAR missingness the pattern-conditional expected information is not the Hessian even for a correct model; the FIML global score test nevertheless uses it, by the author's exception of 2026-10-29 below, and the FIML global LR keeps observed information |
 | Score-test metric | A free choice: any fixed positive definite metric with its matching spectrum gives a consistent test | Expected information is allowed, and is used for stability |
 
 Consequences:
@@ -106,6 +106,22 @@ Consequences:
   valid only when the first stage's own model holds (for polychorics, latent
   normality). Decided 2026-10-05 for ordinal and mixed DWLS (TASK-67, TASK-69);
   the shortcut stays in `lavaan_compat`.
+
+Exception, FIML global score test (author's decision, 2026-10-29). The
+ordinary FIML global score test uses the pattern-conditional expected
+information as both sensitivity and metric, with uncentered casewise score
+products and the PEBA4 reference. This recipe is consistent for complete data
+and MCAR under any distribution, and inconsistent under MAR (conservative
+with normal data). The consistent observed-H0 sensitivity it replaces pays a
+projection penalty that makes it severely conservative at moderate and high
+df: in the research/44 policy lane (60,000 ordinary FIML fits, 2026-10-29) it
+rejected 0.0-0.1% at N = 200 and 1.0-2.5% at N = 1000 for df 34-87, while
+expected sensitivity on the same fits rejected 2.6-5.5% in every
+identified-null cell, normal MAR included. It is the recipe the author's
+gof-missing simulations evaluated (magmaan 0.0.1, which agrees with the
+current code to within 1e-5 on twelve check datasets) and semTests' default. A
+consistent finite-sample correction of the observed projection stays
+research-tier (TASK-171). Nested FIML score tests keep observed sensitivity.
 
 ### Group allocation and likelihood-score covariance
 
