@@ -689,6 +689,14 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))
+  u <- attr(x, "unavailable")
+  # With an unfitted larger model the header says why there is no LR test, so
+  # its placeholder row (kept in the returned table) and note are not printed.
+  if (isTRUE(attr(x, "alternative_not_fitted"))) {
+    t <- t[t$test != "lr", , drop = FALSE]
+    if (all(is.na(t$reason))) t$reason <- NULL
+    u <- u[names(u) != "lr"]
+  }
   .print_test_table(t)
   refit <- attr(x, "refit")
   if (!is.null(refit)) cat("larger model refit from the restricted estimate; its objective improved from ",
@@ -703,7 +711,6 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
     cat("Reference: exact spectrum (All); decisions/05-dwls-policy-calibration and decisions/06-ordinal-threshold-invariance.\n")
   .peba_note(x)
   if (is.null(attr(x, "lavaan_compat"))) .lr_note(t)
-  u <- attr(x, "unavailable")
   for (i in seq_along(u)) cat("  ", names(u)[i], " unavailable: ", u[[i]], "\n", sep = "")
   if (isTRUE(attr(x, "psd_boundary"))) cat(.boundary_note, "\n")
   if (isTRUE(attr(x, "verdict_disagreement"))) cat(.nested_verdict_note, "\n")

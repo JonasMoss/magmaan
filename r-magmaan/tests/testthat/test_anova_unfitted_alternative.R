@@ -89,3 +89,16 @@ test_that('unfitted comparisons refuse wrong roles, schemas and compatibility', 
     expect_true(all(table$reason == 'unsupported_model'))
   }
 })
+
+test_that('the printout of a score-only anova() omits the LR placeholder', {
+  skip_if_not_installed('lavaan')
+  d <- lavaan::HolzingerSwineford1939
+  free <- magmaan_model(.unfitted_cfa, prototype = d)
+  equal <- magmaan_model(paste(.unfitted_cfa, 'a == b', sep = '\n'), prototype = d)
+  table <- anova(magmaan(equal, d), free)
+  expect_true('lr' %in% table$test)
+  out <- capture.output(print(table))
+  expect_true(any(grepl('only the score test is reported', out, fixed = TRUE)))
+  expect_false(any(grepl('likelihood ratio', out, fixed = TRUE)))
+  expect_false(any(grepl('lr unavailable', out, fixed = TRUE)))
+})
