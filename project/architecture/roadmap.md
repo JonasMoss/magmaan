@@ -617,7 +617,7 @@ ownership reserved for TASK-33.3. Existing fitting defaults are unchanged.
 
 [Ordinal and mixed inference](capabilities/ordinal_and_mixed.md) uses exact first-stage rows for ordinary DWLS inference and the All global and nested reference, with explicit compatibility bundles and live DELTA scales (TASK-69, TASK-71, TASK-74, TASK-79, TASK-81, TASK-83–84, TASK-88–92, TASK-127). Association-ML lab covariance, tests and releases compose exact Stage-1 transport (TASK-32.2–4); the dated changes retain the calibration and parity evidence.
 
-[Complete-data ML](capabilities/complete_data_ml.md) uses exact casewise likelihood terms for nested LR meat and can reseed a larger fit from its restricted optimum. Observed-sensitivity score and larger-model LR geometries retain their calibration record in decisions/04.
+[Complete-data ML](capabilities/complete_data_ml.md) uses exact casewise likelihood terms for nested LR meat and can reseed a larger fit from its restricted optimum. Nested score tests, robust MI and equality releases use expected sensitivity and metric under the scope exception of 2026-11-11 (TASK-174), retaining empirical likelihood-score meat and SB/PEBA4, so they do not depend on marker or std.lv identification. The nested LR keeps the observed larger-model geometry. Both records are in decisions/04.
 
 [Parser and model construction](capabilities/parser.md) supports the scoped Mplus frontend, data plans, growth models and nonlinear all-ordinal lab equalities, with explicit ordinary fitting refusals and corpus gates (TASK-54.2). Unsupported routes retain rule-specific errors.
 
