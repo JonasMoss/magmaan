@@ -77,7 +77,12 @@ Fabin1F fabin_3ind(const Eigen::MatrixXd& S0, bool std_lv) {
   }
   if (degenerate2) psi *= 0.5;
 
-  Eigen::Vector3d lam(1.0, l2, l3);
+  // Dynamic size on purpose: a dynamic block of a fixed Vector3d copied into a
+  // VectorXd instantiates Eigen's 4-wide AVX store, which GCC 15 flags as a
+  // 32-byte read of a 24-byte object (-Wstringop-overread, fatal in R CMD
+  // check) even though nvar <= 3 never takes that path.
+  Eigen::VectorXd lam(3);
+  lam << 1.0, l2, l3;
   if (std_lv) {
     const double s = (psi < 0.0 ? -1.0 : 1.0) * std::sqrt(std::abs(psi));
     lam *= s;
