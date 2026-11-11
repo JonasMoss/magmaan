@@ -212,10 +212,9 @@ per-paper AGENTS.md overrides for a documented reason:
 - Use `\,` for thin spaces in integrals and product names (`\,dx`,
   `\arg\,min`).
 
-**Symbol glossary.** Every paper carries a short Symbol Glossary section
-near the front of the manuscript, listing each symbol once with its
-meaning. Prevents the "p means both p-value and number of indicators"
-drift. Update the glossary whenever notation changes.
+**No symbol glossary.** Define each symbol in the text where it first
+appears, and give one symbol one meaning throughout the paper (never $p$
+for both a $p$-value and the number of indicators).
 
 Theorems by profile:
 
@@ -330,8 +329,6 @@ Style consistency that the pipeline must enforce, not the author:
 - **Tables and figures prefixed with the paper slug.**
   `tables/snlls_geiser_corpus_summary.tex`, not `tables/summary.tex`.
   Prevents cross-paper collisions and makes grep useful.
-- **Symbol glossary updated when notation changes.** A grep for `$p$`
-  should agree with what the glossary says `p` means.
 - **One R script writes one rectangular CSV.** A script that produces
   three artifacts produces three CSVs. Tables and figures read CSVs,
   never call simulation code.
