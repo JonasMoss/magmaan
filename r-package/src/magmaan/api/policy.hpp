@@ -155,11 +155,11 @@ struct PolicyInference {
 // likelihood-ratio statistic is the difference of the two fit statistics;
 // the score uses H1 at the embedded null, whose restriction directions are
 // projected against the lifted null nuisance tangent, so it keeps its
-// meaning at a PSD boundary null. Both use observed geometry: the score
-// projects with the observed information at the null fit and keeps the
-// expected metric on the projected directions (the FIML recipe), and the
-// Satorra-2000 LR spectrum reduces through the observed information at the
-// alternative. Each is calibrated with SB and PEBA4 from its spectrum.
+// meaning at a PSD boundary null. Complete-data ML scores use expected
+// sensitivity and metric (scope.md exception 2026-11-11); FIML scores retain
+// observed sensitivity with the expected metric. The Satorra-2000 LR spectrum
+// uses observed information at the alternative. Each ML/FIML test is
+// calibrated with SB and PEBA4 from its spectrum.
 struct PolicyNested {
   PolicyTest score, lr;
   bool psd_boundary = false;  // either fit is a PSD estimate on the boundary

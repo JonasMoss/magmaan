@@ -1,3 +1,9 @@
+# magmaanlab (development)
+
+- Ordinary complete-data ML policy nested scores, modification indices and
+  equality releases now use expected sensitivity and metric. Lab primitive
+  defaults remain unchanged.
+
 # magmaanlab 0.2.3
 
 - `global_score_flip_test()` now defaults to expected sensitivity for FIML;

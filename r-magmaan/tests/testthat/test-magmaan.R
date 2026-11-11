@@ -410,7 +410,7 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   expect_equal(attr(a, "restricted"), "f0")
   expect_equal(unclass(anova(f1, f0, references = c("sb", "peba4"))), unclass(a), ignore_attr = TRUE)
   expect_equal(a$df, rep(2L, 4))
-  # Both tests are the lab's hypothesis quadratics in the observed nested
+  # Both tests are the lab's hypothesis quadratics: expected score and observed LR in the nested
   # geometry, calibrated explicitly.
   shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))
   h <- magmaanlab::prepare_hypothesis(magmaanlab::prepare_inference(as_lab_fit(f0), shared),
@@ -418,7 +418,7 @@ test_that("anova() gives nested LR and score tests with SB and PEBA4", {
   for (k in 1:2) {
     test <- c("score", "lr")[k]
     cal <- magmaanlab::calibrate_quadratic(
-      magmaanlab::inference_quadratic(h, test, geometry = "observed"), c("sb", "peba4"))
+      magmaanlab::inference_quadratic(h, test, geometry = if (test == "score") "expected" else "observed"), c("sb", "peba4"))
     expect_equal(a$statistic[(k - 1L)*2L + 1L], cal$statistic[1], tolerance = 1e-10)
     expect_equal(c(a$pvalue[a$reference %in% "sb"][k], a$pvalue[a$reference %in% "peba4"][k]), cal$p_value, tolerance = 1e-10)
   }

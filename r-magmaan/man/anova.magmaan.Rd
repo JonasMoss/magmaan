@@ -50,6 +50,10 @@ fits are unchanged; \code{attr(result, "refit")} records the old and new objecti
 and printing reports the recovery. Internal refit warnings are captured in
 \code{attr(result, "reseed")$warnings} and printed as notes, including when a
 retry is unsuccessful. An unsuccessful retry retains the failure.
+
+Complete-data ML score tests use expected sensitivity and metric, with
+empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
+score tests and modification indices retain observed sensitivity.
 }
 \section{Simulation studies}{
 

@@ -241,6 +241,8 @@ score_tests <- function(fit, data = NULL, ...) {
 # recorded in fit$W; `weight=` is needed only for fits without that record and
 # must otherwise equal it. The ordinary statistic is recovered only when the
 # weight is the inverse of the selected Gamma.
+# The ordinary complete-data ML policy explicitly selects expected sensitivity
+# and metric (scope.md exception 2026-11-11); these lab defaults stay observed.
 # Continuous, all-ordinal and complete mixed LS use observed sensitivity by
 # default, with the expected quadratic metric and matching projected meat.
 # Expected sensitivity and fixed weights remain explicit comparators.

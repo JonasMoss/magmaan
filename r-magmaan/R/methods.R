@@ -474,6 +474,10 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' `attr(result, "reseed")$warnings` and printed as notes, including when a
 #' retry is unsuccessful. An unsuccessful retry retains the failure.
 #'
+#' Complete-data ML score tests use expected sensitivity and metric, with
+#' empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
+#' score tests and modification indices retain observed sensitivity.
+#'
 #' @param object,... Two [magmaan()] fits, in either order.
 #' @param lavaan_compat `NULL` (default) reports the policy's score and LR
 #'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference

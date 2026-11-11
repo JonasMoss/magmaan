@@ -141,7 +141,13 @@ TEST_CASE("FIML policy: complete-data reductions and typed reasons") {
   available(fn.score,1); available(fn.lr,1);
   CHECK(fn.lr.statistic == doctest::Approx(mn.lr.statistic).epsilon(1e-8));
   CHECK((fn.lr.eigenvalues-mn.lr.eigenvalues).norm() < 1e-9);
-  CHECK((fn.score.eigenvalues-mn.score.eigenvalues).norm() < 1e-8);
+  // ML and FIML now select different nested-score sensitivities. Compare the
+  // FIML policy to the explicit observed route, retaining its old contract.
+  auto observed_h = robust::frontier::prepare_ntml_hypothesis(*f0,*f1); REQUIRE(observed_h);
+  auto observed_q = robust::frontier::ntml_quadratic(**observed_h,true,robust::Information::Observed); REQUIRE(observed_q);
+  auto observed_s = robust::frontier::ntml_spectrum(**observed_q); REQUIRE(observed_s);
+  CHECK(fn.score.statistic == doctest::Approx((*observed_q)->statistic).epsilon(1e-8));
+  CHECK((fn.score.eigenvalues-**observed_s).norm() < 1e-8);
   {
     // Unequal groups: both routes weight each group's transport metric by its
     // size, so complete-data FIML and ML nested LR laws still coincide.

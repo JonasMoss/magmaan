@@ -17,13 +17,14 @@
   has explicit unavailable intervals. This changes numerical availability,
   not interval definitions or inference policy.
 
-- TASK-106 separates observed nuisance sensitivity from the expected metric
-  and bread for robust ML modification indices and affine releases. The one-df
-  statistic is `(g_H' score)^2 / (g_H' B g_H)`; positive observed efficient
-  curvature is not required. EPCs use the expected-information projection.
-  Identified numerical failures retain rows with typed errors in C++ and
-  `reason`/`detail` columns in lab tables. Expected-bread, LS and ordinal
-  numerical recipes are unchanged.
+- TASK-106 retains the generalized one-df statistic
+  `(g' score)^2 / (g' B g)` along the nuisance-projected direction `g`, and
+  typed numerical-error rows (`reason`/`detail` in lab tables). Under the
+  2026-11-11 scope exception (TASK-174),
+  ordinary complete-data ML modification indices and affine releases use
+  expected sensitivity and metric with empirical likelihood-score meat.
+  EPCs use the expected-information projection. FIML retains observed
+  sensitivity and the expected metric.
 
 - TASK-101 adds the policy point fit-index composer and lab data-frame
   adapter: complete ML uses the observed raw-score Takeuchi trace difference,
@@ -44,7 +45,7 @@
   [interface vision](../../design/r-interface-vision.md#inference-policy).
 
 - `policy_score_contracts_test.cpp` gates two-group complete-data covariance
-  and nested observed-score reduction from FIML, equivalent label/`==`/
+  and explicit expected-sensitivity nested ML reduction, equivalent label/`==`/
   `group.equal` restrictions at a shared evaluation point (relative 1e-8),
   and finite or typed policy inference on an actual Heywood PSD-boundary fit.
   These gates preserve raw score second moments and existing policy defaults.
@@ -1348,6 +1349,11 @@
   spectrum for regular profile-Hessian nested-test research primitives.
 
 #### Dated changes
+
+- 2026-11-11 (TASK-174): ordinary complete-data ML nested score tests, robust
+  modification indices and equality releases use expected sensitivity and
+  metric, retaining empirical likelihood scores and SB/PEBA4 references.
+  Nested LR, FIML, LS and parameter covariance retain their geometry.
 
 2026-10-04: the ML policy's nested LR meat now includes the exact casewise
 likelihood terms at the alternative fit, so the spectrum stays consistent when

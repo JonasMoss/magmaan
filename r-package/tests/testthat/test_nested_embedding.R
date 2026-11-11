@@ -59,11 +59,11 @@ test_that("exact ML path embedding agrees across spellings and with lavaan", {
   compat <- robust_nested_lrt(h1, nulls[[2L]], data = d,
                               A.method = "exact", convention = "lavaan", method = "restriction_map")
   expect_equal(compat$T_scaled, oracle[["Chisq diff"]][2L], tolerance = 1e-4)
-  # lavTestScore() is the expected nested geometry; the policy uses the
-  # observed one. The lab reproduces both.
+  # lavTestScore() and the complete-data ML policy select expected nested
+  # geometry; observed remains available explicitly in the lab.
   shared <- prepare_inference_data(h1, d)
   hyp <- prepare_hypothesis(prepare_inference(nulls[[3L]], shared), prepare_inference(h1, shared))
-  expect_equal(inference_quadratic(hyp, "score", geometry = "observed")$statistic,
+  expect_equal(inference_quadratic(hyp, "score", geometry = "expected")$statistic,
                expected$score$statistic, tolerance = 1e-10)
   score_null <- lavaan::cfa(nested_spellings[[3L]], d)
   expect_equal(inference_quadratic(hyp, "score", geometry = "expected")$statistic,

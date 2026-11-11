@@ -737,11 +737,12 @@ PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
         : InferenceReason::NumericFailure;
     return unavailable(reason,hypothesis.error().detail);
   }
-  // Observed geometry: the nested comparison usually has a misspecified
-  // larger model, where expected information gives an inconsistent reference
-  // law for both statistics.
+  // The complete-data score uses expected sensitivity and metric under the
+  // scope.md exception of 2026-11-11. LR retains observed geometry: expected
+  // LR references are inconsistent under a misspecified larger model
+  // (decisions/04).
   using robust::Information;
-  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true, Information::Observed),
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true, Information::Expected),
             out.score);
   // Detect the negative raw LR before calibration: the quadratic constructor
   // rejects negative statistics, so checking a calibrated result hides this

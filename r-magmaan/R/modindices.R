@@ -5,6 +5,12 @@
 #' separately, including shared labels, explicit equalities and group.equal.
 #' Candidate order is preserved; results are never sorted automatically.
 #'
+#' Complete-data ML score tests use expected sensitivity and metric, with
+#' empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
+#' score tests and modification indices retain observed sensitivity. DWLS
+#' uses exact first-stage sampling rows and estimated-weight influence with
+#' observed sensitivity. ML/FIML EPCs use expected information.
+#'
 #' LR tests refit one augmented model per candidate from the embedded fitted
 #' estimate, and are consequently more costly. They use the same policy nested
 #' test as anova(): LR for ML/FIML and fit-function differences for DWLS, with
@@ -17,10 +23,16 @@
 #' @param releases Include equality releases (default TRUE).
 #' @return A data frame with kind, lhs, op, rhs, group, test, statistic, df,
 #'   pvalue, epc, sepc.lv, sepc.all and reason. Unavailable statistics are NA.
+#'   Equality rows describe native affine restrictions in parameter-label coordinates.
 #' @section Candidate scope:
 #' The generator proposes loadings, residual/latent covariances and absent
 #' regressions among variables already participating in structural equations,
 #' including reverse paths. Identification failures retain unavailable rows.
+#' Singular nuisance sensitivity or nonpositive score variance produces
+#' `numeric_failure` and NA values; LR may still refit these candidates. Failed
+#' refits carry `refit_failed` or `not_converged`. Penalized, non-converged and
+#' unsupported regimes retain typed rows.
+#' @seealso [anova.magmaan()], [magmaan()]
 #' @export
 modindices <- function(fit, test = c("score", "lr"), candidates = NULL, releases = TRUE) {
   if (!inherits(fit, "magmaan")) stop("modindices(): supply a magmaan() fit", call. = FALSE)

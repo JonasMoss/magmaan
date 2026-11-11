@@ -65,7 +65,7 @@ inference::frontier::RobustScoreOptions ml_options(const PolicyModificationOptio
   inference::frontier::RobustScoreOptions out;
   out.base = options.candidates;
   out.base.information = inference::ScoreInformation::Expected;
-  out.spec = {robust::Information::Observed, robust::WeightMoments::Likelihood,
+  out.spec = {robust::Information::Expected, robust::WeightMoments::Likelihood,
       robust::ScoreCovariance::Empirical};
   return out;
 }

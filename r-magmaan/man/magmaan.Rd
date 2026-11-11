@@ -90,6 +90,9 @@ its replacement.}
 }
 \value{
 An object of class \code{magmaan}.
+Complete-data ML score tests use expected sensitivity and metric, with
+empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
+score tests and modification indices retain observed sensitivity.
 }
 \description{
 Estimates the model and, unless \code{inference = FALSE}, computes inference

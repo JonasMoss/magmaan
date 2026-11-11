@@ -9,7 +9,7 @@
 #include <algorithm>
 #include "magmaan/data/ordinal.hpp"
 
-TEST_CASE("policy modification indices select observed empirical ML and affine releases") {
+TEST_CASE("policy modification indices select expected sensitivity with empirical ML and affine releases") {
   using namespace magmaan;
   auto syntax = parse::Parser::parse("f =~ x1 + a*x2 + a*x3 + x4");
   REQUIRE(syntax);
@@ -35,7 +35,7 @@ TEST_CASE("policy modification indices select observed empirical ML and affine r
   REQUIRE(result.reason == api::InferenceReason::Available);
   inference::frontier::RobustScoreOptions opts;
   opts.base.candidates = inference::ScoreCandidateSet::WithAbsentRows;
-  opts.spec = {robust::Information::Observed, robust::WeightMoments::Likelihood, robust::ScoreCovariance::Empirical};
+  opts.spec = {robust::Information::Expected, robust::WeightMoments::Likelihood, robust::ScoreCovariance::Empirical};
   auto fixed = inference::frontier::modification_indices_robust(*pt, *rep, *sample, raw, *estimates, opts);
   auto released = inference::frontier::score_tests_robust(*pt, *rep, *sample, raw, *estimates, opts);
   REQUIRE(fixed); REQUIRE(released);

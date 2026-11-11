@@ -555,6 +555,10 @@ ordinary API exposes barrier fitting experimentally as
 
 #### ML and FIML
 
+- [x] **TASK-174**: complete-data ML nested score, MI and equality releases
+  use expected sensitivity and metric under the 2026-11-11 scope exception;
+  nested LR, FIML and parameter covariance stay unchanged.
+
 - [x] **TASK-172**: FIML global score uses expected sensitivity under the
   2026-10-29 scope exception; nested and covariance geometry stay unchanged.
 

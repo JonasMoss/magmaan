@@ -334,6 +334,10 @@ print.magmaan_model <- function(x, ...) {
 #' @param ... Arguments removed in magmaan 0.2.0; each raises an error naming
 #'   its replacement.
 #' @return An object of class `magmaan`.
+#' Complete-data ML score tests use expected sensitivity and metric, with
+#' empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
+#' score tests and modification indices retain observed sensitivity.
+#'
 #' @section Ordered association ML:
 #' With all indicators declared `ordered`, `estimator = "ML"` fits Gaussian
 #' ML on the estimated polychoric correlations. The ordinal default remains

@@ -542,8 +542,9 @@ user chooses what replaces the missing empirical moments.
 
 `modindices(fit, test = "score", candidates = NULL, releases = TRUE)` reports
 robust one-df score statistics and chi-square(1) limiting p-values, including
-one-at-a-time affine equality releases. The C++ composer selects observed
-sensitivity and empirical likelihood/pattern scores for ML/FIML, or exact
+one-at-a-time affine equality releases. The C++ composer selects expected
+sensitivity and metric for complete-data ML (scope exception 2026-11-11),
+observed sensitivity for FIML, empirical likelihood/pattern scores for both, or exact
 first-stage rows and estimated-weight influence for all-ordinal/mixed DWLS.
 There is no reference selector. Optional `test = "lr"` refits each augmented
 model from the embedded null and reports the ordinary nested LR/fit-function
@@ -641,7 +642,10 @@ where it is consistent by construction: as a freely chosen score metric, and in
 goodness-of-fit tests, whose null hypothesis is the correct model (there,
 simulations choose between expected and observed). A badly calibrated
 misspecification-robust recipe calls for a finite-sample correction, not a
-return to expected information.
+return to expected information. The dated scope exceptions override this
+general rule: FIML global scores (2026-10-29) and complete-data ML nested
+scores, MI and equality releases (2026-11-11) use expected sensitivity and
+metric, with their empirical likelihood-score meat retained.
 
 **Principle: estimators keep their conventional definitions (adopted
 2026-10-27, TASK-164).** The policy changes inference only. An estimator,
@@ -775,7 +779,7 @@ tests with PEBA4 by default (SB available explicitly), score first. The comparis
 agree.
 
 Complete-data ML nested geometry (`api::policy_nested_ml`, 2026-09-26;
-observed geometry since 2026-10-02):
+observed LR geometry since 2026-10-02; expected score since 2026-11-11):
 
 - **Nesting.** The restricted model is the other model plus equality
   constraints on the same parameters (shared labels, or `b == 0` on a labeled
@@ -790,38 +794,24 @@ observed geometry since 2026-10-02):
   Satorra-2000 test). Evidence for SB and PEBA on this statistic, in the
   expected geometry: FMG (2026) Study 2, reproduced in
   `experiments/replications/07-foldnes-moss-gronneberg-2026-study2/`.
-- **Score.** Evaluated at the restricted fit: casewise likelihood scores along
-  the restriction directions, projected against the restricted model's own
-  directions with the larger model's observed information at the restricted
-  fit (the efficient score), and the expected-information metric on the
-  projected directions. This is the FIML score recipe
-  (`inference::frontier::project_scores`): the projection enters the quadratic
-  form's weight as well as its spectrum, so on complete data the FIML and ML
-  nested scores coincide. The projection keeps the statistic meaningful where
-  the restricted fit is not stationary, as at a PSD boundary. A calibration
-  study of its own is still missing (backlog).
-- **Adopted change (2026-10-02): observed geometry for nested tests.** A
-  nested comparison is usually made with a misspecified larger model (the
-  invariance case). There the true Hessian contains residual terms that
-  expected information omits, so expected information gives an inconsistent
-  reference law for both statistics. The score therefore moves to observed
-  sensitivity at the restricted fit with the expected metric, as for FIML,
-  and the Satorra-2000 spectrum to observed information at the larger model.
-  The likelihood-ratio statistic is unchanged. The score keeps its numerator,
-  and its weight also uses the observed projection (decided 2026-10-02: the
-  same recipe as FIML rather than an unchanged statistic with an observed
-  spectrum only), so the score statistic itself changes; at df 1 the two
-  choices give the same scaled test. The global ML test keeps expected
-  information: there the model is correct under the null, so expected is
-  consistent, and observed sensitivity collapses as p grows. Implemented
-  2026-10-02 and calibrated 2026-10-03
-  ([decisions/04](../../experiments/decisions/04-nested-ml-geometry/report.qmd),
-  36,000 draws): under a strongly misspecified larger model the
-  expected-geometry LR rejects 10–16% of true nulls and its excess barely
-  shrinks with N, while the observed geometry approaches 5% (6.4% at N = 300
-  per group, normal data). The observed score is conservative at N = 100 per
-  group (2–3%); a finite-sample correction that keeps consistency is in the
-  backlog.
+- **Score (scope exception 2026-11-11, TASK-174).** Evaluated at the restricted
+  fit with expected nuisance sensitivity and expected metric, retaining
+  casewise likelihood-score meat and SB/PEBA4 references. The projection keeps
+  the statistic meaningful when the restricted fit is not stationary, as at
+  a PSD boundary. FIML nested scores retain observed sensitivity.
+- **Geometry evidence.** The 2026-10-02 policy selected observed sensitivity
+  for both nested tests because a misspecified larger model breaks information
+  equality. The LR keeps this geometry: in decisions/04 (36,000 draws), the
+  expected-geometry LR rejected 10–16% of true nulls under strong larger-model
+  misspecification, while observed geometry approached 5%.
+  The author's 2026-11-11 exception instead selects expected sensitivity for
+  complete-data ML scores, MI and releases: decisions/04 found observed scores
+  conservative at N = 100 per group (2.0–3.0%), versus 4.2–5.6% for expected,
+  with equal size-adjusted power; expected rejected 4.6–6.4% even under strong
+  larger-model misspecification. TASK-169 also found marker versus std.lv
+  dependence for observed sensitivity (3.4% versus 6.4% at n = 100), whereas
+  expected sensitivity is invariant. This is a recorded finite-sample policy
+  exception, not a general consistency claim under misspecification.
 - **Named reporting conventions (adopted 2026-10-02).** `anova()` defaults
   to the policy (`lavaan_compat = NULL`) and accepts an explicit bundle name
   for checked lavaan compatibility. Complete
@@ -836,7 +826,8 @@ expected Hessians differ by O_p(n^-1/2), so the global tests have the same
 asymptotic law either way and the choice is a finite-sample one. For parameter
 covariance under misspecification, and for nested tests whose larger model is
 misspecified (the usual invariance-testing case), the choice is first order;
-both now use observed information (above).
+covariance and nested LR use observed information; complete-data ML scores
+use expected sensitivity under the recorded exception (above).
 The nested geometry must therefore be specified component by component before
 implementation: nuisance sensitivity, quadratic metric, evaluation point,
 moment covariance, centering and normalization. Do not mechanically replace

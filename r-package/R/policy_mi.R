@@ -1,12 +1,19 @@
 #' Policy modification indices and equality releases
 #'
-#' Uses observed sensitivity and empirical scores for ML and FIML, and exact
+#' Uses expected sensitivity and metric for complete-data ML, observed
+#' sensitivity for FIML, and empirical likelihood scores for both. Uses exact
 #' first-stage sampling rows with estimated weights for ordinal or mixed DWLS.
 #' Each robust score statistic has a chi-square(1) limiting reference law.
+#' The metric and EPCs use expected information for ML/FIML; DWLS uses
+#' observed sensitivity. Singular nuisance sensitivity or nonpositive score
+#' variance retains `numeric_failure` rows. Fits outside the policy return
+#' typed unavailable rows; no alternative convention is substituted.
 #' @param fit A fitted magmaanlab model.
 #' @param data Optional raw observations; defaults to the retained fitting data.
 #' @param releases Include univariate equality-release tests.
-#' @return A data frame in candidate order, with typed unavailability reasons.
+#' @return A data frame in candidate order, with kind, lhs, op, rhs, group, test,
+#'   statistic, df, pvalue, epc, sepc.lv, sepc.all and reason. Internal candidate-row
+#'   metadata supports native one-restriction augmentation and embedded-start refits.
 #' @export
 policy_modification_indices <- function(fit, data = NULL, releases = TRUE) {
   if (!inherits(fit, "magmaan_fit")) stop("policy_modification_indices(): supply a fitted magmaan model")

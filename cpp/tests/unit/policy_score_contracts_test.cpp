@@ -191,13 +191,14 @@ TEST_CASE("policy score contracts: two-group complete-data ML reduction") {
   auto nf=api::policy_nested_fiml(null.pt,null.rep,en,{},alt.pt,alt.rep,ea,{},raw,*pack);
   auto nm=api::policy_nested_ml(fn,{},fa,{});
   available(nf.score,3); available(nm.score,3);
-  CHECK(nf.score.statistic==doctest::Approx(nm.score.statistic).epsilon(1e-8));
-  CHECK((nf.score.eigenvalues-nm.score.eigenvalues).norm()<1e-8);
+  // ML selects expected sensitivity; FIML retains its observed policy.
   auto direct=inference::frontier::nested_score_components(alt.pt,alt.rep,null.pt,null.rep,
-    &(*data)->sample,raw,nullptr,en,inference::frontier::ScoreSensitivity::ObservedInformation);
+    &(*data)->sample,raw,nullptr,en,inference::frontier::ScoreSensitivity::ExpectedInformation);
   REQUIRE(direct);
   auto projected=inference::frontier::project_scores(*direct,true,false); REQUIRE(projected);
   CHECK(projected->statistic==doctest::Approx(nm.score.statistic).epsilon(1e-8));
+  auto spectrum=inference::frontier::score_spectrum(*projected); REQUIRE(spectrum);
+  CHECK((*spectrum-nm.score.eigenvalues).norm()<1e-8);
 }
 
 TEST_CASE("policy score contracts: equivalent constraints at a common null point") {
@@ -271,8 +272,13 @@ TEST_CASE("policy score contracts: equivalent constraints at a common null point
         auto bn=api::policy_nested_ml(baseline,{},ml_alt,{});
         CHECK((mp.covariance-p.covariance).norm()/p.covariance.norm()<1e-8);
         auto mn=api::policy_nested_ml(ml,{},ml_alt,{});
-        CHECK(mn.score.statistic==doctest::Approx(nested.score.statistic).epsilon(1e-8));
-        CHECK((mn.score.eigenvalues-nested.score.eigenvalues).norm()<1e-8);
+        // FIML policy retains observed sensitivity; compare it to that
+        // explicit ML geometry while the policy invariance below uses expected.
+        auto hypothesis=robust::frontier::prepare_ntml_hypothesis(ml,ml_alt); REQUIRE(hypothesis);
+        auto observed=robust::frontier::ntml_quadratic(**hypothesis,true,robust::Information::Observed); REQUIRE(observed);
+        auto spectrum=robust::frontier::ntml_spectrum(**observed); REQUIRE(spectrum);
+        CHECK((*observed)->statistic==doctest::Approx(nested.score.statistic).epsilon(1e-8));
+        CHECK((**spectrum-nested.score.eigenvalues).norm()<1e-8);
         for (const auto& pair : {std::pair{mp.score,bp.score},std::pair{mp.lr,bp.lr},
             std::pair{mn.score,bn.score},std::pair{mn.lr,bn.lr}}) {
           REQUIRE(pair.first.reason==api::InferenceReason::Available);

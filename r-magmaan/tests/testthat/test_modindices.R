@@ -1,11 +1,12 @@
 .mi_workers <- function(fit, data) {
   lab <- as_lab_fit(fit)
   ordinal <- isTRUE(lab$ordinal) || isTRUE(lab$mixed_ordinal)
+  bread <- if (identical(lab$estimator, "ML") && !ordinal) "expected" else "observed"
   fixed <- magmaanlab::modification_indices_robust(lab, data = data,
-    bread = "observed", information = if (ordinal) "expected" else "observed",
+    bread = bread, information = "expected",
     estimated_weight = ordinal)
   release <- magmaanlab::score_tests_robust(lab, data = data,
-    bread = "observed", estimated_weight = ordinal)
+    bread = bread, estimated_weight = ordinal)
   list(fixed = fixed, release = release)
 }
 .mi_key <- function(x) paste(x$lhs, x$op, x$rhs, x$group)
@@ -261,7 +262,7 @@ test_that("HS score modifications retain every saddle-direction candidate", {
     pt$ustart[added] <- 0
     explicit$partable <- pt
     worker <- magmaanlab::modification_indices_robust(explicit, data = d,
-      candidates = "fixed", bread = "observed", information = "expected",
+      candidates = "fixed", bread = "expected", information = "expected",
       estimated_weight = FALSE)
     worker <- worker[.mi_key(worker) == .mi_key(row), ]
     if (row$reason == "available") {

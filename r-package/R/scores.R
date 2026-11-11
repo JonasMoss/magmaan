@@ -365,7 +365,9 @@ policy_inference <- function(fit, data = NULL) {
 
 # magmaan's nested tests of fit_H0 against fit_H1, as applied by the
 # ordinary-user package's anova(): the likelihood-ratio and score statistics,
-# with PEBA4 by default (SB is a comparator). DWLS uses observed-Hessian/IJ
+# with PEBA4 by default (SB is a comparator). Complete-data ML scores use
+# expected sensitivity and metric (scope exception 2026-11-11); nested LR
+# and FIML scores retain observed sensitivity. DWLS uses observed-Hessian/IJ
 # fit-function differences with the All reference; nested score is unavailable.
 # fit_H0 may drop, fix or constrain fit_H1's paths,
 # fitted to the same observations; interior moment reparameterizations are

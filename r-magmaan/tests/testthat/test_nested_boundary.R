@@ -25,7 +25,7 @@ test_that("released-label tests compute at an improper null and match expected S
   expect_true(all(is.na(result$reason)))
   expect_false(attr(result, "psd_boundary"))
 
-  # The policy uses observed geometry and the carried restriction. Its
+  # The LR policy uses observed geometry and the carried restriction. Its
   # expected-geometry exact-restriction lab comparator is lavaan's Satorra-2000
   # with the exact restriction map, as in test-magmaan.R.
   shared <- magmaanlab::prepare_inference_data(as_lab_fit(f1))

@@ -1,3 +1,11 @@
+# magmaan (development)
+
+- Complete-data ML nested score tests, `modindices()` and equality releases
+  now use expected sensitivity and metric and are invariant to identification.
+  The observed version was conservative at small N in decisions/04 and
+  depended on marker versus std.lv identification. Nested LR and all FIML
+  tests are unchanged.
+
 # magmaan 0.2.3
 
 - The FIML global score test now uses expected rather than observed

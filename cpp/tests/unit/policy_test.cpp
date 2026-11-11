@@ -511,7 +511,8 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
     const auto& test = score ? out.score : out.lr;
     REQUIRE(test.reason == api::InferenceReason::Available);
     CHECK(test.reference == "peba4");
-    auto quadratic = ntml::ntml_quadratic(**h, score, magmaan::robust::Information::Observed);
+    auto quadratic = ntml::ntml_quadratic(**h, score, score
+        ? magmaan::robust::Information::Expected : magmaan::robust::Information::Observed);
     REQUIRE(quadratic.has_value());
     auto spectrum = ntml::ntml_spectrum(**quadratic);
     REQUIRE(spectrum.has_value());
@@ -757,14 +758,14 @@ TEST_CASE("policy nested embedding: frozen lavaan dropped-loading score and exac
     auto result=api::policy_nested_ml(null,{},alt,{});
     REQUIRE(result.score.reason==api::InferenceReason::Available);
     REQUIRE(result.lr.reason==api::InferenceReason::Available);
-    // lavTestScore() uses the expected geometry, which the lab and the lavaan
-    // convention keep; the policy score uses the observed projection.
+    // lavTestScore(), the explicit lab comparator and the ML policy score
+    // use expected sensitivity under the 2026-11-11 scope exception.
     auto hypothesis=ntml::prepare_ntml_hypothesis(null,alt);
     REQUIRE(hypothesis.has_value());
     auto lavaan_score=ntml::ntml_quadratic(**hypothesis,true);
     REQUIRE(lavaan_score.has_value());
     CHECK(std::abs((*lavaan_score)->statistic-j["score"].get<double>())<1e-5);
-    CHECK(std::isfinite(result.score.statistic));
+    CHECK(std::abs(result.score.statistic-j["score"].get<double>())<1e-5);
     CHECK(std::abs(result.lr.statistic-j["lr"].get<double>())<1e-10);
     auto c1=magmaan::estimate::build_eq_constraints(alt->pt);
     auto c0=magmaan::estimate::build_eq_constraints(null->pt);
@@ -916,7 +917,7 @@ Eigen::VectorXd sorted(Eigen::VectorXd v) {
 
 }  // namespace
 
-TEST_CASE("policy nested tests: observed geometry under a misspecified larger model") {
+TEST_CASE("policy nested tests: expected score and observed LR under a misspecified larger model") {
   std::mt19937 rng(2026u);
   magmaan::data::RawData raw;
   raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Zero()));
@@ -974,10 +975,13 @@ TEST_CASE("policy nested tests: observed geometry under a misspecified larger mo
     return std::make_pair(g.dot(V.ldlt().solve(g)), sorted(es.eigenvalues()));
   };
   const auto observed = reference_score(*H0);
-  CHECK(out.score.statistic == doctest::Approx(observed.first).epsilon(1e-6));
-  CHECK((out.score.eigenvalues - observed.second).norm() < 1e-6 * observed.second.norm());
+  auto score_observed = ntml::ntml_quadratic(**hypothesis, true, magmaan::robust::Information::Observed);
+  REQUIRE(score_observed);
+  auto spectrum_observed = ntml::ntml_spectrum(**score_observed); REQUIRE(spectrum_observed);
+  CHECK((*score_observed)->statistic == doctest::Approx(observed.first).epsilon(1e-6));
+  CHECK((**spectrum_observed - observed.second).norm() < 1e-6 * observed.second.norm());
 
-  // The expected geometry stays available (lab and lavaan composition) and
+  // The policy selects expected geometry under the scope exception and
   // matches the same reconstruction with S = I; the observed weight is at
   // least as large, so its statistic is not larger at a stationary null.
   auto score_expected = ntml::ntml_quadratic(**hypothesis, true);
@@ -987,8 +991,10 @@ TEST_CASE("policy nested tests: observed geometry under a misspecified larger mo
   const auto expected = reference_score(*I0);
   CHECK((*score_expected)->statistic == doctest::Approx(expected.first).epsilon(1e-6));
   CHECK((**spectrum_expected - expected.second).norm() < 1e-6 * expected.second.norm());
-  CHECK(out.score.statistic <= (*score_expected)->statistic + 1e-8);
-  CHECK(std::abs(out.score.statistic - (*score_expected)->statistic) >
+  CHECK(out.score.statistic == doctest::Approx(expected.first).epsilon(1e-6));
+  CHECK((out.score.eigenvalues - expected.second).norm() < 1e-6 * expected.second.norm());
+  CHECK((*score_observed)->statistic <= (*score_expected)->statistic + 1e-8);
+  CHECK(std::abs((*score_observed)->statistic - (*score_expected)->statistic) >
         1e-6 * (*score_expected)->statistic);
 
   // LR: the statistic is unchanged; the Satorra-2000 spectrum reduces through
@@ -1059,11 +1065,10 @@ TEST_CASE("policy nested tests: observed and expected geometry coincide at exact
     CHECK((test.eigenvalues - **spectrum).norm() < 1e-6 * (*spectrum)->norm());
   }
 }
-TEST_CASE("policy nested tests: the complete-data FIML nested score equals the ML policy score") {
-  // The ML nested score uses the FIML recipe (observed sensitivity, expected
-  // metric). On complete data with a mean structure the FIML score machinery
-  // therefore reproduces the policy statistic and spectrum exactly, in both
-  // geometries. The supplied FIML-pack path retains its mean semantics.
+TEST_CASE("policy nested tests: ML policy equals explicit expected complete-data score") {
+  // Both explicit geometries still reduce through the FIML machinery on
+  // complete data. The ML policy selects only expected sensitivity under
+  // the 2026-11-11 scope exception. FIML policy remains observed.
   std::mt19937 rng(2026u);
   magmaan::data::RawData raw;
   raw.X.push_back(t_rows(rng, 500, Eigen::Vector4d::Zero()));
@@ -1097,7 +1102,7 @@ TEST_CASE("policy nested tests: the complete-data FIML nested score equals the M
     REQUIRE(q_spectrum.has_value());
     CHECK(projected->statistic == doctest::Approx((*q)->statistic).epsilon(1e-9));
     CHECK((sorted(*spectrum) - **q_spectrum).norm() < 1e-9 * (*q_spectrum)->norm());
-    if (observed) {
+    if (!observed) {
       CHECK(out.score.statistic == doctest::Approx(projected->statistic).epsilon(1e-9));
       CHECK((out.score.eigenvalues - sorted(*spectrum)).norm() < 1e-9 * spectrum->norm());
     }
