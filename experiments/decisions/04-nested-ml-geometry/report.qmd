@@ -15,7 +15,7 @@ execute:
 |---|---|---|---|
 | Nested ML LR spectrum | Observed information at the larger model | Adopted by principle; confirmed | Production 2026-10-03: expected drifts under strong misspecification (11–16% at nominal 5%), observed approaches 5% as N grows |
 | Nested ML LR restriction rows | Null tangent carried to the larger fit (identification-invariant) | Adopted by principle (TASK-168); calibrated | Rerun 2026-10-28 on the same draws: equal to exact rows with normal data, 6.3–7.9% instead of 10.0–10.7% with skewed data at N = 100 |
-| Nested ML score projection | Observed sensitivity, expected metric | Adopted by principle; conservative at N = 100 per group | Production 2026-10-03: 2–3% at N = 100, 3.6–5.7% at N = 300; finite-sample follow-up open |
+| Nested ML score projection | Expected sensitivity and metric | Author's scope exception 2026-11-11 (TASK-169); replaces observed sensitivity | Production 2026-10-03: observed 2–3% at N = 100 and 3.6–5.7% at N = 300, expected 4.2–5.6% at N = 100 with a correct or mildly misspecified larger model and 4.6–6.4% under strong misspecification; size-adjusted power equal; expected is identification-invariant, observed is not (TASK-169) |
 | Nested ML restricted-mean meat | Exact likelihood rows at the larger fit | Adopted; calibrated, no flag | Structured-mean production 2026-10-05: 108,000 draws, no failures; never worse than the pre-66 meat by the registered rule |
 | Global ML geometry | Expected | Outside this decision | No change proposed |
 
@@ -41,9 +41,14 @@ with N; the observed one does.
 group it rejects 2.0–3.3% where the expected-sensitivity score rejects
 4.2–6.3%; at N = 300 the gap is at most one point. This is what tripped the
 registered rule (`reconsider_observed`, mild and correct cells, score arms).
-Under the 2026-10-03 amendment it calls for finite-sample work on the observed
+Under the 2026-10-03 amendment it called for finite-sample work on the observed
 score, not a return to expected sensitivity. Under strong misspecification both
-score geometries stay near 5%.
+score geometries stay near 5%. Amendment 2026-11-11, written after these
+results and the TASK-169 identification study: the author returned the
+ordinary nested ML score to expected sensitivity by a dated scope exception,
+because the observed score's consistency gain did not show at these sample
+sizes while its small-sample loss and identification dependence did. The LR
+keeps the observed geometry.
 
 The LR tests over-reject with skewed data at N = 100 in every geometry
 (10–16%), consistent with the score-first reporting decision. Seven of 36,000

@@ -81,7 +81,7 @@ options. What it demands depends on what each component's null asserts.
 | Component | What its null asserts | Consequence |
 | --- | --- | --- |
 | Parameter covariance, Wald tests and intervals | Nothing about model correctness: the target is the pseudo-true $\theta(P)$ | Sandwich with observed-information bread and empirical score or moment meat; estimated-weight influence for data-dependent weights (DWLS, GLS, WLS) |
-| Nested tests (score, likelihood ratio, fit-function difference) | The restriction holds at the larger model's pseudo-true value; the larger model may be wrong | Observed-information sensitivity and spectra; estimated-weight laws for least-squares estimators (the DWLS parameter-space estimated-weight IJ law). Fixed-weight or expected-information versions are comparators only |
+| Nested tests (score, likelihood ratio, fit-function difference) | The restriction holds at the larger model's pseudo-true value; the larger model may be wrong | Observed-information sensitivity and spectra; estimated-weight laws for least-squares estimators (the DWLS parameter-space estimated-weight IJ law). Fixed-weight or expected-information versions are comparators only, except complete-data ML score tests (author's exception of 2026-11-11 below) |
 | Global goodness-of-fit tests | The model is correct | Consistency is needed only under that null. With complete data, the expected normal-theory information is the limit of the observed Hessian there, even for nonnormal data, so it is admissible and simulations choose. Under MAR missingness the pattern-conditional expected information is not the Hessian even for a correct model; the FIML global score test nevertheless uses it, by the author's exception of 2026-10-29 below, and the FIML global LR keeps observed information |
 | Score-test metric | A free choice: any fixed positive definite metric with its matching spectrum gives a consistent test | Expected information is allowed, and is used for stability |
 
@@ -122,6 +122,26 @@ gof-missing simulations evaluated (magmaan 0.0.1, which agrees with the
 current code to within 1e-5 on twelve check datasets) and semTests' default. A
 consistent finite-sample correction of the observed projection stays
 research-tier (TASK-171). Nested FIML score tests keep observed sensitivity.
+
+Exception, complete-data ML score tests (author's decision, 2026-11-11,
+TASK-169). Ordinary complete-data ML nested score tests, robust modification
+indices and equality releases use the expected information as both
+sensitivity and metric, with casewise likelihood score meat and the PEBA4
+reference. This recipe is consistent whenever the larger model is correct,
+under any distribution, and inconsistent when the larger model is
+misspecified. The consistent observed sensitivity it replaces was conservative
+in small samples without a power gain: in decisions/04 (36,000 draws, two-group
+CFA, six loading restrictions, 2026-10-03) it rejected 2.0-3.0% at N = 100 per
+group with a correct or mildly misspecified larger model, against 4.2-5.6%
+for expected sensitivity, with size-adjusted power equal within about one
+point. Under strong misspecification of the larger model (population RMSEA
+.127) the expected score still rejected 4.6-6.4%. The observed sensitivity
+also depends on the identification: the TASK-169 study rejected 3.4% under
+marker and 6.4% under std.lv identification at n = 100, while expected
+information is invariant. The nested ML LR keeps observed geometry, where
+expected information failed in practice (11.6-13.5% under strong
+misspecification). Nested FIML score tests, FIML modification indices and
+least-squares and ordinal score tests keep observed sensitivity.
 
 ### Group allocation and likelihood-score covariance
 
