@@ -162,7 +162,9 @@ portable source-package CI checks Linux, macOS and Windows against current R
 dependencies, alongside the pinned lavaan oracle gate.
 The 0.2.3 release switches the ordinary FIML global score test to expected
 sensitivity (scope exception 2026-10-29) and ships RDWLS and
-identification-invariant nested LR restrictions.
+identification-invariant nested LR restrictions. The 0.2.4 release does the
+same for complete-data ML nested score tests, modification indices and
+equality releases (scope exception 2026-11-11).
 **0.2.0 delivers the adopted ordinary API, lavaan-compatible fitting, primary
 inference and MI/release-score completion**: `options = list(preset =
 "lavaan-0.7.2")` extends to linear equality constraints, FIML and all-ordinal

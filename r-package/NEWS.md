@@ -1,4 +1,4 @@
-# magmaanlab (development)
+# magmaanlab 0.2.4
 
 - Ordinary complete-data ML policy nested scores, modification indices and
   equality releases now use expected sensitivity and metric. Lab primitive

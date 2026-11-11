@@ -1,4 +1,4 @@
-# magmaan (development)
+# magmaan 0.2.4
 
 - Complete-data ML nested score tests, `modindices()` and equality releases
   now use expected sensitivity and metric and are invariant to identification.
