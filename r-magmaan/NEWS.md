@@ -1,5 +1,8 @@
 # magmaan 0.2.4
 
+- `anova()` computes the score test from the restricted fit when the larger
+  model is passed unfitted; LR carries `alternative_not_fitted`.
+
 - Complete-data ML nested score tests, `modindices()` and equality releases
   now use expected sensitivity and metric and are invariant to identification.
   The observed version was conservative at small N in decisions/04 and

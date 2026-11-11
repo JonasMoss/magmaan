@@ -773,6 +773,10 @@ Global tests against the saturated model:
     spectrum and both are reported. Finite-sample corrections of the observed
     reference are [banked](../backlog/speculative.md#fiml-observed-sensitivity-finite-sample-correction).
 
+`anova(restricted_fit, larger_model)` also accepts an unfitted `magmaan_model()`
+for continuous ML/FIML, computing the policy score alone and typing LR as
+`alternative_not_fitted` without fitting the larger model.
+
 Nested comparisons take an explicit second model, `anova(fit0, fit1)`, and
 report the analogous score and likelihood-ratio (or fit-function difference)
 tests with PEBA4 by default (SB available explicitly), score first. The comparison checks that data, estimator and nesting

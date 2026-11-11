@@ -2651,6 +2651,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// policy_nested_model_impl
+Rcpp::List policy_nested_model_impl(SEXP model, Rcpp::List fit, SEXP null_context, Rcpp::LogicalVector null_state);
+RcppExport SEXP _magmaanlab_policy_nested_model_impl(SEXP modelSEXP, SEXP fitSEXP, SEXP null_contextSEXP, SEXP null_stateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type null_context(null_contextSEXP);
+    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type null_state(null_stateSEXP);
+    rcpp_result_gen = Rcpp::wrap(policy_nested_model_impl(model, fit, null_context, null_state));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_reuse_impl
 Rcpp::List inference_reuse_impl(SEXP context);
 RcppExport SEXP _magmaanlab_inference_reuse_impl(SEXP contextSEXP) {
@@ -4983,6 +4997,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaanlab_policy_inference_dwls_impl", (DL_FUNC) &_magmaanlab_policy_inference_dwls_impl, 3},
     {"_magmaanlab_policy_nested_dwls_impl", (DL_FUNC) &_magmaanlab_policy_nested_dwls_impl, 6},
     {"_magmaanlab_policy_nested_impl", (DL_FUNC) &_magmaanlab_policy_nested_impl, 4},
+    {"_magmaanlab_policy_nested_model_impl", (DL_FUNC) &_magmaanlab_policy_nested_model_impl, 4},
     {"_magmaanlab_inference_reuse_impl", (DL_FUNC) &_magmaanlab_inference_reuse_impl, 1},
     {"_magmaanlab_prepared_structure_count_impl", (DL_FUNC) &_magmaanlab_prepared_structure_count_impl, 0},
     {"_magmaanlab_nested_null_start_impl", (DL_FUNC) &_magmaanlab_nested_null_start_impl, 2},

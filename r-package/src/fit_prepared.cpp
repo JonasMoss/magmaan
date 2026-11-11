@@ -729,6 +729,47 @@ Rcpp::List policy_nested_impl(SEXP null_context, SEXP alternative_context,
 }
 
 // [[Rcpp::export]]
+Rcpp::List policy_nested_model_impl(SEXP model, Rcpp::List fit,
+    SEXP null_context, Rcpp::LogicalVector null_state) {
+  const auto state = policy_state_from(null_state);
+  magmaan::api::PolicyNested out;
+  const std::string estimator = Rcpp::as<std::string>(fit["estimator"]);
+  if ((estimator != "ML" && estimator != "FIML") ||
+      (fit.containsElementNamed("association") && !Rf_isNull(fit["association"])) ||
+      (fit.containsElementNamed("nclusters") && !Rf_isNull(fit["nclusters"])) ||
+      (fit.containsElementNamed("ordinal") && Rcpp::as<bool>(fit["ordinal"]))) {
+    out.score.reason = out.lr.reason = magmaan::api::InferenceReason::UnsupportedModel;
+    out.score.detail = out.lr.detail = "score-only nested policy supports continuous ML and FIML";
+  } else if (state.penalized || !state.converged) {
+    out.score.reason = state.penalized ? magmaan::api::InferenceReason::Penalized :
+        magmaan::api::InferenceReason::NotConverged;
+    out.score.detail = state.penalized ? std::string(magmaan::api::penalized_detail) :
+        "the restricted fit did not pass its convergence verdict";
+    out.lr.reason = magmaan::api::InferenceReason::AlternativeNotFitted;
+    out.lr.detail = "the larger model was not fitted; only the score test is reported";
+  } else {
+    Rcpp::List sample = Rcpp::List::create(Rcpp::_["S"] = fit["S"],
+        Rcpp::_["nobs"] = fit["nobs"], Rcpp::_["mean"] =
+        fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue);
+    auto alternative = ctx_from_partable_sample_stats(model, sample, "policy_nested");
+    auto& null = score_bindings::get<score_bindings::Context>(null_context,
+        "magmaan_inference_context");
+    if (estimator == "FIML") {
+      out = magmaan::api::policy_nested_score_fiml(null.ctx.pt, null.ctx.rep,
+          null.estimates, state, alternative.pt, alternative.rep, null.raw, null.pack);
+    } else {
+      out = magmaan::api::policy_nested_score_ml(null.ntml, state,
+          alternative.pt, alternative.rep);
+    }
+  }
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = magmaan::api::verdict_disagreement(state);
+  return Rcpp::List::create(Rcpp::_["score"] = policy_test_list(out.score),
+      Rcpp::_["lr"] = policy_test_list(out.lr), Rcpp::_["psd_boundary"] = out.psd_boundary,
+      Rcpp::_["verdict_disagreement"] = out.verdict_disagreement);
+}
+
+// [[Rcpp::export]]
 Rcpp::List inference_reuse_impl(SEXP context) {
   auto& c=score_bindings::get<score_bindings::Context>(context,"magmaan_inference_context");
   if (c.estimator == "FIML") return Rcpp::List::create(

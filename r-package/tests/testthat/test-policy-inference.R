@@ -161,3 +161,22 @@ test_that("DWLS global policy exposes the exact spectrum All reference", {
     }
   }
 })
+
+test_that("policy_nested accepts an unfitted alternative with typed LR refusal", {
+  skip_if_not_installed("lavaan")
+  d <- lavaan::HolzingerSwineford1939
+  syntax <- 'visual =~ x1 + a*x2 + b*x3
+textual =~ x4 + x5 + x6
+speed =~ x7 + x8 + x9'
+  larger <- model_spec(syntax)
+  restricted <- fit_model(paste(syntax, 'a == b', sep = '\n'), d)
+  fitted <- fit_model(larger, d)
+  one <- policy_nested(larger, restricted)
+  two <- policy_nested(fitted, restricted)
+  expect_true(one$score$available, info = one$score$detail)
+  expect_equal(one$score, two$score, tolerance = 1e-10)
+  expect_identical(one$lr$reason, 'alternative_not_fitted')
+  expect_false(one$lr$available)
+  restricted$converged <- FALSE
+  expect_identical(policy_nested(larger, restricted)$score$reason, 'not_converged')
+})

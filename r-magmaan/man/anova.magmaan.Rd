@@ -2,15 +2,19 @@
 % Please edit documentation in R/methods.R
 \name{anova.magmaan}
 \alias{anova.magmaan}
+\alias{anova.magmaan_model}
 \alias{print.magmaan_anova}
 \title{Compare two nested magmaan fits}
 \usage{
 \method{anova}{magmaan}(object, ..., lavaan_compat = NULL, references = NULL)
 
+\method{anova}{magmaan_model}(object, ..., lavaan_compat = NULL, references = NULL)
+
 \method{print}{magmaan_anova}(x, digits = 3, ...)
 }
 \arguments{
-\item{object, ...}{Two \code{\link[=magmaan]{magmaan()}} fits, in either order.}
+\item{object, ...}{Two \code{\link[=magmaan]{magmaan()}} fits, or one restricted fit and one
+unfitted larger \code{\link[=magmaan_model]{magmaan_model()}}, in either order.}
 
 \item{lavaan_compat}{\code{NULL} (default) reports the policy's score and LR
 tests. \code{"ML"}, \code{"MLM"} and \code{"MLR"} report lavaan's default difference
@@ -54,6 +58,12 @@ retry is unsuccessful. An unsuccessful retry retains the failure.
 Complete-data ML score tests use expected sensitivity and metric, with
 empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
 score tests and modification indices retain observed sensitivity.
+
+A restricted fit and an unfitted larger \code{\link[=magmaan_model]{magmaan_model()}} can also be
+supplied in either order. This computes only the score test from the fit's
+raw data and reports LR as \code{alternative_not_fitted}; it fits nothing else.
+The data schemas must agree. This form supports continuous ML and FIML,
+and cannot be combined with \code{lavaan_compat}.
 }
 \section{Simulation studies}{
 
@@ -72,4 +82,18 @@ A PSD-boundary input retains the \code{psd_boundary} attribute and marks compute
 rows with that \code{reason}; inference is computed assuming an interior
 population. Improper unrestricted fits also receive inference when the
 required tangents have full rank; tangent rank loss is \code{boundary_nesting}.
+}
+
+\examples{
+\dontrun{
+d <- lavaan::HolzingerSwineford1939
+cfa <- 'visual =~ x1 + x2 + x3
+textual =~ x4 + x5 + x6
+speed =~ x7 + x8 + x9'
+free <- magmaan_model(cfa, prototype = d, group = "school")
+equal <- magmaan_model(cfa, prototype = d, group = "school",
+                       group.equal = "loadings")
+metric <- magmaan(equal, d)
+anova(metric, free)
+}
 }

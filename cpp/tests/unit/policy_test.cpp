@@ -503,6 +503,16 @@ TEST_CASE("policy nested tests: the hypothesis quadratics with SB and PEBA4") {
   auto null = prepare_on(*data, null_model);
   auto out = api::policy_nested_ml(null, {}, alt, {});
   CHECK_FALSE(out.psd_boundary);
+  auto score_only = api::policy_nested_score_ml(null, {}, alt_model.pt, alt_model.rep);
+  REQUIRE(score_only.score.reason == api::InferenceReason::Available);
+  CHECK(score_only.score.statistic == doctest::Approx(out.score.statistic).epsilon(1e-12));
+  CHECK((score_only.score.eigenvalues - out.score.eigenvalues).norm() < 1e-12);
+  CHECK(score_only.lr.reason == api::InferenceReason::AlternativeNotFitted);
+  CHECK(api::reason_name(score_only.lr.reason) == "alternative_not_fitted");
+  auto reversed = api::policy_nested_score_ml(alt, {}, null_model.pt, null_model.rep);
+  CHECK(reversed.score.reason == api::InferenceReason::NotNested);
+  auto failed = api::policy_nested_score_ml(null, {false, false}, alt_model.pt, alt_model.rep);
+  CHECK(failed.score.reason == api::InferenceReason::NotConverged);
   // References on fresh snapshots of the same fits.
   auto h = ntml::prepare_ntml_hypothesis(prepare_on(*data, null_model), prepare_on(*data, alt_model),
                                          magmaan::robust::NestedRestriction::Invariant);

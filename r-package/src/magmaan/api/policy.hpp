@@ -25,6 +25,7 @@ namespace magmaan::api {
 
 enum class InferenceReason {
   Available,
+  AlternativeNotFitted, // score-only comparison: no alternative estimate for LR
   NotConverged,      // the fit did not pass its convergence verdict
   Saturated,         // zero degrees of freedom: no global test exists
   UnsupportedModel,  // outside the policy's model class (e.g. fixed x)
@@ -382,6 +383,16 @@ post_expected<Eigen::MatrixXd> moment_transported_restriction(
     const data::MixedOrdinalStats& stats, estimate::OrdinalParameterization parameterization,
     const std::vector<std::int8_t>* alternative_row_user = nullptr);
 } // namespace frontier
+
+// Score-only comparison. No optimization or alternative estimates are needed.
+PolicyNested policy_nested_score_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep);
+PolicyNested policy_nested_score_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& null_state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack);
 
 PolicyNested policy_nested_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
                               const PolicyFitState& null_state,

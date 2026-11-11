@@ -372,7 +372,35 @@ policy_inference <- function(fit, data = NULL) {
 # fit_H0 may drop, fix or constrain fit_H1's paths,
 # fitted to the same observations; interior moment reparameterizations are
 # evaluated at a common null point.
+#' Compose ordinary-user nested inference
+#'
+#' Requests the C++ ordinary-user nested policy for a restricted fit and a
+#' larger fitted model or model specification. With an unfitted alternative,
+#' only the score test is computed; LR is unavailable with reason
+#' `alternative_not_fitted`. No model is fitted by this form.
+#'
+#' Complete-data ML scores use expected sensitivity and metric; FIML scores
+#' use observed sensitivity. Both retain empirical likelihood-score meat and
+#' PEBA4 references. Two-fit LR tests retain observed geometry. All-ordinal
+#' and mixed DWLS two-fit differences use observed-Hessian/IJ geometry with
+#' the All reference. Unfitted alternatives support only continuous ML/FIML.
+#'
+#' @param fit_H1 Larger (alternative) fitted model or `magmaan_model_spec`.
+#' @param fit_H0 Restricted (null) fitted model.
+#' @param data Observations compatible with the model. Defaults to the fit's
+#'   retained data; FIML uses the fit's raw observations.
+#' @return A nested inference bundle with typed availability reasons, test
+#'   summaries and reference spectra.
+#' @export
 policy_nested <- function(fit_H1, fit_H0, data = NULL) {
+  if (inherits(fit_H1, "magmaan_model_spec") && inherits(fit_H0, "magmaan_fit")) {
+    .marker_refusal(fit_H0, caller = "policy_nested()")
+    supported <- toupper(fit_H0$estimator) %in% c("ML", "FIML") &&
+      is.null(fit_H0$association) && is.null(fit_H0$nclusters) && !isTRUE(fit_H0$ordinal)
+    state <- .policy_state(fit_H0)
+    context <- if (supported && state[[1]] && !state[[4]]) prepare_inference(fit_H0, data)$native else NULL
+    return(policy_nested_model_impl(fit_H1$partable, fit_H0, context, state))
+  }
   if (!inherits(fit_H1, "magmaan_fit") || !inherits(fit_H0, "magmaan_fit"))
     stop("policy_nested(): supply two fitted magmaan models")
   .marker_refusal(fit_H1, fit_H0, caller = "policy_nested()")

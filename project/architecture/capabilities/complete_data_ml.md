@@ -1350,6 +1350,10 @@
 
 #### Dated changes
 
+- 2026-11-11 (TASK-175): score-only nested policy accepts the restricted fit
+  and an unfitted larger model; `anova()` and lab `policy_nested()` expose it
+  without optimization, with LR typed `alternative_not_fitted`.
+
 - 2026-11-11 (TASK-174): ordinary complete-data ML nested score tests, robust
   modification indices and equality releases use expected sensitivity and
   metric, retaining empirical likelihood scores and SB/PEBA4 references.

@@ -556,6 +556,10 @@ ordinary API exposes barrier fitting experimentally as
 
 #### ML and FIML
 
+- [x] **TASK-175**: `anova()` accepts a restricted fit and unfitted larger model
+  for continuous ML/FIML policy scores; LR is typed `alternative_not_fitted`.
+  The lab `policy_nested()` model-spec path uses the same C++ policy.
+
 - [x] **TASK-174**: complete-data ML nested score, MI and equality releases
   use expected sensitivity and metric under the 2026-11-11 scope exception;
   nested LR, FIML and parameter covariance stay unchanged.

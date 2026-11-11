@@ -1,5 +1,8 @@
 # magmaanlab 0.2.4
 
+- `policy_nested()` accepts an unfitted alternative model specification for
+  continuous ML/FIML score tests, without estimating the larger model.
+
 - Ordinary complete-data ML policy nested scores, modification indices and
   equality releases now use expected sensitivity and metric. Lab primitive
   defaults remain unchanged.

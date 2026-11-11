@@ -158,6 +158,7 @@ std::size_t policy_ingredient_builds(const MixedDwlsPolicyFit& fit) { return fit
 
 std::string_view reason_name(InferenceReason reason) noexcept {
   switch (reason) {
+    case InferenceReason::AlternativeNotFitted: return "alternative_not_fitted";
     case InferenceReason::Available:        return "available";
     case InferenceReason::NotConverged:     return "not_converged";
     case InferenceReason::Saturated:        return "saturated";
@@ -796,6 +797,74 @@ void fiml_score(const post_expected<inference::frontier::ScoreComponents>& compo
   out.eigenvalues = *spectrum;
   calibrate_spectrum(out);
 }
+}
+
+PolicyNested policy_nested_score_ml(std::shared_ptr<robust::frontier::NTMLFit> null,
+    const PolicyFitState& state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep) {
+  PolicyNested out;
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  set_unavailable(out.lr, InferenceReason::AlternativeNotFitted,
+      "the larger model was not fitted; only the score test is reported");
+  if (state.penalized || !state.converged) {
+    set_unavailable(out.score, state.penalized ? InferenceReason::Penalized :
+        InferenceReason::NotConverged, state.penalized ? std::string(penalized_detail) :
+        "the restricted fit did not pass its convergence verdict");
+    return out;
+  }
+  auto c0 = estimate::build_eq_constraints(null->pt);
+  auto c1 = estimate::build_eq_constraints(alternative_pt);
+  if (!c0 || !c1) {
+    const auto& error = !c0 ? c0.error() : c1.error();
+    set_unavailable(out.score, nested_reason(error), error.detail);
+    return out;
+  }
+  auto embedding = robust::embed_nested_null(alternative_pt, alternative_rep,
+      null->pt, null->rep, null->estimates.theta, *c1, *c0, true);
+  if (!embedding) {
+    set_unavailable(out.score, nested_reason(embedding.error()), embedding.error().detail);
+    return out;
+  }
+  auto estimates = null->estimates;
+  estimates.theta = embedding->theta;
+  auto alternative = robust::frontier::prepare_ntml_fit(null->data,
+      std::move(alternative_pt), alternative_rep, std::move(estimates));
+  if (!alternative) {
+    set_unavailable(out.score, nested_reason(alternative.error()), alternative.error().detail);
+    return out;
+  }
+  auto hypothesis = robust::frontier::prepare_ntml_hypothesis(null, *alternative);
+  if (!hypothesis) {
+    set_unavailable(out.score, nested_reason(hypothesis.error()), hypothesis.error().detail);
+    return out;
+  }
+  calibrate(robust::frontier::ntml_quadratic(**hypothesis, true,
+      robust::Information::Expected), out.score);
+  return out;
+}
+
+PolicyNested policy_nested_score_fiml(spec::LatentStructure null_pt,
+    const model::MatrixRep& null_rep, const estimate::Estimates& null_estimates,
+    const PolicyFitState& state, spec::LatentStructure alternative_pt,
+    const model::MatrixRep& alternative_rep, const data::RawData& raw,
+    const estimate::fiml::FIMLPack& pack) {
+  PolicyNested out;
+  out.psd_boundary = state.psd_boundary;
+  out.verdict_disagreement = verdict_disagreement(state);
+  set_unavailable(out.lr, InferenceReason::AlternativeNotFitted,
+      "the larger model was not fitted; only the score test is reported");
+  if (state.penalized || !state.converged) {
+    set_unavailable(out.score, state.penalized ? InferenceReason::Penalized :
+        InferenceReason::NotConverged, state.penalized ? std::string(penalized_detail) :
+        "the restricted fit did not pass its convergence verdict");
+    return out;
+  }
+  using namespace inference::frontier;
+  fiml_score(nested_score_components(std::move(alternative_pt), alternative_rep,
+      std::move(null_pt), null_rep, nullptr, raw, &pack, null_estimates,
+      ScoreSensitivity::ObservedInformation), out.score);
+  return out;
 }
 
 static PolicyInference policy_inference_fiml_cached(spec::LatentStructure pt,

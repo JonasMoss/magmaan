@@ -138,6 +138,11 @@ TEST_CASE("FIML policy: complete-data reductions and typed reasons") {
   // their reduction is asymptotic, not an equality at the fitted sample.
   auto fn = api::policy_nested_fiml(m0.pt,m0.rep,e0,{},m1.pt,m1.rep,e1,{},raw,*pack);
   auto mn = api::policy_nested_ml(*f0,{},*f1,{});
+  auto score_only = api::policy_nested_score_fiml(m0.pt,m0.rep,e0,{},m1.pt,m1.rep,raw,*pack);
+  available(score_only.score,1);
+  CHECK(score_only.score.statistic == doctest::Approx(fn.score.statistic).epsilon(1e-12));
+  CHECK((score_only.score.eigenvalues-fn.score.eigenvalues).norm() < 1e-12);
+  CHECK(score_only.lr.reason == api::InferenceReason::AlternativeNotFitted);
   available(fn.score,1); available(fn.lr,1);
   CHECK(fn.lr.statistic == doctest::Approx(mn.lr.statistic).epsilon(1e-8));
   CHECK((fn.lr.eigenvalues-mn.lr.eigenvalues).norm() < 1e-9);

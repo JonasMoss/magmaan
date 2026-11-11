@@ -741,6 +741,10 @@ policy_nested_impl <- function(null_context, alternative_context, null_state, al
     .Call(`_magmaanlab_policy_nested_impl`, null_context, alternative_context, null_state, alternative_state)
 }
 
+policy_nested_model_impl <- function(model, fit, null_context, null_state) {
+    .Call(`_magmaanlab_policy_nested_model_impl`, model, fit, null_context, null_state)
+}
+
 inference_reuse_impl <- function(context) {
     .Call(`_magmaanlab_inference_reuse_impl`, context)
 }

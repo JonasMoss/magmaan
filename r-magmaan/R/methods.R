@@ -478,7 +478,14 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' empirical likelihood-score meat (scope exception 2026-11-11). FIML nested
 #' score tests and modification indices retain observed sensitivity.
 #'
-#' @param object,... Two [magmaan()] fits, in either order.
+#' A restricted fit and an unfitted larger [magmaan_model()] can also be
+#' supplied in either order. This computes only the score test from the fit's
+#' raw data and reports LR as `alternative_not_fitted`; it fits nothing else.
+#' The data schemas must agree. This form supports continuous ML and FIML,
+#' and cannot be combined with `lavaan_compat`.
+#'
+#' @param object,... Two [magmaan()] fits, or one restricted fit and one
+#'   unfitted larger [magmaan_model()], in either order.
 #' @param lavaan_compat `NULL` (default) reports the policy's score and LR
 #'   tests. `"ML"`, `"MLM"` and `"MLR"` report lavaan's default difference
 #'   test for complete-data ML. `"WLSMV"` and `"ULSMV"` report the ordinal
@@ -503,6 +510,18 @@ print.summary.magmaan <- function(x, digits = 3, ...) {
 #' rows with that `reason`; inference is computed assuming an interior
 #' population. Improper unrestricted fits also receive inference when the
 #' required tangents have full rank; tangent rank loss is `boundary_nesting`.
+#' @examples
+#' \dontrun{
+#' d <- lavaan::HolzingerSwineford1939
+#' cfa <- 'visual =~ x1 + x2 + x3
+#' textual =~ x4 + x5 + x6
+#' speed =~ x7 + x8 + x9'
+#' free <- magmaan_model(cfa, prototype = d, group = "school")
+#' equal <- magmaan_model(cfa, prototype = d, group = "school",
+#'                        group.equal = "loadings")
+#' metric <- magmaan(equal, d)
+#' anova(metric, free)
+#' }
 #' @return A data frame of class `magmaan_anova`.
 #' @export
 anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) {
@@ -510,6 +529,11 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
   fits <- c(list(object), list(...))
   labels <- vapply(as.list(substitute(list(object, ...)))[-1L],
                    function(e) paste(deparse(e), collapse = ""), character(1))
+  if (length(fits) == 2L &&
+      sum(vapply(fits, inherits, logical(1), "magmaan")) == 1L &&
+      sum(vapply(fits, inherits, logical(1), "magmaan_model")) == 1L) {
+    return(.anova_unfitted(fits, labels, lavaan_compat, references))
+  }
   if (length(fits) != 2L || !all(vapply(fits, inherits, logical(1), "magmaan"))) {
     stop("anova(): compare exactly two magmaan() fits", call. = FALSE)
   }
@@ -581,6 +605,39 @@ anova.magmaan <- function(object, ..., lavaan_compat = NULL, references = NULL) 
             verdict_disagreement = isTRUE(res$verdict_disagreement), refit = recovery$refit, reseed = recovery$reseed)
 }
 
+#' @name anova.magmaan_model
+#' @rdname anova.magmaan
+#' @export
+anova.magmaan_model <- anova.magmaan
+
+.anova_unfitted <- function(fits, labels, lavaan_compat, references) {
+  if (!is.null(lavaan_compat))
+    stop("anova(): lavaan_compat difference tests require both models fitted", call. = FALSE)
+  null <- which(vapply(fits, inherits, logical(1), "magmaan"))
+  fit <- fits[[null]]
+  alternative <- fits[[3L - null]]
+  schema <- c("observed", "group", "groups", "ordered", "categories")
+  if (!identical(fit$model[schema], alternative[schema]))
+    stop("anova(): the model and fit must share the same data schema (observed variables, group variable and group order)", call. = FALSE)
+  res <- magmaanlab::policy_nested(alternative$spec, fit$lab)
+  if (identical(res$score$reason, "not_nested"))
+    stop("anova(): the score test is computed at the restricted fit; fit the restricted model and pass the larger model unfitted (",
+         res$score$detail, ")", call. = FALSE)
+  rows <- lapply(c("score", "lr"), function(component)
+    .policy_test_rows(res[[component]], component, references))
+  out <- .nested_boundary_rows(.bind_test_rows(rows), res)
+  reasons <- vapply(res[c("score", "lr")], function(t)
+    if (isTRUE(t$available)) "" else paste0(t$reason, if (nzchar(t$detail)) paste0(": ", t$detail)),
+    character(1))
+  structure(out, class = c("magmaan_anova", "data.frame"),
+    restricted = labels[[null]], alternative = labels[[3L - null]],
+    references = references, spectra = list(score = res$score$eigenvalues, lr = NULL),
+    peba_blocks = attr(out, "peba_blocks"), unavailable = reasons[nzchar(reasons)],
+    psd_boundary = isTRUE(res$psd_boundary),
+    verdict_disagreement = isTRUE(res$verdict_disagreement),
+    refit = NULL, reseed = NULL, alternative_not_fitted = TRUE)
+}
+
 # Keep typed refusal reasons; a computed boundary row records the population
 # assumption using the same diagnostic and wording as global inference.
 .nested_boundary_rows <- function(rows, result) {
@@ -627,6 +684,8 @@ print.magmaan_anova <- function(x, digits = 3, ...) {
   cat("Nested tests of ", attr(x, "restricted"), " (restricted) against ",
       attr(x, "alternative"), "\n", sep = "")
   if (!is.null(attr(x, "lavaan_compat"))) cat("lavaan compatibility: ", attr(x, "lavaan_compat"), "\n", sep = "")
+  if (isTRUE(attr(x, "alternative_not_fitted")))
+    cat("The larger model was not fitted; only the score test is reported.\n")
   t <- as.data.frame(unclass(x), stringsAsFactors = FALSE)
   num <- vapply(t, is.numeric, logical(1))
   t[num] <- lapply(t[num], function(v) round(v, digits))

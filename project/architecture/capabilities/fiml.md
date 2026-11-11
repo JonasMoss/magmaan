@@ -619,6 +619,10 @@ retains its separate observed-information comparator.
 
 #### Dated changes
 
+- 2026-11-11 (TASK-175): score-only nested policy accepts the restricted fit
+  and an unfitted larger model; `anova()` and lab `policy_nested()` expose it
+  without optimization, with LR typed `alternative_not_fitted`.
+
 2026-10-29 (TASK-172): global score sensitivity now uses pattern-conditional
 expected information by the scope exception. The expected metric, uncentered
 casewise meat and SB/PEBA4 references remain; nested score, global LR, robust
